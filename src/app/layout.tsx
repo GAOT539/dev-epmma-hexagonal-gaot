@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
 
 const roboto = Roboto({
   variable: "--font-roboto",
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className={`${roboto.variable} font-sans min-h-full flex flex-col`}>
         {children}
+        <Toaster position="bottom-right" richColors />
       </body>
     </html>
   );

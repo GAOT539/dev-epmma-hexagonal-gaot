@@ -3,9 +3,39 @@
 import { useState } from "react";
 import Image from "next/image";
 import { Eye, EyeOff } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
+  const [usuario, setUsuario] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  function handleLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const testUser = process.env.NEXT_PUBLIC_TEST_USER;
+    const testPassword = process.env.NEXT_PUBLIC_TEST_PASSWORD;
+
+    if (usuario !== testUser || password !== testPassword) {
+      toast.error("Credenciales incorrectas", {
+        description: "El usuario o la contraseña ingresados no son válidos. Verifique e intente nuevamente.",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    toast.success("Acceso concedido", {
+      description: "Bienvenido al Sistema de Gestión EPMMA.",
+    });
+
+    // Pequeño delay para que el toast sea visible antes de redirigir
+    setTimeout(() => {
+      router.push("/dashboard");
+    }, 800);
+  }
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-institucional-whiteSmoke p-4 sm:p-6 md:p-8">
@@ -38,7 +68,7 @@ export default function LoginPage() {
             Acceso al Sistema
           </h2>
 
-          <form className="w-full space-y-5" noValidate>
+          <form className="w-full space-y-5" noValidate onSubmit={handleLogin}>
 
             {/* Campo Usuario */}
             <div className="flex flex-col space-y-2">
@@ -55,6 +85,8 @@ export default function LoginPage() {
                 autoComplete="username"
                 required
                 placeholder="Ingrese su usuario"
+                value={usuario}
+                onChange={(e) => setUsuario(e.target.value)}
                 className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 text-base text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
             </div>
@@ -75,6 +107,8 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   required
                   placeholder="Ingrese su contraseña"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                   className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-12 text-base text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
                 />
                 <button
@@ -107,9 +141,10 @@ export default function LoginPage() {
             <button
               id="login-submit"
               type="submit"
-              className="w-full h-12 mt-1 bg-institucional-green hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 transition-colors text-base-white text-lg font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-institucional-green/40"
+              disabled={isLoading}
+              className="w-full h-12 mt-1 bg-institucional-green hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-base-white text-lg font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-institucional-green/40"
             >
-              Ingresar
+              {isLoading ? "Ingresando..." : "Ingresar"}
             </button>
           </form>
 
