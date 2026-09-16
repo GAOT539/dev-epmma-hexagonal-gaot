@@ -1,24 +1,31 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Home, ClipboardList, Settings, BarChart3 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  Home,
+  ClipboardList,
+  Settings,
+  BarChart3,
+  Monitor,
+  ScrollText,
+  LogOut,
+  User,
+} from "lucide-react";
 import { clsx } from "clsx";
+import { useAuth } from "@/infrastructure/auth/auth-context";
+import { MENU_POR_ROL } from "@/infrastructure/mocks/auth.mock";
+import { useEffect } from "react";
 
-// ── Definición de los enlaces de navegación ───────────────────────────────────
+// ── Definición completa de todos los enlaces ─────────────────────────────────
 
-const sidebarLinks = [
-  { href: "/dashboard",     label: "Inicio",    Icon: Home          },
-  { href: "/listas",        label: "Listas",    Icon: ClipboardList },
-  { href: "/reportes",      label: "Reportes",  Icon: BarChart3     },
-  { href: "/configuracion", label: "Config",    Icon: Settings      },
-] as const;
-
-const bottomLinks = [
-  { href: "/configuracion", label: "Config",    Icon: Settings      },
-  { href: "/dashboard",     label: "Inicio",    Icon: Home          },
-  { href: "/reportes",      label: "Reportes",  Icon: BarChart3     },
-  { href: "/listas",        label: "Listas",    Icon: ClipboardList },
+const allLinks = [
+  { href: "/dashboard",     label: "Inicio",     Icon: Home          },
+  { href: "/listas",        label: "Listas",     Icon: ClipboardList },
+  { href: "/reportes",      label: "Reportes",   Icon: BarChart3     },
+  { href: "/tic",           label: "Catastro",   Icon: Monitor       },
+  { href: "/auditoria",     label: "Auditoría",  Icon: ScrollText    },
+  { href: "/configuracion", label: "Config",     Icon: Settings      },
 ] as const;
 
 // ── Subcomponente: ítem de navegación ─────────────────────────────────────────
@@ -79,6 +86,41 @@ function NavItem({
 
 export default function PanelLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+
+  // Protección de ruta: redirigir a login si no hay sesión
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      router.replace("/login");
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Mientras carga o no autenticado, mostrar skeleton
+  if (isLoading || !isAuthenticated || !user) {
+    return (
+      <div className="min-h-screen bg-institucional-whiteSmoke flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-10 w-10 rounded-full border-4 border-institucional-green/30 border-t-institucional-green animate-spin" />
+          <p className="text-sm text-institucional-whiteSmokeBlack">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Filtrar ítems según rol del usuario
+  const allowedPaths = MENU_POR_ROL[user.rol] ?? [];
+  const filteredLinks = allLinks.filter((link) =>
+    allowedPaths.includes(link.href)
+  );
+
+  // Para bottom nav, tomar los últimos 4 (o menos)
+  const bottomLinks = filteredLinks.slice(0, 4);
+
+  function handleLogout() {
+    logout();
+    router.replace("/login");
+  }
 
   return (
     <div className="min-h-screen bg-institucional-whiteSmoke">
@@ -105,7 +147,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
         {/* Menú de navegación */}
         <nav className="flex-1 overflow-y-auto p-3">
           <ul className="flex flex-col gap-1" role="list">
-            {sidebarLinks.map(({ href, label, Icon }) => (
+            {filteredLinks.map(({ href, label, Icon }) => (
               <li key={href}>
                 <NavItem
                   href={href}
@@ -119,8 +161,33 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
           </ul>
         </nav>
 
-        {/* Pie del sidebar */}
-        <div className="border-t border-institucional-whiteSmokeBlack/20 p-4">
+        {/* Pie del sidebar con info de usuario */}
+        <div className="border-t border-institucional-whiteSmokeBlack/20 p-4 space-y-3">
+          {/* Info del usuario */}
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-green/10 text-institucional-green">
+              <User size={16} strokeWidth={2} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-semibold text-base-eerieBlack">
+                {user.nombres} {user.apellidos}
+              </p>
+              <p className="truncate text-[10px] text-institucional-whiteSmokeBlack">
+                {user.rol.replace("_", " ")}
+              </p>
+            </div>
+          </div>
+
+          {/* Botón cerrar sesión */}
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-base-red transition-colors hover:bg-base-red/10"
+          >
+            <LogOut size={14} strokeWidth={2} />
+            Cerrar sesión
+          </button>
+
           <p className="text-[10px] text-institucional-whiteSmokeBlack">
             © {new Date().getFullYear()} EPMMA
           </p>

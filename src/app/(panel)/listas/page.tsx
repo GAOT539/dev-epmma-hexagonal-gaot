@@ -1,8 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { getNavesMock } from "@/infrastructure/mocks/mercado.mock";
-import type { Comerciante, EstadoComercianteAsistencia, Sector } from "@/domain/models/comerciante.model";
+import { useCallback, useMemo, useState } from "react";
+import {
+  getNaves,
+  getPuestosPorSector,
+  getComerciantePorId,
+  getAsistenciaPorFecha,
+  setEstadoAsistencia,
+  setPermisoComercianteRango,
+  getAsistenciaComerciantePorFecha,
+} from "@/infrastructure/mocks/mercado.mock";
+import type {
+  EstadoAsistencia,
+  Nave,
+  Puesto,
+  Comerciante,
+  Sector,
+} from "@/domain/models/comerciante.model";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -11,35 +25,121 @@ import {
   CalendarDays,
   CheckCircle2,
   ChevronDown,
+  Eye as EyeIcon,
+  Search,
+  ShieldAlert,
   Tag,
+  ToggleLeft,
+  ToggleRight,
+  X,
   XCircle,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { addDays, format, isToday, subDays } from "date-fns";
+import { addDays, format, isToday, isFuture, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
-// ── Metadatos de la página ────────────────────────────────────────────────────
+// ── Colores por estado ───────────────────────────────────────────────────────
 
-interface AccionBtnProps {
+const ESTADO_CONFIG: Record<
+  EstadoAsistencia | "Vacante",
+  { bg: string; text: string; ring: string; label: string }
+> = {
+  Presente: {
+    bg: "bg-acento-verdeOliva1/15",
+    text: "text-acento-verdeOliva1",
+    ring: "ring-acento-verdeOliva1/30",
+    label: "Presente",
+  },
+  Ausente: {
+    bg: "bg-base-red/10",
+    text: "text-base-red",
+    ring: "ring-base-red/30",
+    label: "Ausente",
+  },
+  Novedad: {
+    bg: "bg-acento-naranjaSalmon1/15",
+    text: "text-acento-naranjaSalmon1",
+    ring: "ring-acento-naranjaSalmon1/30",
+    label: "Novedad",
+  },
+  Observacion: {
+    bg: "bg-acento-azul1/15",
+    text: "text-acento-azul1",
+    ring: "ring-acento-azul1/30",
+    label: "Observación",
+  },
+  Permiso: {
+    bg: "bg-acento-morado/15",
+    text: "text-acento-morado",
+    ring: "ring-acento-morado/30",
+    label: "Permiso",
+  },
+  Pendiente: {
+    bg: "bg-institucional-whiteSmokeBlack/15",
+    text: "text-institucional-whiteSmokeBlack",
+    ring: "ring-institucional-whiteSmokeBlack/30",
+    label: "Pendiente",
+  },
+  Vacante: {
+    bg: "bg-institucional-whiteSmokeBlack/10",
+    text: "text-institucional-whiteSmokeBlack",
+    ring: "ring-institucional-whiteSmokeBlack/20",
+    label: "Vacante",
+  },
+};
+
+// ── Orden de prioridad de estados ────────────────────────────────────────────
+
+const ESTADO_PRIORIDAD: Record<string, number> = {
+  Ausente: 0,
+  Observacion: 1,
+  Novedad: 2,
+  Permiso: 3,
+  Pendiente: 4,
+  Presente: 5,
+};
+
+// ── Helper: formatear fecha ──────────────────────────────────────────────────
+
+function formatDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// ── Botón de acción de estado ────────────────────────────────────────────────
+
+function AccionBtn({
+  label,
+  Icon,
+  colorClasses,
+  isActive,
+  onClick,
+  disabled,
+}: {
   label: string;
-  estado: Comerciante["estado"];
   Icon: React.ElementType;
   colorClasses: string;
   isActive: boolean;
   onClick: () => void;
-}
-
-function AccionBtn({ label, Icon, colorClasses, isActive, onClick }: AccionBtnProps) {
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       aria-pressed={isActive}
       className={[
         "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold",
         "transition-all duration-150 active:scale-95",
-        isActive ? colorClasses.replace(/\/10/g, "") + " text-base-white" : colorClasses,
+        disabled ? "opacity-40 cursor-not-allowed" : "",
+        isActive
+          ? colorClasses.replace(/\/15/g, "").replace(/\/10/g, "") +
+            " text-base-white shadow-sm"
+          : colorClasses,
       ].join(" ")}
     >
       <Icon size={13} strokeWidth={2.5} aria-hidden="true" />
@@ -48,83 +148,350 @@ function AccionBtn({ label, Icon, colorClasses, isActive, onClick }: AccionBtnPr
   );
 }
 
-// ── Subcomponente: tarjeta de comerciante ─────────────────────────────────────
+// ── Modal de detalle del comerciante ─────────────────────────────────────────
 
-function ComercianteCard({
+function ComercianteModal({
+  comerciante,
+  puesto,
+  estado,
+  fecha,
+  onClose,
+  onPermisoAsignado,
+}: {
+  comerciante: Comerciante;
+  puesto: Puesto;
+  estado: EstadoAsistencia;
+  fecha: string;
+  onClose: () => void;
+  onPermisoAsignado: (inicio: string, fin: string) => void;
+}) {
+  const [permisoInicio, setPermisoInicio] = useState("");
+  const [permisoFin, setPermisoFin] = useState("");
+  const [error, setError] = useState("");
+
+  const estadoConfig = ESTADO_CONFIG[estado];
+  const isPermiso = estado === "Permiso";
+
+  function handleAsignarPermiso() {
+    setError("");
+    if (!permisoInicio || !permisoFin) {
+      setError("Debe seleccionar fecha de inicio y fin.");
+      return;
+    }
+    if (permisoInicio > permisoFin) {
+      setError("La fecha de inicio no puede ser posterior a la de fin.");
+      return;
+    }
+    onPermisoAsignado(permisoInicio, permisoFin);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-base-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl bg-base-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-institucional-green px-6 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white font-bold text-lg">
+              {comerciante.nombres.charAt(0)}
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-base-white">
+                {comerciante.nombres} {comerciante.apellidos}
+              </h2>
+              <p className="text-sm text-base-white/80">CIU: {comerciante.ciu}</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-base-white/10 text-base-white hover:bg-base-white/20 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Contenido */}
+        <div className="px-6 py-5 space-y-4">
+          {/* Info del comerciante */}
+          <div className="grid grid-cols-2 gap-3">
+            <InfoItem label="Cédula" value={comerciante.cedula} />
+            <InfoItem label="CIU" value={comerciante.ciu} />
+            <InfoItem label="Actividad" value={comerciante.actividad} />
+            <InfoItem label="Puesto" value={puesto.codigo} />
+            <InfoItem label="Nave" value={puesto.naveId.replace("nave-", "Nave ").toUpperCase()} />
+            <InfoItem label="Fecha" value={fecha} />
+          </div>
+
+          {/* Estado actual */}
+          <div className="flex items-center gap-2 mt-2">
+            <span className="text-xs font-medium text-institucional-whiteSmokeBlack">Estado:</span>
+            <span
+              className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${estadoConfig.bg} ${estadoConfig.text}`}
+            >
+              {estadoConfig.label}
+            </span>
+            {isPermiso && (
+              <span className="text-[10px] text-acento-morado font-medium">
+                (Bloqueado por permiso activo)
+              </span>
+            )}
+          </div>
+
+          {/* Asignación de permiso */}
+          {!isPermiso && (
+            <div className="mt-4 rounded-xl bg-institucional-whiteSmoke p-4 space-y-3">
+              <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
+                <ShieldAlert size={16} className="text-acento-morado" />
+                Asignar Permiso
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
+                    Inicio
+                  </label>
+                  <input
+                    type="date"
+                    value={permisoInicio}
+                    onChange={(e) => setPermisoInicio(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
+                    Fin
+                  </label>
+                  <input
+                    type="date"
+                    value={permisoFin}
+                    onChange={(e) => setPermisoFin(e.target.value)}
+                    className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                  />
+                </div>
+              </div>
+              {error && (
+                <p className="text-xs text-base-red font-medium">{error}</p>
+              )}
+              <button
+                onClick={handleAsignarPermiso}
+                className="w-full h-9 rounded-lg bg-acento-morado hover:bg-acento-morado/90 text-base-white text-xs font-semibold transition-colors shadow-sm"
+              >
+                Asignar Permiso
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InfoItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-institucional-whiteSmoke p-2.5">
+      <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase tracking-wider">
+        {label}
+      </p>
+      <p className="text-sm font-semibold text-base-eerieBlack mt-0.5 truncate">
+        {value}
+      </p>
+    </div>
+  );
+}
+
+// ── Tarjeta de puesto/comerciante ────────────────────────────────────────────
+
+function PuestoCard({
+  puesto,
   comerciante,
   estado,
   onEstadoChange,
+  onDoubleClick,
+  isPermiso,
 }: {
-  comerciante: Comerciante;
-  estado: EstadoComercianteAsistencia;
-  onEstadoChange: (estado: EstadoComercianteAsistencia) => void;
+  puesto: Puesto;
+  comerciante: Comerciante | null;
+  estado: EstadoAsistencia | "Vacante";
+  onEstadoChange: (estado: EstadoAsistencia) => void;
+  onDoubleClick: () => void;
+  isPermiso: boolean;
 }) {
+  const config = ESTADO_CONFIG[estado];
+  const isVacante = puesto.estado === "Vacante";
+
+  if (isVacante) {
+    return (
+      <article
+        className={`flex items-center gap-3 rounded-xl bg-base-white/60 px-4 py-3 ring-1 ${config.ring} opacity-60`}
+      >
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-whiteSmokeBlack/10 text-xs font-bold text-institucional-whiteSmokeBlack">
+          —
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium text-institucional-whiteSmokeBlack">
+            {puesto.codigo}
+          </p>
+          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-semibold text-institucional-whiteSmokeBlack mt-0.5">
+            Vacante
+          </span>
+        </div>
+      </article>
+    );
+  }
+
   return (
     <article
-      className="flex flex-col gap-3 rounded-xl bg-base-white px-4 py-3.5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 sm:flex-row sm:items-center sm:justify-between"
-      aria-label={`Comerciante: ${comerciante.nombre}`}
+      className={`flex flex-col gap-3 rounded-xl bg-base-white px-4 py-3.5 shadow-sm ring-1 ${config.ring} sm:flex-row sm:items-center sm:justify-between cursor-pointer transition-all hover:shadow-md`}
+      onDoubleClick={onDoubleClick}
+      title="Doble clic para ver detalles"
     >
-      {/* Nombre + indicador de estado pendiente */}
+      {/* Info */}
       <div className="flex items-center gap-3 min-w-0">
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-green/10 text-sm font-bold text-institucional-green">
-          {comerciante.nombre.charAt(0)}
+        <span
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.bg} text-sm font-bold ${config.text}`}
+        >
+          {comerciante?.nombres.charAt(0) ?? "?"}
         </span>
         <div className="min-w-0">
           <p className="truncate font-semibold text-base-eerieBlack text-sm leading-tight">
-            {comerciante.nombre}
+            {comerciante
+              ? `${comerciante.nombres} ${comerciante.apellidos}`
+              : "Sin asignar"}
           </p>
-          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/20 px-2 py-0.5 text-[10px] font-medium text-institucional-whiteSmokeBlack mt-0.5">
-            {estado === "pendiente" ? "Sin registrar" : estado}
-          </span>
+          <div className="flex items-center gap-2 mt-0.5">
+            <span className="text-[10px] text-institucional-whiteSmokeBlack">
+              {puesto.codigo}
+            </span>
+            {comerciante && (
+              <span className="text-[10px] text-institucional-whiteSmokeBlack">
+                CIU: {comerciante.ciu}
+              </span>
+            )}
+            <span
+              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${config.bg} ${config.text}`}
+            >
+              {config.label}
+            </span>
+          </div>
         </div>
       </div>
 
       {/* Botones de acción */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-1.5 flex-wrap">
         <AccionBtn
           label="Presente"
-          estado="presente"
           Icon={CheckCircle2}
-          colorClasses="bg-acento-verdeOliva1/10 text-acento-verdeOliva1 hover:bg-acento-verdeOliva1 hover:text-base-white"
-          isActive={estado === "presente"}
-          onClick={() => onEstadoChange("presente")}
+          colorClasses="bg-acento-verdeOliva1/15 text-acento-verdeOliva1 hover:bg-acento-verdeOliva1 hover:text-base-white"
+          isActive={estado === "Presente"}
+          onClick={() => onEstadoChange("Presente")}
+          disabled={isPermiso}
         />
         <AccionBtn
           label="Ausente"
-          estado="ausente"
           Icon={XCircle}
           colorClasses="bg-base-red/10 text-base-red hover:bg-base-red hover:text-base-white"
-          isActive={estado === "ausente"}
-          onClick={() => onEstadoChange("ausente")}
+          isActive={estado === "Ausente"}
+          onClick={() => onEstadoChange("Ausente")}
+          disabled={isPermiso}
         />
         <AccionBtn
           label="Novedad"
-          estado="novedad"
           Icon={AlertTriangle}
-          colorClasses="bg-acento-naranjaSalmon1/10 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
-          isActive={estado === "novedad"}
-          onClick={() => onEstadoChange("novedad")}
+          colorClasses="bg-acento-naranjaSalmon1/15 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
+          isActive={estado === "Novedad"}
+          onClick={() => onEstadoChange("Novedad")}
+          disabled={isPermiso}
+        />
+        <AccionBtn
+          label="Obs."
+          Icon={EyeIcon}
+          colorClasses="bg-acento-azul1/15 text-acento-azul1 hover:bg-acento-azul1 hover:text-base-white"
+          isActive={estado === "Observacion"}
+          onClick={() => onEstadoChange("Observacion")}
+          disabled={isPermiso}
         />
       </div>
     </article>
   );
 }
 
-// ── Subcomponente: bloque de sector ──────────────────────────────────────────
+// ── Bloque de sector ─────────────────────────────────────────────────────────
 
 function SectorBlock({
   sector,
+  fecha,
   isOpen,
   onToggle,
-  attendance,
+  searchQuery,
+  overrides,
   onEstadoChange,
+  onOpenModal,
 }: {
   sector: Sector;
+  fecha: string;
   isOpen: boolean;
   onToggle: () => void;
-  attendance: Record<string, EstadoComercianteAsistencia>;
-  onEstadoChange: (comercianteId: string, estado: EstadoComercianteAsistencia) => void;
+  searchQuery: string;
+  overrides: Record<string, EstadoAsistencia>;
+  onEstadoChange: (comercianteId: string, estado: EstadoAsistencia) => void;
+  onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
 }) {
+  const puestos = getPuestosPorSector(sector.id);
+  const asistenciaDelDia = getAsistenciaPorFecha(fecha);
+
+  // Construir datos de renderizado
+  const items = puestos.map((puesto) => {
+    const comerciante = puesto.comercianteId
+      ? getComerciantePorId(puesto.comercianteId)
+      : null;
+
+    let estado: EstadoAsistencia | "Vacante" = "Vacante";
+    if (puesto.estado === "Ocupado" && comerciante) {
+      // Check overrides first
+      const overrideKey = `${comerciante.idInterno}:${fecha}`;
+      if (overrides[overrideKey]) {
+        estado = overrides[overrideKey];
+      } else {
+        const registro = asistenciaDelDia.find(
+          (r) => r.comercianteId === comerciante.idInterno
+        );
+        estado = registro?.estado ?? "Pendiente";
+      }
+    }
+
+    return { puesto, comerciante, estado };
+  });
+
+  // Filtrar por búsqueda
+  const filtered = searchQuery
+    ? items.filter((item) => {
+        if (item.puesto.estado === "Vacante") return false;
+        const q = searchQuery.toLowerCase();
+        const c = item.comerciante;
+        if (!c) return false;
+        return (
+          c.nombres.toLowerCase().includes(q) ||
+          c.apellidos.toLowerCase().includes(q) ||
+          c.ciu.toLowerCase().includes(q) ||
+          item.puesto.codigo.toLowerCase().includes(q)
+        );
+      })
+    : items;
+
+  // Ordenar: Ausente → Observacion → Novedad → Permiso → Pendiente → Presente → Vacante
+  const sorted = [...filtered].sort((a, b) => {
+    const prioA = a.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[a.estado] ?? 10);
+    const prioB = b.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[b.estado] ?? 10);
+    return prioA - prioB;
+  });
+
+  const totalOcupados = items.filter((i) => i.puesto.estado === "Ocupado").length;
+  const totalVacantes = items.filter((i) => i.puesto.estado === "Vacante").length;
+
   return (
     <section className="overflow-hidden rounded-xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
       <button
@@ -134,83 +501,284 @@ function SectorBlock({
         aria-controls={`sector-content-${sector.id}`}
         className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-institucional-green/5"
       >
-        <Tag size={13} strokeWidth={2} className="text-institucional-whiteSmokeBlack" aria-hidden="true" />
-        <h3
-          id={`sector-${sector.id}`}
-          className="text-sm font-bold text-base-eerieBlack"
-        >
-          {sector.nombre}
-        </h3>
-        <span className="ml-auto rounded-full bg-institucional-whiteSmokeBlack/20 px-2 py-0.5 text-[10px] font-medium text-institucional-whiteSmokeBlack">
-          {sector.comerciantes.length} comerciantes
-        </span>
-        <ChevronDown className={`text-institucional-green transition-transform ${isOpen ? "rotate-180" : ""}`} size={18} aria-hidden="true" />
+        <Tag
+          size={13}
+          strokeWidth={2}
+          className="text-institucional-whiteSmokeBlack"
+          aria-hidden="true"
+        />
+        <h3 className="text-sm font-bold text-base-eerieBlack">{sector.nombre}</h3>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="rounded-full bg-acento-verdeOliva1/10 px-2 py-0.5 text-[10px] font-medium text-acento-verdeOliva1">
+            {totalOcupados} ocupados
+          </span>
+          {totalVacantes > 0 && (
+            <span className="rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-medium text-institucional-whiteSmokeBlack">
+              {totalVacantes} vacantes
+            </span>
+          )}
+        </div>
+        <ChevronDown
+          className={`text-institucional-green transition-transform ${isOpen ? "rotate-180" : ""}`}
+          size={18}
+          aria-hidden="true"
+        />
       </button>
 
       {isOpen && (
-        <ul id={`sector-content-${sector.id}`} className="flex flex-col gap-2 border-t border-institucional-whiteSmokeBlack/15 bg-institucional-whiteSmoke/50 p-3" role="list">
-          {sector.comerciantes.map((comerciante) => (
-            <li key={comerciante.id}>
-              <ComercianteCard
-                comerciante={comerciante}
-                estado={attendance[comerciante.id] ?? comerciante.estado}
-                onEstadoChange={(estado) => onEstadoChange(comerciante.id, estado)}
+        <ul
+          id={`sector-content-${sector.id}`}
+          className="flex flex-col gap-2 border-t border-institucional-whiteSmokeBlack/15 bg-institucional-whiteSmoke/50 p-3"
+          role="list"
+        >
+          {sorted.map((item) => (
+            <li key={item.puesto.id}>
+              <PuestoCard
+                puesto={item.puesto}
+                comerciante={item.comerciante}
+                estado={item.estado}
+                isPermiso={item.estado === "Permiso"}
+                onEstadoChange={(nuevoEstado) => {
+                  if (item.comerciante) {
+                    onEstadoChange(item.comerciante.idInterno, nuevoEstado);
+                  }
+                }}
+                onDoubleClick={() => {
+                  if (item.comerciante && item.estado !== "Vacante") {
+                    onOpenModal(item.puesto, item.comerciante, item.estado as EstadoAsistencia);
+                  }
+                }}
               />
             </li>
           ))}
+          {sorted.length === 0 && (
+            <li className="py-6 text-center text-sm text-institucional-whiteSmokeBlack">
+              No se encontraron resultados.
+            </li>
+          )}
         </ul>
       )}
     </section>
   );
 }
 
+// ── Vista Treemap ────────────────────────────────────────────────────────────
+
+function TreemapView({
+  nave,
+  fecha,
+  overrides,
+}: {
+  nave: Nave;
+  fecha: string;
+  overrides: Record<string, EstadoAsistencia>;
+}) {
+  const asistenciaDelDia = getAsistenciaPorFecha(fecha);
+
+  return (
+    <div className="space-y-4">
+      {nave.sectores.map((sector) => {
+        const puestos = getPuestosPorSector(sector.id);
+
+        return (
+          <div key={sector.id}>
+            <h3 className="text-sm font-bold text-base-eerieBlack mb-2">
+              {sector.nombre}
+            </h3>
+            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 gap-1">
+              {puestos.map((puesto) => {
+                const comerciante = puesto.comercianteId
+                  ? getComerciantePorId(puesto.comercianteId)
+                  : null;
+
+                let estado: EstadoAsistencia | "Vacante" = "Vacante";
+                if (puesto.estado === "Ocupado" && comerciante) {
+                  const overrideKey = `${comerciante.idInterno}:${fecha}`;
+                  if (overrides[overrideKey]) {
+                    estado = overrides[overrideKey];
+                  } else {
+                    const registro = asistenciaDelDia.find(
+                      (r) => r.comercianteId === comerciante.idInterno
+                    );
+                    estado = registro?.estado ?? "Pendiente";
+                  }
+                }
+
+                const config = ESTADO_CONFIG[estado];
+                const bgColorMap: Record<string, string> = {
+                  Presente: "bg-acento-verdeOliva1",
+                  Ausente: "bg-base-red",
+                  Novedad: "bg-acento-naranjaSalmon1",
+                  Observacion: "bg-acento-azul1",
+                  Permiso: "bg-acento-morado",
+                  Pendiente: "bg-institucional-whiteSmokeBlack/40",
+                  Vacante: "bg-institucional-whiteSmokeBlack/20",
+                };
+
+                return (
+                  <div
+                    key={puesto.id}
+                    className={`aspect-square rounded-sm ${bgColorMap[estado]} transition-all hover:scale-110 hover:z-10 cursor-default relative group`}
+                    title={
+                      comerciante
+                        ? `${puesto.codigo}: ${comerciante.nombres} ${comerciante.apellidos} — ${config.label}`
+                        : `${puesto.codigo}: Vacante`
+                    }
+                  >
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-20 pointer-events-none">
+                      <div className="rounded-lg bg-base-eerieBlack text-base-white text-[9px] px-2 py-1 whitespace-nowrap shadow-lg">
+                        <p className="font-semibold">{puesto.codigo}</p>
+                        {comerciante && (
+                          <p>
+                            {comerciante.nombres} {comerciante.apellidos}
+                          </p>
+                        )}
+                        <p className="opacity-75">{config.label}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+
+      {/* Leyenda */}
+      <div className="flex flex-wrap gap-3 mt-4 px-1">
+        {(
+          ["Presente", "Ausente", "Novedad", "Observacion", "Permiso", "Pendiente", "Vacante"] as const
+        ).map((key) => {
+          const config = ESTADO_CONFIG[key];
+          const bgMap: Record<string, string> = {
+            Presente: "bg-acento-verdeOliva1",
+            Ausente: "bg-base-red",
+            Novedad: "bg-acento-naranjaSalmon1",
+            Observacion: "bg-acento-azul1",
+            Permiso: "bg-acento-morado",
+            Pendiente: "bg-institucional-whiteSmokeBlack/40",
+            Vacante: "bg-institucional-whiteSmokeBlack/20",
+          };
+          return (
+            <div key={key} className="flex items-center gap-1.5">
+              <div className={`h-3 w-3 rounded-sm ${bgMap[key]}`} />
+              <span className="text-[10px] text-institucional-whiteSmokeBlack font-medium">
+                {config.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Página principal de Listas ───────────────────────────────────────────────
+
 export default function ListasPage() {
-  const naves = getNavesMock();
-  const [selectedNave, setSelectedNave] = useState<string | null>(null);
+  const naves = getNaves();
+  const [selectedNaveId, setSelectedNaveId] = useState<string | null>(null);
   const [openSector, setOpenSector] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
-  const [attendance, setAttendance] = useState<Record<string, EstadoComercianteAsistencia>>({});
-  const nave = naves.find((item) => item.id === selectedNave);
-  // Si selectedDate es hoy → el carrusel termina en hoy (5 días previos + hoy).
-  // Si selectedDate es pasado → termina un día después (4 antes + seleccionada + 1 después).
+  const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"lista" | "treemap">("lista");
+  const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
+
+  // Modal state
+  const [modalData, setModalData] = useState<{
+    puesto: Puesto;
+    comerciante: Comerciante;
+    estado: EstadoAsistencia;
+  } | null>(null);
+
+  const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
+  const fechaStr = formatDate(selectedDate);
+
+  // Selector de fechas horizontal
   const endDate = isToday(selectedDate) ? selectedDate : addDays(selectedDate, 1);
   const recentDates = Array.from({ length: 6 }, (_, index) =>
-    subDays(endDate, 5 - index),
+    subDays(endDate, 5 - index)
   );
 
   function selectNave(naveId: string) {
-    const selected = naves.find((item) => item.id === naveId);
-    setSelectedNave(naveId);
+    const selected = naves.find((n) => n.id === naveId);
+    setSelectedNaveId(naveId);
     setOpenSector(selected?.sectores[0]?.id ?? null);
+    setSearchQuery("");
   }
 
   function goBackToNaves() {
-    setSelectedNave(null);
+    setSelectedNaveId(null);
     setOpenSector(null);
+    setSearchQuery("");
+  }
+
+  function handleEstadoChange(comercianteId: string, estado: EstadoAsistencia) {
+    const key = `${comercianteId}:${fechaStr}`;
+    setOverrides((prev) => ({ ...prev, [key]: estado }));
+    setEstadoAsistencia(comercianteId, fechaStr, estado);
+  }
+
+  function handleOpenModal(puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) {
+    setModalData({ puesto, comerciante, estado });
+  }
+
+  function handlePermisoAsignado(inicio: string, fin: string) {
+    if (!modalData) return;
+    setPermisoComercianteRango(modalData.comerciante.idInterno, inicio, fin);
+
+    // Actualizar overrides para reflejar permiso en las fechas
+    const startDate = new Date(inicio + "T00:00:00");
+    const endDate = new Date(fin + "T00:00:00");
+    const current = new Date(startDate);
+    const newOverrides = { ...overrides };
+
+    while (current <= endDate) {
+      const f = formatDate(current);
+      newOverrides[`${modalData.comerciante.idInterno}:${f}`] = "Permiso";
+      current.setDate(current.getDate() + 1);
+    }
+
+    setOverrides(newOverrides);
+    setModalData(null);
   }
 
   return (
     <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
-      <header className="mb-8 max-w-3xl mx-auto">
+      <header className="mb-6 max-w-4xl mx-auto">
         <div className="flex items-center gap-2">
           <CalendarDays size={22} className="text-institucional-green" aria-hidden="true" />
-          <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">Toma de Listas</h1>
+          <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
+            Toma de Listas
+          </h1>
         </div>
+
+        {/* Selector de fechas */}
         <div
           className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
           aria-label="Seleccionar fecha"
         >
           {recentDates.map((date) => {
             const dateValue = formatDate(date);
-            const isSelected = formatDate(selectedDate) === dateValue;
+            const isSelected = fechaStr === dateValue;
+            const isFutureDate = isFuture(date) && !isToday(date);
             return (
               <button
                 key={dateValue}
                 type="button"
-                onClick={() => setSelectedDate(date)}
+                onClick={() => !isFutureDate && setSelectedDate(date)}
+                disabled={isFutureDate}
                 aria-pressed={isSelected}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-colors ${isSelected ? "bg-institucional-green text-base-white shadow-sm" : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green"}`}
+                className={[
+                  "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-colors",
+                  isFutureDate
+                    ? "bg-institucional-whiteSmokeBlack/10 text-institucional-whiteSmokeBlack/40 cursor-not-allowed"
+                    : isSelected
+                      ? "bg-institucional-green text-base-white shadow-sm"
+                      : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green",
+                ].join(" ")}
               >
                 {isToday(date)
                   ? "Hoy"
@@ -219,7 +787,7 @@ export default function ListasPage() {
             );
           })}
 
-          {/* Botón con Popover + Calendar de shadcn/ui */}
+          {/* Calendar popover */}
           <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
             <PopoverTrigger
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:text-institucional-green hover:ring-institucional-green/40"
@@ -237,17 +805,53 @@ export default function ListasPage() {
                     setCalendarOpen(false);
                   }
                 }}
-                disabled={(date) => date > new Date()}
+                disabled={(date) => isFuture(date) && !isToday(date)}
                 locale={es}
                 autoFocus
               />
             </PopoverContent>
           </Popover>
         </div>
+
+        {/* Barra de búsqueda + toggle vista */}
+        {nave && (
+          <div className="mt-4 flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search
+                size={16}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+              />
+              <input
+                type="text"
+                placeholder="Buscar por nombre, CIU o puesto..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-10 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-10 pr-4 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+              />
+            </div>
+
+            {/* Toggle vista */}
+            <button
+              type="button"
+              onClick={() =>
+                setViewMode((v) => (v === "lista" ? "treemap" : "lista"))
+              }
+              className="flex items-center gap-2 rounded-lg bg-base-white px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40"
+            >
+              {viewMode === "lista" ? (
+                <ToggleLeft size={18} className="text-institucional-green" />
+              ) : (
+                <ToggleRight size={18} className="text-institucional-green" />
+              )}
+              {viewMode === "lista" ? "Vista Lista" : "Mapa de Árbol"}
+            </button>
+          </div>
+        )}
       </header>
 
-      <div className="mx-auto flex max-w-3xl flex-col gap-4">
+      <div className="mx-auto flex max-w-4xl flex-col gap-4">
         {!nave ? (
+          /* ── Selección de nave ── */
           naves.map((item) => (
             <button
               key={item.id}
@@ -259,46 +863,81 @@ export default function ListasPage() {
                 <Building2 size={24} aria-hidden="true" />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block text-lg font-bold text-base-eerieBlack">{item.nombre}</span>
-                <span className="text-sm text-institucional-whiteSmokeBlack">{item.sectores.length} sectores disponibles</span>
+                <span className="block text-lg font-bold text-base-eerieBlack">
+                  {item.nombre}
+                </span>
+                <span className="text-sm text-institucional-whiteSmokeBlack">
+                  {item.sectores.length} sectores · {item.limitePuestos} puestos
+                </span>
               </span>
-              <ChevronDown className="-rotate-90 text-institucional-green" size={20} aria-hidden="true" />
+              <ChevronDown
+                className="-rotate-90 text-institucional-green"
+                size={20}
+                aria-hidden="true"
+              />
             </button>
           ))
         ) : (
+          /* ── Vista de nave seleccionada ── */
           <section aria-labelledby={`nave-${nave.id}`}>
-            <button type="button" onClick={goBackToNaves} className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-institucional-green hover:underline">
+            <button
+              type="button"
+              onClick={goBackToNaves}
+              className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-institucional-green hover:underline"
+            >
               <ArrowLeft size={18} aria-hidden="true" />
               Volver a naves
             </button>
+
             <div className="mb-5 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-institucional-green/10 text-institucional-green">
                 <Building2 size={20} aria-hidden="true" />
               </div>
-              <h2 id={`nave-${nave.id}`} className="text-xl font-bold text-base-eerieBlack">{nave.nombre}</h2>
+              <h2 id={`nave-${nave.id}`} className="text-xl font-bold text-base-eerieBlack">
+                {nave.nombre}
+              </h2>
             </div>
-            <div className="flex flex-col gap-3">
-              {nave.sectores.map((sector) => (
-                <SectorBlock
-                  key={sector.id}
-                  sector={sector}
-                  isOpen={openSector === sector.id}
-                  onToggle={() => setOpenSector(openSector === sector.id ? null : sector.id)}
-                  attendance={attendance}
-                  onEstadoChange={(comercianteId, estado) => setAttendance((current) => ({ ...current, [comercianteId]: estado }))}
-                />
-              ))}
-            </div>
+
+            {viewMode === "lista" ? (
+              <div className="flex flex-col gap-3">
+                {nave.sectores.map((sector) => (
+                  <SectorBlock
+                    key={sector.id}
+                    sector={sector}
+                    fecha={fechaStr}
+                    isOpen={openSector === sector.id}
+                    onToggle={() =>
+                      setOpenSector(openSector === sector.id ? null : sector.id)
+                    }
+                    searchQuery={searchQuery}
+                    overrides={overrides}
+                    onEstadoChange={handleEstadoChange}
+                    onOpenModal={handleOpenModal}
+                  />
+                ))}
+              </div>
+            ) : (
+              <TreemapView
+                nave={nave}
+                fecha={fechaStr}
+                overrides={overrides}
+              />
+            )}
           </section>
         )}
       </div>
+
+      {/* Modal de detalle */}
+      {modalData && (
+        <ComercianteModal
+          comerciante={modalData.comerciante}
+          puesto={modalData.puesto}
+          estado={modalData.estado}
+          fecha={fechaStr}
+          onClose={() => setModalData(null)}
+          onPermisoAsignado={handlePermisoAsignado}
+        />
+      )}
     </div>
   );
-}
-
-function formatDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }

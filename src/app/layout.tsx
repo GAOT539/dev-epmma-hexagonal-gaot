@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
+import { AuthProvider } from "@/infrastructure/auth/auth-context";
 
 const roboto = Roboto({
   variable: "--font-roboto",
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${roboto.variable} h-full antialiased`}
     >
       <body className={`${roboto.variable} font-sans min-h-full flex flex-col`}>
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
         <Toaster position="bottom-right" richColors />
       </body>
     </html>
