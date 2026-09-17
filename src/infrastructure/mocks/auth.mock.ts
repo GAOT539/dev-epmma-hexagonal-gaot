@@ -29,8 +29,8 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Medina Ruiz",
     rol: "TIC",
     mustChangePassword: true,
-    passwordHash: "1801234567*",
-    passwordActual: "1801234567*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
   },
   {
     id: "u-dir-01",
@@ -39,8 +39,8 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Sánchez López",
     rol: "DIRECTOR",
     mustChangePassword: true,
-    passwordHash: "1802345678*",
-    passwordActual: "1802345678*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
   },
   {
     id: "u-jefe-01",
@@ -49,8 +49,8 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Vargas Mendoza",
     rol: "JEFE_OPERATIVO",
     mustChangePassword: true,
-    passwordHash: "1803456789*",
-    passwordActual: "1803456789*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
   },
   {
     id: "u-sup-01",
@@ -59,8 +59,9 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Torres Guzmán",
     rol: "SUPERVISOR",
     mustChangePassword: true,
-    passwordHash: "1804567890*",
-    passwordActual: "1804567890*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
+    navesAsignadas: ["nave-a", "nave-b"],
   },
   {
     id: "u-sup-02",
@@ -69,8 +70,9 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Castillo Vera",
     rol: "SUPERVISOR",
     mustChangePassword: true,
-    passwordHash: "1805678901*",
-    passwordActual: "1805678901*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
+    navesAsignadas: ["nave-c", "nave-d"],
   },
   {
     id: "u-sup-03",
@@ -79,8 +81,9 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Mora Salcedo",
     rol: "SUPERVISOR",
     mustChangePassword: true,
-    passwordHash: "1806789012*",
-    passwordActual: "1806789012*",
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
+    navesAsignadas: ["nave-e"],
   },
 ];
 
@@ -109,6 +112,13 @@ export function authenticateUser(
     (u) => u.cedula === identificador && u.passwordActual === password
   );
   return user ? toUsuario(user) : null;
+}
+
+/** Verificar contraseña actual de un usuario */
+export function verifyPassword(userId: string, password: string): boolean {
+  const user = usuarios.find((u) => u.id === userId);
+  if (!user) return false;
+  return user.passwordActual === password;
 }
 
 export function changePassword(
@@ -170,6 +180,67 @@ export function getSupervisores(): Usuario[] {
     .map(toUsuario);
 }
 
+// ── CRUD de Usuarios ─────────────────────────────────────────────────────────
+
+let nextUserId = usuarios.length + 1;
+
+export function crearUsuario(data: {
+  cedula: string;
+  nombres: string;
+  apellidos: string;
+  rol: Rol;
+  navesAsignadas?: string[];
+}): Usuario {
+  const id = `u-new-${String(nextUserId++).padStart(2, "0")}`;
+  const nuevoUsuario: MockUsuario = {
+    id,
+    cedula: data.cedula,
+    nombres: data.nombres,
+    apellidos: data.apellidos,
+    rol: data.rol,
+    mustChangePassword: true,
+    passwordHash: "123456789*",
+    passwordActual: "123456789*",
+    navesAsignadas: data.navesAsignadas,
+  };
+  usuarios.push(nuevoUsuario);
+  return toUsuario(nuevoUsuario);
+}
+
+export function editarUsuario(
+  id: string,
+  data: {
+    nombres?: string;
+    apellidos?: string;
+    cedula?: string;
+    rol?: Rol;
+    navesAsignadas?: string[];
+  }
+): Usuario | null {
+  const idx = usuarios.findIndex((u) => u.id === id);
+  if (idx === -1) return null;
+
+  usuarios[idx] = {
+    ...usuarios[idx],
+    ...(data.nombres !== undefined && { nombres: data.nombres }),
+    ...(data.apellidos !== undefined && { apellidos: data.apellidos }),
+    ...(data.cedula !== undefined && { cedula: data.cedula }),
+    ...(data.rol !== undefined && { rol: data.rol }),
+    ...(data.navesAsignadas !== undefined && { navesAsignadas: data.navesAsignadas }),
+  };
+
+  return toUsuario(usuarios[idx]);
+}
+
+export function eliminarUsuario(id: string): boolean {
+  const idx = usuarios.findIndex((u) => u.id === id);
+  if (idx === -1) return false;
+  // No permitir eliminar al superadmin
+  if (usuarios[idx].id === "u-super") return false;
+  usuarios.splice(idx, 1);
+  return true;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function toUsuario(m: MockUsuario): Usuario {
@@ -181,6 +252,7 @@ function toUsuario(m: MockUsuario): Usuario {
     rol: m.rol,
     mustChangePassword: m.mustChangePassword,
     passwordHash: m.passwordHash,
+    navesAsignadas: m.navesAsignadas,
   };
 }
 

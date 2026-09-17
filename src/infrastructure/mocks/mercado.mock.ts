@@ -35,7 +35,23 @@ const APELLIDOS = [
   "Caicedo", "Velasteguí",
 ];
 
-const SECTOR_NOMBRES = ["Zona Norte", "Zona Sur", "Zona Este", "Zona Oeste"];
+// Jerarquía estricta: Nave -> Sector (sin Zonas)
+const SECTOR_NOMBRES = ["Sector 1", "Sector 2", "Sector 3", "Sector 4"];
+
+// ── Textos de novedad para generación ────────────────────────────────────────
+
+const TEXTOS_NOVEDAD = [
+  "Puesto en mal estado, requiere mantenimiento urgente.",
+  "Comerciante reporta problema con instalaciones eléctricas.",
+  "Acumulación de basura en los alrededores del puesto.",
+  "Fuga de agua detectada cerca del puesto.",
+  "Comerciante solicitó cambio de puesto por conflicto con vecino.",
+  "Producto en mal estado decomisado por inspección sanitaria.",
+  "Puesto parcialmente dañado por incidente menor.",
+  "Comerciante presenta documentación vencida.",
+  "Bloqueo parcial del pasillo por mercadería fuera del puesto.",
+  "Ruido excesivo reportado por comerciantes aledaños.",
+];
 
 // ── Seed determinístico ──────────────────────────────────────────────────────
 
@@ -73,7 +89,7 @@ const NAVES_CONFIG = [
 
 const LIMITE_PUESTOS = 100;
 
-// Generar sectores
+// Generar sectores (sin Zonas — directamente Sector 1..4 por nave)
 function generarSectores(): Map<string, Sector[]> {
   const map = new Map<string, Sector[]>();
   for (const nave of NAVES_CONFIG) {
@@ -159,6 +175,7 @@ const { puestos: allPuestos, comerciantes: allComerciantes } =
   generarPuestosYComerciantes();
 
 // ── Generar asistencia histórica (últimos 30 días) ──────────────────────────
+// Regla de transición: Si ayer = Novedad, hoy = Observacion con observacionTexto heredada
 
 function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
   const map = new Map<string, RegistroAsistencia[]>();
@@ -166,16 +183,21 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
 
   for (const comerciante of allComerciantes) {
     let estadoAnterior: EstadoAsistencia = "Pendiente";
+    let textoNovedadAnterior: string | undefined = undefined;
 
     for (let d = 30; d >= 0; d--) {
       const fecha = format(subDays(hoy, d), "yyyy-MM-dd");
       const key = fecha;
 
       let estado: EstadoAsistencia;
+      let observacionTexto: string | undefined = undefined;
+      let observacion: string | undefined = undefined;
 
-      // Regla de transición: Novedad ayer → Observacion hoy
+      // Regla de transición: Novedad ayer → Observacion hoy con texto heredado
       if (estadoAnterior === "Novedad") {
         estado = "Observacion";
+        observacion = "En observación por novedad previa";
+        observacionTexto = textoNovedadAnterior;
       } else {
         // Distribución aleatoria
         const r = rand();
@@ -186,20 +208,24 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
         else estado = "Permiso";
       }
 
+      // Generar texto de novedad si el estado es Novedad
+      if (estado === "Novedad") {
+        observacionTexto = pick(TEXTOS_NOVEDAD);
+        observacion = "Novedad reportada por supervisor";
+      } else if (estado === "Observacion" && !observacion) {
+        observacion = "En observación";
+      } else if (estado === "Permiso") {
+        observacion = "Permiso concedido";
+      }
+
       const registro: RegistroAsistencia = {
         id: `asist-${comerciante.idInterno}-${fecha}`,
         comercianteId: comerciante.idInterno,
         puestoId: comerciante.puestoId ?? "",
         fecha,
         estado,
-        observacion:
-          estado === "Novedad"
-            ? "Novedad reportada por supervisor"
-            : estado === "Observacion"
-              ? "En observación por novedad previa"
-              : estado === "Permiso"
-                ? "Permiso concedido"
-                : undefined,
+        observacion,
+        observacionTexto,
         permisoInicio: estado === "Permiso" ? fecha : undefined,
         permisoFin:
           estado === "Permiso"
@@ -211,6 +237,8 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
       existing.push(registro);
       map.set(key, existing);
 
+      // Guardar estado y texto para la transición del día siguiente
+      textoNovedadAnterior = estado === "Novedad" ? observacionTexto : undefined;
       estadoAnterior = estado;
     }
   }
@@ -321,7 +349,8 @@ export function setEstadoAsistencia(
   comercianteId: string,
   fecha: string,
   estado: EstadoAsistencia,
-  observacion?: string
+  observacion?: string,
+  observacionTexto?: string
 ) {
   const key = `${comercianteId}:${fecha}`;
   asistenciaOverrides.set(key, estado);
@@ -330,7 +359,7 @@ export function setEstadoAsistencia(
   const registros = asistenciaHistorica.get(fecha) ?? [];
   const idx = registros.findIndex((r) => r.comercianteId === comercianteId);
   if (idx >= 0) {
-    registros[idx] = { ...registros[idx], estado, observacion };
+    registros[idx] = { ...registros[idx], estado, observacion, observacionTexto };
   } else {
     const comerciante = getComerciantePorId(comercianteId);
     registros.push({
@@ -340,6 +369,7 @@ export function setEstadoAsistencia(
       fecha,
       estado,
       observacion,
+      observacionTexto,
     });
     asistenciaHistorica.set(fecha, registros);
   }
@@ -367,4 +397,111 @@ export function setPermisoComercianteRango(
     setEstadoAsistencia(comercianteId, fecha, "Permiso", "Permiso concedido");
     current.setDate(current.getDate() + 1);
   }
+}
+
+// ── CRUD de Comerciantes (para el módulo TIC) ────────────────────────────────
+
+let nextComerciante = allComerciantes.length + 1;
+
+export function agregarComerciante(data: {
+  ciu: string;
+  nombres: string;
+  apellidos: string;
+  actividad: string;
+  naveId: string;
+  sectorId: string;
+  puestoId: string;
+}): Comerciante {
+  const comId = `com-${String(nextComerciante++).padStart(4, "0")}`;
+  const cedula = genCedula(nextComerciante);
+
+  const comerciante: Comerciante = {
+    idInterno: comId,
+    ciu: data.ciu,
+    cedula,
+    nombres: data.nombres,
+    apellidos: data.apellidos,
+    actividad: data.actividad,
+    puestoId: data.puestoId,
+  };
+
+  allComerciantes.push(comerciante);
+
+  // Marcar puesto como ocupado
+  const puesto = allPuestos.find((p) => p.id === data.puestoId);
+  if (puesto) {
+    puesto.estado = "Ocupado";
+    puesto.comercianteId = comId;
+  }
+
+  return comerciante;
+}
+
+export function editarComerciante(
+  idInterno: string,
+  data: {
+    ciu?: string;
+    nombres?: string;
+    apellidos?: string;
+    actividad?: string;
+    naveId?: string;
+    sectorId?: string;
+    puestoId?: string;
+  }
+): Comerciante | null {
+  const idx = allComerciantes.findIndex((c) => c.idInterno === idInterno);
+  if (idx === -1) return null;
+
+  const old = allComerciantes[idx];
+
+  // Si cambió de puesto, liberar el anterior y asignar el nuevo
+  if (data.puestoId && data.puestoId !== old.puestoId) {
+    const oldPuesto = allPuestos.find((p) => p.id === old.puestoId);
+    if (oldPuesto) {
+      oldPuesto.estado = "Vacante";
+      oldPuesto.comercianteId = null;
+    }
+    const newPuesto = allPuestos.find((p) => p.id === data.puestoId);
+    if (newPuesto) {
+      newPuesto.estado = "Ocupado";
+      newPuesto.comercianteId = old.idInterno;
+    }
+  }
+
+  allComerciantes[idx] = {
+    ...old,
+    ...(data.ciu !== undefined && { ciu: data.ciu }),
+    ...(data.nombres !== undefined && { nombres: data.nombres }),
+    ...(data.apellidos !== undefined && { apellidos: data.apellidos }),
+    ...(data.actividad !== undefined && { actividad: data.actividad }),
+    ...(data.puestoId !== undefined && { puestoId: data.puestoId }),
+  };
+
+  return allComerciantes[idx];
+}
+
+export function eliminarComerciante(idInterno: string): boolean {
+  const idx = allComerciantes.findIndex((c) => c.idInterno === idInterno);
+  if (idx === -1) return false;
+
+  const com = allComerciantes[idx];
+
+  // Liberar puesto
+  if (com.puestoId) {
+    const puesto = allPuestos.find((p) => p.id === com.puestoId);
+    if (puesto) {
+      puesto.estado = "Vacante";
+      puesto.comercianteId = null;
+    }
+  }
+
+  allComerciantes.splice(idx, 1);
+  return true;
+}
+
+/** Obtener puestos vacantes para un sector específico */
+export function getPuestosVacantesPorSector(sectorId: string): Puesto[] {
+  return allPuestos.filter(
+    (p) => p.sectorId === sectorId && p.estado === "Vacante"
+  );
 }

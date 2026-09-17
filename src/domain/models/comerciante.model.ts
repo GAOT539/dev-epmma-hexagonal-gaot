@@ -18,6 +18,8 @@ export interface Usuario {
   mustChangePassword: boolean;
   /** Hash simulado – en mock simplemente comparamos strings */
   passwordHash: string;
+  /** Naves asignadas al supervisor (solo aplica para rol SUPERVISOR) */
+  navesAsignadas?: string[];
 }
 
 // ── Estados ──────────────────────────────────────────────────────────────────
@@ -77,6 +79,8 @@ export interface RegistroAsistencia {
   fecha: string; // YYYY-MM-DD
   estado: EstadoAsistencia;
   observacion?: string;
+  /** Texto detallado de la novedad/observación */
+  observacionTexto?: string;
   permisoInicio?: string; // YYYY-MM-DD
   permisoFin?: string;    // YYYY-MM-DD
 }

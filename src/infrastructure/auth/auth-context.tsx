@@ -12,6 +12,7 @@ import type { Usuario } from "@/domain/models/comerciante.model";
 import {
   authenticateUser,
   changePassword as mockChangePassword,
+  verifyPassword,
 } from "@/infrastructure/mocks/auth.mock";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -26,6 +27,7 @@ interface AuthContextType {
   ) => { success: boolean; user?: Usuario; error?: string };
   logout: () => void;
   changePassword: (
+    currentPassword: string,
     newPassword: string
   ) => { success: boolean; error?: string };
   updateUser: (user: Usuario) => void;
@@ -87,8 +89,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const changePassword = useCallback(
-    (newPassword: string) => {
+    (currentPassword: string, newPassword: string) => {
       if (!user) return { success: false, error: "No hay sesión activa." };
+
+      // Skip current password verification for forced first-login changes
+      if (!user.mustChangePassword) {
+        if (!verifyPassword(user.id, currentPassword)) {
+          return { success: false, error: "La contraseña actual es incorrecta." };
+        }
+      }
 
       const result = mockChangePassword(user.id, newPassword);
       if (result.success) {

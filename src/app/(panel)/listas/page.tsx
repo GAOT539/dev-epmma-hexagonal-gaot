@@ -16,6 +16,7 @@ import type {
   Puesto,
   Comerciante,
   Sector,
+  RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
 import {
   AlertTriangle,
@@ -26,6 +27,7 @@ import {
   CheckCircle2,
   ChevronDown,
   Eye as EyeIcon,
+  MessageSquareWarning,
   Search,
   ShieldAlert,
   Tag,
@@ -33,9 +35,20 @@ import {
   ToggleRight,
   X,
   XCircle,
+  Edit3,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
 import { addDays, format, isToday, isFuture, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -148,6 +161,70 @@ function AccionBtn({
   );
 }
 
+// ── Modal de Observación (textarea) ──────────────────────────────────────────
+
+function ObservacionDialog({
+  open,
+  comerciante,
+  onClose,
+  onSave,
+}: {
+  open: boolean;
+  comerciante: Comerciante | null;
+  onClose: () => void;
+  onSave: (texto: string) => void;
+}) {
+  const [texto, setTexto] = useState("");
+
+  function handleSave() {
+    if (!texto.trim()) return;
+    onSave(texto.trim());
+    setTexto("");
+  }
+
+  function handleClose() {
+    setTexto("");
+    onClose();
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-acento-naranjaSalmon1">
+            <MessageSquareWarning size={20} />
+            Registrar Observación
+          </DialogTitle>
+          <DialogDescription>
+            {comerciante
+              ? `Ingrese el detalle de la observación para ${comerciante.nombres} ${comerciante.apellidos} (${comerciante.ciu}).`
+              : "Ingrese el detalle de la observación."}
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          placeholder="Describa la novedad o situación observada..."
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          rows={4}
+          className="resize-none"
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={handleClose}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={!texto.trim()}
+            className="bg-acento-naranjaSalmon1 text-base-white hover:bg-acento-naranjaSalmon2"
+          >
+            Guardar como Novedad
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Modal de detalle del comerciante ─────────────────────────────────────────
 
 function ComercianteModal({
@@ -157,6 +234,7 @@ function ComercianteModal({
   fecha,
   onClose,
   onPermisoAsignado,
+  onNovedadGuardada,
 }: {
   comerciante: Comerciante;
   puesto: Puesto;
@@ -164,13 +242,31 @@ function ComercianteModal({
   fecha: string;
   onClose: () => void;
   onPermisoAsignado: (inicio: string, fin: string) => void;
+  onNovedadGuardada: (comercianteId: string, texto: string) => void;
 }) {
   const [permisoInicio, setPermisoInicio] = useState("");
   const [permisoFin, setPermisoFin] = useState("");
   const [error, setError] = useState("");
+  const [novedadTexto, setNovedadTexto] = useState("");
+  const [editandoPermiso, setEditandoPermiso] = useState(false);
 
   const estadoConfig = ESTADO_CONFIG[estado];
   const isPermiso = estado === "Permiso";
+
+  // Obtener registro actual para fechas de permiso
+  const registroActual = getAsistenciaComerciantePorFecha(
+    comerciante.idInterno,
+    fecha
+  );
+
+  // Obtener observación del día anterior (si existe)
+  const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
+  const registroAyer = getAsistenciaComerciantePorFecha(
+    comerciante.idInterno,
+    fechaAyer
+  );
+  const observacionAnterior =
+    registroAyer?.estado === "Novedad" ? registroAyer.observacionTexto : null;
 
   function handleAsignarPermiso() {
     setError("");
@@ -185,13 +281,19 @@ function ComercianteModal({
     onPermisoAsignado(permisoInicio, permisoFin);
   }
 
+  function handleGuardarNovedad() {
+    if (!novedadTexto.trim()) return;
+    onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
+    setNovedadTexto("");
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-base-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-base-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        className="w-full max-w-lg rounded-2xl bg-base-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -242,9 +344,122 @@ function ComercianteModal({
             )}
           </div>
 
-          {/* Asignación de permiso */}
-          {!isPermiso && (
-            <div className="mt-4 rounded-xl bg-institucional-whiteSmoke p-4 space-y-3">
+          {/* ── Sección Novedad (textarea + observación anterior) ── */}
+          <div className="rounded-xl bg-acento-naranjaSalmon1/5 p-4 space-y-3 ring-1 ring-acento-naranjaSalmon1/20">
+            <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
+              <AlertTriangle size={16} className="text-acento-naranjaSalmon1" />
+              Registrar Novedad
+            </h3>
+            <Textarea
+              placeholder="Escriba la novedad o situación a reportar..."
+              value={novedadTexto}
+              onChange={(e) => setNovedadTexto(e.target.value)}
+              rows={3}
+              className="resize-none text-sm"
+            />
+            <Button
+              onClick={handleGuardarNovedad}
+              disabled={!novedadTexto.trim()}
+              size="sm"
+              className="w-full bg-acento-naranjaSalmon1 text-base-white hover:bg-acento-naranjaSalmon2"
+            >
+              Guardar Novedad
+            </Button>
+
+            {/* Observación heredada del día anterior */}
+            {observacionAnterior && (
+              <div className="mt-2 rounded-lg bg-acento-azul1/10 p-3 ring-1 ring-acento-azul1/20">
+                <p className="text-[11px] font-semibold text-acento-azul1 mb-1">
+                  📋 Observación anterior:
+                </p>
+                <p className="text-xs text-acento-azul2 leading-relaxed">
+                  {observacionAnterior}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* ── Sección Permiso ── */}
+          {isPermiso && registroActual ? (
+            <div className="rounded-xl bg-acento-morado/5 p-4 space-y-3 ring-1 ring-acento-morado/20">
+              <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
+                <ShieldAlert size={16} className="text-acento-morado" />
+                Permiso Activo
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg bg-base-white p-2.5">
+                  <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase">
+                    Desde
+                  </p>
+                  <p className="text-sm font-semibold text-base-eerieBlack mt-0.5">
+                    {registroActual.permisoInicio
+                      ? format(new Date(registroActual.permisoInicio + "T00:00:00"), "dd/MM")
+                      : "—"}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-base-white p-2.5">
+                  <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase">
+                    Hasta
+                  </p>
+                  <p className="text-sm font-semibold text-base-eerieBlack mt-0.5">
+                    {registroActual.permisoFin
+                      ? format(new Date(registroActual.permisoFin + "T00:00:00"), "dd/MM")
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+              {!editandoPermiso ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditandoPermiso(true)}
+                  className="w-full text-acento-morado border-acento-morado/30 hover:bg-acento-morado/5"
+                >
+                  <Edit3 size={14} className="mr-2" />
+                  Editar Permiso
+                </Button>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
+                        Nuevo Inicio
+                      </label>
+                      <input
+                        type="date"
+                        value={permisoInicio}
+                        onChange={(e) => setPermisoInicio(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
+                        Nuevo Fin
+                      </label>
+                      <input
+                        type="date"
+                        value={permisoFin}
+                        onChange={(e) => setPermisoFin(e.target.value)}
+                        className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                      />
+                    </div>
+                  </div>
+                  {error && (
+                    <p className="text-xs text-base-red font-medium">{error}</p>
+                  )}
+                  <Button
+                    onClick={handleAsignarPermiso}
+                    size="sm"
+                    className="w-full bg-acento-morado hover:bg-acento-morado/90 text-base-white"
+                  >
+                    Reasignar Permiso
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            /* Asignación de nuevo permiso (solo si no tiene permiso activo) */
+            <div className="rounded-xl bg-institucional-whiteSmoke p-4 space-y-3">
               <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
                 <ShieldAlert size={16} className="text-acento-morado" />
                 Asignar Permiso
@@ -311,6 +526,7 @@ function PuestoCard({
   estado,
   onEstadoChange,
   onDoubleClick,
+  onObservacion,
   isPermiso,
 }: {
   puesto: Puesto;
@@ -318,6 +534,7 @@ function PuestoCard({
   estado: EstadoAsistencia | "Vacante";
   onEstadoChange: (estado: EstadoAsistencia) => void;
   onDoubleClick: () => void;
+  onObservacion: () => void;
   isPermiso: boolean;
 }) {
   const config = ESTADO_CONFIG[estado];
@@ -380,7 +597,7 @@ function PuestoCard({
         </div>
       </div>
 
-      {/* Botones de acción */}
+      {/* Botones de acción: Presente, Ausente, Observación */}
       <div className="flex items-center gap-1.5 flex-wrap">
         <AccionBtn
           label="Presente"
@@ -399,19 +616,11 @@ function PuestoCard({
           disabled={isPermiso}
         />
         <AccionBtn
-          label="Novedad"
-          Icon={AlertTriangle}
-          colorClasses="bg-acento-naranjaSalmon1/15 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
-          isActive={estado === "Novedad"}
-          onClick={() => onEstadoChange("Novedad")}
-          disabled={isPermiso}
-        />
-        <AccionBtn
-          label="Obs."
+          label="Observación"
           Icon={EyeIcon}
-          colorClasses="bg-acento-azul1/15 text-acento-azul1 hover:bg-acento-azul1 hover:text-base-white"
-          isActive={estado === "Observacion"}
-          onClick={() => onEstadoChange("Observacion")}
+          colorClasses="bg-acento-naranjaSalmon1/15 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
+          isActive={estado === "Novedad" || estado === "Observacion"}
+          onClick={onObservacion}
           disabled={isPermiso}
         />
       </div>
@@ -430,6 +639,7 @@ function SectorBlock({
   overrides,
   onEstadoChange,
   onOpenModal,
+  onObservacion,
 }: {
   sector: Sector;
   fecha: string;
@@ -439,6 +649,7 @@ function SectorBlock({
   overrides: Record<string, EstadoAsistencia>;
   onEstadoChange: (comercianteId: string, estado: EstadoAsistencia) => void;
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
+  onObservacion: (comerciante: Comerciante) => void;
 }) {
   const puestos = getPuestosPorSector(sector.id);
   const asistenciaDelDia = getAsistenciaPorFecha(fecha);
@@ -548,6 +759,11 @@ function SectorBlock({
                     onOpenModal(item.puesto, item.comerciante, item.estado as EstadoAsistencia);
                   }
                 }}
+                onObservacion={() => {
+                  if (item.comerciante) {
+                    onObservacion(item.comerciante);
+                  }
+                }}
               />
             </li>
           ))}
@@ -562,16 +778,18 @@ function SectorBlock({
   );
 }
 
-// ── Vista Treemap ────────────────────────────────────────────────────────────
+// ── Vista Treemap (Mapa de Árbol) ────────────────────────────────────────────
 
 function TreemapView({
   nave,
   fecha,
   overrides,
+  onOpenModal,
 }: {
   nave: Nave;
   fecha: string;
   overrides: Record<string, EstadoAsistencia>;
+  onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
 }) {
   const asistenciaDelDia = getAsistenciaPorFecha(fecha);
 
@@ -585,7 +803,7 @@ function TreemapView({
             <h3 className="text-sm font-bold text-base-eerieBlack mb-2">
               {sector.nombre}
             </h3>
-            <div className="grid grid-cols-8 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-16 gap-1">
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
               {puestos.map((puesto) => {
                 const comerciante = puesto.comercianteId
                   ? getComerciantePorId(puesto.comercianteId)
@@ -615,28 +833,56 @@ function TreemapView({
                   Vacante: "bg-institucional-whiteSmokeBlack/20",
                 };
 
+                const isInteractive = !!comerciante && estado !== "Vacante";
+
                 return (
                   <div
                     key={puesto.id}
-                    className={`aspect-square rounded-sm ${bgColorMap[estado]} transition-all hover:scale-110 hover:z-10 cursor-default relative group`}
+                    onClick={() => {
+                      if (isInteractive && comerciante) {
+                        onOpenModal(puesto, comerciante, estado as EstadoAsistencia);
+                      }
+                    }}
+                    className={[
+                      "min-h-[120px] p-4 rounded-lg flex flex-col justify-between transition-all relative",
+                      bgColorMap[estado],
+                      isInteractive
+                        ? "cursor-pointer hover:scale-[1.03] hover:shadow-lg hover:z-10"
+                        : "cursor-default opacity-60",
+                    ].join(" ")}
                     title={
                       comerciante
                         ? `${puesto.codigo}: ${comerciante.nombres} ${comerciante.apellidos} — ${config.label}`
                         : `${puesto.codigo}: Vacante`
                     }
                   >
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 hidden group-hover:block z-20 pointer-events-none">
-                      <div className="rounded-lg bg-base-eerieBlack text-base-white text-[9px] px-2 py-1 whitespace-nowrap shadow-lg">
-                        <p className="font-semibold">{puesto.codigo}</p>
-                        {comerciante && (
-                          <p>
-                            {comerciante.nombres} {comerciante.apellidos}
-                          </p>
-                        )}
-                        <p className="opacity-75">{config.label}</p>
+                    {/* Código de puesto */}
+                    <span className="text-[9px] font-bold text-base-white/70 uppercase tracking-wider">
+                      {puesto.codigo}
+                    </span>
+
+                    {comerciante ? (
+                      <div className="mt-auto">
+                        <p className="text-xs font-bold text-base-white leading-tight truncate">
+                          {comerciante.nombres}
+                        </p>
+                        <p className="text-[10px] text-base-white/80 truncate">
+                          {comerciante.apellidos}
+                        </p>
+                        <p className="text-[9px] text-base-white/60 font-mono mt-1">
+                          {comerciante.ciu}
+                        </p>
                       </div>
-                    </div>
+                    ) : (
+                      <p className="mt-auto text-[10px] text-base-white/50 font-medium">
+                        Vacante
+                      </p>
+                    )}
+
+                    {/* Badge de estado */}
+                    <span className="absolute top-2 right-2 text-[8px] font-bold text-base-white/80 bg-base-black/20 rounded px-1.5 py-0.5">
+                      {config.label}
+                    </span>
                   </div>
                 );
               })}
@@ -693,6 +939,10 @@ export default function ListasPage() {
     estado: EstadoAsistencia;
   } | null>(null);
 
+  // Observación dialog state
+  const [obsDialogOpen, setObsDialogOpen] = useState(false);
+  const [obsCommerciante, setObsCommerciante] = useState<Comerciante | null>(null);
+
   const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
 
@@ -743,6 +993,45 @@ export default function ListasPage() {
 
     setOverrides(newOverrides);
     setModalData(null);
+  }
+
+  // Manejar clic en "Observación" → abrir dialog
+  function handleObservacion(comerciante: Comerciante) {
+    setObsCommerciante(comerciante);
+    setObsDialogOpen(true);
+  }
+
+  // Guardar observación → estado cambia a Novedad
+  function handleObservacionSave(texto: string) {
+    if (!obsCommerciante) return;
+    const key = `${obsCommerciante.idInterno}:${fechaStr}`;
+    setOverrides((prev) => ({ ...prev, [key]: "Novedad" }));
+    setEstadoAsistencia(
+      obsCommerciante.idInterno,
+      fechaStr,
+      "Novedad",
+      "Novedad reportada por supervisor",
+      texto
+    );
+    setObsDialogOpen(false);
+    setObsCommerciante(null);
+  }
+
+  // Manejar novedad desde el modal de detalle
+  function handleNovedadDesdeModal(comercianteId: string, texto: string) {
+    const key = `${comercianteId}:${fechaStr}`;
+    setOverrides((prev) => ({ ...prev, [key]: "Novedad" }));
+    setEstadoAsistencia(
+      comercianteId,
+      fechaStr,
+      "Novedad",
+      "Novedad reportada por supervisor",
+      texto
+    );
+    // Actualizar el estado del modal
+    if (modalData && modalData.comerciante.idInterno === comercianteId) {
+      setModalData({ ...modalData, estado: "Novedad" });
+    }
   }
 
   return (
@@ -913,6 +1202,7 @@ export default function ListasPage() {
                     overrides={overrides}
                     onEstadoChange={handleEstadoChange}
                     onOpenModal={handleOpenModal}
+                    onObservacion={handleObservacion}
                   />
                 ))}
               </div>
@@ -921,6 +1211,7 @@ export default function ListasPage() {
                 nave={nave}
                 fecha={fechaStr}
                 overrides={overrides}
+                onOpenModal={handleOpenModal}
               />
             )}
           </section>
@@ -936,8 +1227,20 @@ export default function ListasPage() {
           fecha={fechaStr}
           onClose={() => setModalData(null)}
           onPermisoAsignado={handlePermisoAsignado}
+          onNovedadGuardada={handleNovedadDesdeModal}
         />
       )}
+
+      {/* Dialog de Observación */}
+      <ObservacionDialog
+        open={obsDialogOpen}
+        comerciante={obsCommerciante}
+        onClose={() => {
+          setObsDialogOpen(false);
+          setObsCommerciante(null);
+        }}
+        onSave={handleObservacionSave}
+      />
     </div>
   );
 }

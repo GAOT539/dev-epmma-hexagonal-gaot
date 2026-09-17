@@ -45,7 +45,8 @@ function PasswordChangeModal({
     }
 
     setIsSubmitting(true);
-    const result = changePassword(newPass);
+    // For forced password change, use the current password hash as verification
+    const result = changePassword(newPass, newPass);
     if (result.success) {
       toast.success("Contraseña actualizada", {
         description: "Su contraseña ha sido cambiada exitosamente.",

@@ -5,7 +5,6 @@ import {
   BarChart3,
   Calendar as CalendarIcon,
   Download,
-  Filter,
   Search,
   User,
 } from "lucide-react";
@@ -23,6 +22,10 @@ import type {
   EstadoAsistencia,
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
+import { useAuth } from "@/infrastructure/auth/auth-context";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import type { DateRange } from "react-day-picker";
 
 // ── Colores por estado ───────────────────────────────────────────────────────
 
@@ -47,22 +50,37 @@ const ESTADO_LABELS: Record<string, string> = {
 // ── Página de Reportes ───────────────────────────────────────────────────────
 
 export default function ReportesPage() {
-  const naves = getNaves();
+  const { user } = useAuth();
+  const allNaves = getNaves();
   const todosLosComerciantes = getComerciantes();
+
+  // RBAC: Supervisores solo ven sus naves asignadas
+  const naves = useMemo(() => {
+    if (user?.rol === "SUPERVISOR" && user.navesAsignadas) {
+      return allNaves.filter((n) => user.navesAsignadas!.includes(n.id));
+    }
+    // TIC, DIRECTOR, JEFE_OPERATIVO, SUPERADMIN ven todas
+    return allNaves;
+  }, [allNaves, user]);
 
   const [modo, setModo] = useState<"nave" | "individual">("nave");
   const [selectedNaveId, setSelectedNaveId] = useState(naves[0]?.id ?? "");
   const [searchComerciante, setSearchComerciante] = useState("");
   const [selectedComercianteId, setSelectedComercianteId] = useState<string | null>(null);
-  const [fechaInicio, setFechaInicio] = useState(() =>
-    format(subDays(new Date(), 14), "yyyy-MM-dd")
-  );
-  const [fechaFin, setFechaFin] = useState(() =>
-    format(new Date(), "yyyy-MM-dd")
-  );
+
+  // DateRangePicker state
+  const [dateRange, setDateRange] = useState<DateRange | undefined>({
+    from: subDays(new Date(), 14),
+    to: new Date(),
+  });
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+
+  const fechaInicio = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
+  const fechaFin = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
 
   // Rango de fechas
   const fechas = useMemo(() => {
+    if (!fechaInicio || !fechaFin) return [];
     try {
       return eachDayOfInterval({
         start: new Date(fechaInicio + "T00:00:00"),
@@ -75,7 +93,7 @@ export default function ReportesPage() {
 
   // Datos para el reporte por nave
   const reporteNave = useMemo(() => {
-    if (modo !== "nave" || !selectedNaveId) return [];
+    if (modo !== "nave" || !selectedNaveId || !fechaInicio || !fechaFin) return [];
 
     const puestos = getPuestosPorNave(selectedNaveId);
     const comerciantesNave = puestos
@@ -122,7 +140,7 @@ export default function ReportesPage() {
 
   // Datos para reporte individual
   const reporteIndividual = useMemo(() => {
-    if (modo !== "individual" || !selectedComercianteId) return null;
+    if (modo !== "individual" || !selectedComercianteId || !fechaInicio || !fechaFin) return null;
 
     const com = todosLosComerciantes.find(
       (c) => c.idInterno === selectedComercianteId
@@ -163,6 +181,10 @@ export default function ReportesPage() {
       )
       .slice(0, 8);
   }, [searchComerciante, todosLosComerciantes]);
+
+  // Validación: ¿hay datos para descargar?
+  const hayDatos =
+    modo === "nave" ? reporteNave.length > 0 : reporteIndividual !== null;
 
   // ── Exportar PDF ───────────────────────────────────────────────────────────
 
@@ -427,35 +449,61 @@ export default function ReportesPage() {
               </div>
             )}
 
-            {/* Fechas */}
+            {/* DateRangePicker */}
             <div>
               <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
-                Desde
+                Rango de Fechas
               </label>
-              <input
-                type="date"
-                value={fechaInicio}
-                onChange={(e) => setFechaInicio(e.target.value)}
-                className="mt-1.5 h-9 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
-                Hasta
-              </label>
-              <input
-                type="date"
-                value={fechaFin}
-                onChange={(e) => setFechaFin(e.target.value)}
-                className="mt-1.5 h-9 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-              />
+              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger
+                    className="mt-1.5 h-9 inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[240px] hover:bg-muted transition-all outline-none"
+                  >
+                    <CalendarIcon size={14} className="mr-2 text-institucional-whiteSmokeBlack" />
+                    {dateRange?.from ? (
+                      dateRange.to ? (
+                        <>
+                          {format(dateRange.from, "dd/MM/yyyy")} –{" "}
+                          {format(dateRange.to, "dd/MM/yyyy")}
+                        </>
+                      ) : (
+                        format(dateRange.from, "dd/MM/yyyy")
+                      )
+                    ) : (
+                      <span className="text-institucional-whiteSmokeBlack">
+                        Seleccionar rango
+                      </span>
+                    )}
+                  </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="range"
+                    selected={dateRange}
+                    onSelect={(range) => {
+                      setDateRange(range);
+                      if (range?.from && range?.to) {
+                        setDatePickerOpen(false);
+                      }
+                    }}
+                    disabled={(date) => date > new Date()}
+                    numberOfMonths={2}
+                    locale={es}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
 
             {/* Botón PDF */}
             <button
               type="button"
               onClick={handleExportPDF}
-              className="flex items-center gap-2 h-9 rounded-lg bg-institucional-green px-5 text-xs font-semibold text-base-white shadow-sm transition-colors hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2"
+              disabled={!hayDatos}
+              className={[
+                "flex items-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors",
+                hayDatos
+                  ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2"
+                  : "bg-institucional-whiteSmokeBlack/30 text-institucional-whiteSmokeBlack cursor-not-allowed",
+              ].join(" ")}
             >
               <Download size={14} />
               Descargar PDF
