@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   getNaves,
   getComerciantePorId,
@@ -113,21 +114,30 @@ function formatDate(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+// ── Helper: normalizar texto (insensible a tildes y mayúsculas) ──────────────
+
+const normalizeText = (text: string) => {
+  if (!text) return "";
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+};
+
 // ── Botón de acción de estado ────────────────────────────────────────────────
 
 function AccionBtn({
   label,
   Icon,
-  colorClasses,
+  activeClass,
+  inactiveClass,
   isActive,
   onClick,
   disabled,
 }: {
   label: string;
   Icon: React.ElementType;
-  colorClasses: string;
+  activeClass: string;
+  inactiveClass: string;
   isActive: boolean;
-  onClick: () => void;
+  onClick: (e: React.MouseEvent) => void;
   disabled?: boolean;
 }) {
   return (
@@ -137,17 +147,14 @@ function AccionBtn({
       disabled={disabled}
       aria-pressed={isActive}
       className={[
-        "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold",
+        "flex w-full sm:w-auto items-center justify-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold",
         "transition-all duration-150 active:scale-95",
         disabled ? "opacity-40 cursor-not-allowed" : "",
-        isActive
-          ? colorClasses.replace(/\/15/g, "").replace(/\/10/g, "") +
-            " text-base-white shadow-sm"
-          : colorClasses,
+        isActive ? `${activeClass} shadow-sm` : inactiveClass,
       ].join(" ")}
     >
       <Icon size={13} strokeWidth={2.5} aria-hidden="true" />
-      {label}
+      <span>{label}</span>
     </button>
   );
 }
@@ -180,10 +187,13 @@ function ObservacionDialog({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent
+        onInteractOutside={(e) => e.preventDefault()}
+        className="sm:max-w-md"
+      >
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-acento-naranjaSalmon1">
-            <MessageSquareWarning size={20} />
+          <DialogTitle className="flex items-center gap-2 text-blue-600">
+            <MessageSquareWarning size={20} className="text-blue-600" />
             Registrar Observación
           </DialogTitle>
           <DialogDescription>
@@ -197,7 +207,7 @@ function ObservacionDialog({
           value={texto}
           onChange={(e) => setTexto(e.target.value)}
           rows={4}
-          className="resize-none"
+          className="resize-none border-blue-200 focus-visible:ring-blue-500"
         />
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
@@ -206,7 +216,7 @@ function ObservacionDialog({
           <Button
             onClick={handleSave}
             disabled={!texto.trim()}
-            className="bg-acento-naranjaSalmon1 text-base-white hover:bg-acento-naranjaSalmon2"
+            className="bg-blue-600 text-white hover:bg-blue-700 font-semibold"
           >
             Guardar como Novedad
           </Button>
@@ -219,7 +229,7 @@ function ObservacionDialog({
 function ComercianteModal({
   comerciante,
   puesto,
-  estado,
+  estado: estadoInicial,
   fecha,
   onClose,
   onPermisoAsignado,
@@ -235,56 +245,180 @@ function ComercianteModal({
   onNovedadGuardada: (comercianteId: string, texto: string) => void;
   onEstadoChange: (estado: EstadoAsistencia) => void;
 }) {
-  const [permisoInicio, setPermisoInicio] = useState("");
-  const [permisoFin, setPermisoFin] = useState("");
-  const [error, setError] = useState("");
-  const [novedadTexto, setNovedadTexto] = useState("");
-  const [editandoPermiso, setEditandoPermiso] = useState(false);
-
-  const [mostrarObservacion, setMostrarObservacion] = useState(estado === "Observacion");
-
-  const estadoConfig = ESTADO_CONFIG[estado];
-  const isPermiso = estado === "Permiso";
-
-  // Obtener registro actual para fechas de permiso
+  // Registro actual en la base de datos simulada (mock)
   const registroActual = getAsistenciaComerciantePorFecha(
     comerciante.idInterno,
     fecha
   );
 
-  // Obtener observación del día anterior (si existe)
+  // Obtener datos existentes en el mock
+  const observacionExistente = registroActual?.observacionTexto || registroActual?.observacion || "";
+  const tieneObservacionPrevia = Boolean(observacionExistente.trim());
+
+  const tienePermisoPrevio = estadoInicial === "Permiso" || Boolean(registroActual?.permisoInicio);
+  const permisoInicioExistente = registroActual?.permisoInicio || fecha;
+  const permisoFinExistente = registroActual?.permisoFin || fecha;
+
+  // Estados locales del modal
+  const [estadoActual, setEstadoActual] = useState<EstadoAsistencia>(estadoInicial);
+  const [novedadTexto, setNovedadTexto] = useState(observacionExistente);
+  const [permisoInicio, setPermisoInicio] = useState(permisoInicioExistente);
+  const [permisoFin, setPermisoFin] = useState(permisoFinExistente);
+  const [openInicio, setOpenInicio] = useState(false);
+  const [openFin, setOpenFin] = useState(false);
+  const [permisoError, setPermisoError] = useState("");
+
+  const fechaInicioObj = useMemo(() => {
+    if (!permisoInicio) return undefined;
+    const d = new Date(permisoInicio + "T00:00:00");
+    return isNaN(d.getTime()) ? undefined : d;
+  }, [permisoInicio]);
+
+  const fechaFinObj = useMemo(() => {
+    if (!permisoFin) return undefined;
+    const d = new Date(permisoFin + "T00:00:00");
+    return isNaN(d.getTime()) ? undefined : d;
+  }, [permisoFin]);
+
+  // Estado para modal de confirmación personalizado (reemplazo de window.confirm)
+  const [confirmAlert, setConfirmAlert] = useState<{
+    isOpen: boolean;
+    nuevoEstado: "Presente" | "Ausente";
+    tipo: "observacion" | "permiso";
+    mensaje: string;
+  } | null>(null);
+
+  // Subpanel desplegable (toggle): "observacion" | "permiso" | null
+  const [panelActivo, setPanelActivo] = useState<"observacion" | "permiso" | null>(() => {
+    if (estadoInicial === "Observacion") return "observacion";
+    if (estadoInicial === "Permiso") return "permiso";
+    return null;
+  });
+
+  const estadoConfig = ESTADO_CONFIG[estadoActual] ?? ESTADO_CONFIG["Pendiente"];
+
+  // Obtener observación del día anterior (si existe) para referencia
   const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
   const registroAyer = getAsistenciaComerciantePorFecha(
     comerciante.idInterno,
     fechaAyer
   );
   const observacionAnterior =
-    registroAyer?.estado === "Observacion" ? registroAyer.observacionTexto : null;
+    registroAyer?.estado === "Observacion" ? (registroAyer.observacionTexto || registroAyer.observacion) : null;
 
-  function handleAsignarPermiso() {
-    setError("");
+  // ── Intercepción y cambio de estado a Presente / Ausente ──────────────────
+  function handleSeleccionarEstado(nuevoEstado: "Presente" | "Ausente") {
+    if (estadoActual === nuevoEstado && panelActivo === null) return;
+
+    // Si tiene Observación guardada o escrita en el modal
+    if (estadoActual === "Observacion" || Boolean(novedadTexto.trim())) {
+      setConfirmAlert({
+        isOpen: true,
+        nuevoEstado,
+        tipo: "observacion",
+        mensaje:
+          "Cambiar la asistencia eliminará la observación registrada para este día. ¿Desea continuar?",
+      });
+      return;
+    }
+
+    // Si tiene Permiso registrado
+    if (estadoActual === "Permiso" || tienePermisoPrevio) {
+      setConfirmAlert({
+        isOpen: true,
+        nuevoEstado,
+        tipo: "permiso",
+        mensaje:
+          "Cambiar la asistencia eliminará el permiso asignado a este comerciante. ¿Desea continuar?",
+      });
+      return;
+    }
+
+    // Cambio directo sin advertencia
+    setPanelActivo(null);
+    setEstadoActual(nuevoEstado);
+    setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado);
+    onEstadoChange(nuevoEstado);
+    toast.success(`Asistencia registrada como ${nuevoEstado}`);
+  }
+
+  function handleConfirmarCambio() {
+    if (!confirmAlert) return;
+    const { nuevoEstado, tipo } = confirmAlert;
+
+    if (tipo === "observacion") {
+      setNovedadTexto("");
+      setPanelActivo(null);
+      setEstadoActual(nuevoEstado);
+      setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
+      onEstadoChange(nuevoEstado);
+      toast.success(`Asistencia registrada como ${nuevoEstado}`, {
+        description: "Se eliminó la observación registrada para este día.",
+      });
+    } else if (tipo === "permiso") {
+      setPermisoInicio("");
+      setPermisoFin("");
+      setPanelActivo(null);
+      setEstadoActual(nuevoEstado);
+      setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
+      onEstadoChange(nuevoEstado);
+      toast.success(`Asistencia registrada como ${nuevoEstado}`, {
+        description: "Se eliminó el permiso asignado.",
+      });
+    }
+
+    setConfirmAlert(null);
+  }
+
+  // ── Toggles para Observación y Permiso ─────────────────────────────────────
+  function handleToggleObservacion() {
+    setPanelActivo((actual) => (actual === "observacion" ? null : "observacion"));
+  }
+
+  function handleTogglePermiso() {
+    setPanelActivo((actual) => (actual === "permiso" ? null : "permiso"));
+  }
+
+  // ── Guardar / Editar Observación ──────────────────────────────────────────
+  function handleGuardarObservacion() {
+    if (!novedadTexto.trim()) return;
+    onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
+    setEstadoActual("Observacion");
+    onEstadoChange("Observacion");
+    toast.success(
+      tieneObservacionPrevia ? "Observación editada exitosamente" : "Observación registrada exitosamente",
+      { description: "Se ha actualizado la novedad del comerciante." }
+    );
+  }
+
+  // ── Guardar / Editar Permiso ──────────────────────────────────────────────
+  function handleGuardarPermiso() {
+    setPermisoError("");
     if (!permisoInicio || !permisoFin) {
-      setError("Debe seleccionar fecha de inicio y fin.");
+      setPermisoError("Debe seleccionar fecha de inicio y fin.");
       return;
     }
     if (permisoInicio > permisoFin) {
-      setError("La fecha de inicio no puede ser posterior a la de fin.");
+      setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
       return;
     }
     onPermisoAsignado(permisoInicio, permisoFin);
-  }
-
-  function handleGuardarNovedad() {
-    if (!novedadTexto.trim()) return;
-    onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
-    setNovedadTexto("");
+    setEstadoActual("Permiso");
+    onEstadoChange("Permiso");
+    toast.success(
+      tienePermisoPrevio ? "Permiso editado exitosamente" : "Permiso asignado exitosamente",
+      { description: `Rango: ${permisoInicio} al ${permisoFin}.` }
+    );
   }
 
   return (
-    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      {/* @ts-expect-error shadcn dialog onInteractOutside missing type */}
-      <DialogContent onInteractOutside={(e: any) => e.preventDefault()} className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0">
-        {/* Header */}
+    <Dialog open={true} disablePointerDismissal={true} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent
+        onInteractOutside={(e) => e.preventDefault()}
+        showCloseButton={false}
+        className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0"
+      >
+        {/* Header con botón X explícito */}
         <div className="bg-institucional-green px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white font-bold text-lg">
@@ -299,9 +433,17 @@ function ComercianteModal({
               </DialogDescription>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-base-white/80 hover:text-base-white hover:bg-base-white/20 transition-colors"
+            aria-label="Cerrar modal"
+          >
+            <X size={20} />
+          </button>
         </div>
 
-        {/* Contenido */}
+        {/* Contenido del modal */}
         <div className="px-6 py-5 space-y-4">
           {/* Info del comerciante */}
           <div className="grid grid-cols-2 gap-3">
@@ -321,73 +463,107 @@ function ComercianteModal({
             >
               {estadoConfig.label}
             </span>
-            {isPermiso && (
+            {estadoActual === "Permiso" && (
               <span className="text-[10px] text-acento-morado font-medium">
-                (Bloqueado por permiso activo)
+                (Permiso activo)
               </span>
             )}
           </div>
 
-          {/* Acciones Rápidas */}
-          {!isPermiso && (
-            <div className="flex gap-2 mb-4">
-              <Button
-                variant={estado === "Presente" ? "default" : "outline"}
-                className={estado === "Presente" ? "bg-acento-verdeOliva1 hover:bg-acento-verdeOliva1" : "text-acento-verdeOliva1"}
-                onClick={() => onEstadoChange("Presente")}
-              >
-                <CheckCircle2 className="w-4 h-4 mr-2" /> Presente
-              </Button>
-              <Button
-                variant={estado === "Ausente" ? "default" : "outline"}
-                className={estado === "Ausente" ? "bg-base-red hover:bg-base-red" : "text-base-red"}
-                onClick={() => onEstadoChange("Ausente")}
-              >
-                <XCircle className="w-4 h-4 mr-2" /> Ausente
-              </Button>
-              <Button
-                variant={estado === "Observacion" ? "default" : "outline"}
-                className={estado === "Observacion" ? "bg-acento-azul1 hover:bg-acento-azul1 text-base-white" : "text-acento-azul1"}
-                onClick={() => {
-                  onEstadoChange("Observacion");
-                  setMostrarObservacion(true);
-                }}
-              >
-                <EyeIcon className="w-4 h-4 mr-2" /> Observación
-              </Button>
-            </div>
-          )}
+          {/* 1. Acciones Rápidas (4 Botones en cuadrícula de 2 columnas) */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Presente */}
+            <Button
+              type="button"
+              variant={estadoActual === "Presente" ? "default" : "outline"}
+              className={
+                estadoActual === "Presente"
+                  ? "bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90 shadow-sm"
+                  : "text-acento-verdeOliva1 border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
+              }
+              onClick={() => handleSeleccionarEstado("Presente")}
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />
+              Presente
+            </Button>
 
-          {/* ── Sección Novedad (textarea + observación anterior) ── */}
-          {mostrarObservacion && !isPermiso && (
-            <div className="rounded-xl bg-acento-azul1/5 p-4 space-y-3 ring-1 ring-acento-azul1/20">
+            {/* Ausente */}
+            <Button
+              type="button"
+              variant={estadoActual === "Ausente" ? "default" : "outline"}
+              className={
+                estadoActual === "Ausente"
+                  ? "bg-red-700 text-white hover:bg-red-700/90 shadow-sm"
+                  : "text-red-700 border-red-700/30 hover:bg-red-700/10"
+              }
+              onClick={() => handleSeleccionarEstado("Ausente")}
+            >
+              <XCircle className="w-4 h-4 mr-1.5 shrink-0" />
+              Ausente
+            </Button>
+
+            {/* Observación */}
+            <Button
+              type="button"
+              variant={estadoActual === "Observacion" ? "default" : "outline"}
+              className={
+                estadoActual === "Observacion"
+                  ? "bg-blue-600 text-white hover:bg-blue-600/90 shadow-sm"
+                  : "text-blue-600 border-blue-600/30 hover:bg-blue-600/10"
+              }
+              onClick={handleToggleObservacion}
+            >
+              <EyeIcon className="w-4 h-4 mr-1.5 shrink-0" />
+              Observación
+            </Button>
+
+            {/* Permiso */}
+            <Button
+              type="button"
+              variant={estadoActual === "Permiso" ? "default" : "outline"}
+              className={
+                estadoActual === "Permiso"
+                  ? "bg-acento-morado text-white hover:bg-acento-morado/90 shadow-sm"
+                  : "text-acento-morado border-acento-morado/30 hover:bg-acento-morado/10"
+              }
+              onClick={handleTogglePermiso}
+            >
+              <ShieldAlert className="w-4 h-4 mr-1.5 shrink-0" />
+              Permiso
+            </Button>
+          </div>
+
+          {/* 2 & 3. Subpanel Desplegable: Observación (Modo Registro / Edición) */}
+          {panelActivo === "observacion" && (
+            <div className="rounded-xl bg-blue-50/60 p-4 space-y-3 ring-1 ring-blue-200 animate-in fade-in-50 duration-150">
               <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
-                <AlertTriangle size={16} className="text-acento-azul1" />
-                Registrar Observación
+                <AlertTriangle size={16} className="text-blue-600" />
+                {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
               </h3>
               <Textarea
                 placeholder="Escriba la observación o situación a reportar..."
                 value={novedadTexto}
                 onChange={(e) => setNovedadTexto(e.target.value)}
                 rows={3}
-                className="resize-none text-sm"
+                className="resize-none text-sm bg-base-white"
               />
               <Button
-                onClick={handleGuardarNovedad}
+                type="button"
+                onClick={handleGuardarObservacion}
                 disabled={!novedadTexto.trim()}
                 size="sm"
-                className="w-full bg-acento-azul1 text-base-white hover:bg-acento-azul1/90"
+                className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
               >
-                Guardar Observación
+                {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
               </Button>
 
               {/* Observación heredada del día anterior */}
               {observacionAnterior && (
-                <div className="mt-2 rounded-lg bg-acento-azul1/10 p-3 ring-1 ring-acento-azul1/20">
-                  <p className="text-[11px] font-semibold text-acento-azul1 mb-1">
+                <div className="mt-2 rounded-lg bg-blue-100/60 p-3 ring-1 ring-blue-200">
+                  <p className="text-[11px] font-semibold text-blue-700 mb-1">
                     📋 Observación anterior:
                   </p>
-                  <p className="text-xs text-acento-azul2 leading-relaxed">
+                  <p className="text-xs text-blue-900 leading-relaxed">
                     {observacionAnterior}
                   </p>
                 </div>
@@ -395,127 +571,155 @@ function ComercianteModal({
             </div>
           )}
 
-          {/* ── Sección Permiso ── */}
-          {isPermiso && registroActual ? (
-            <div className="rounded-xl bg-acento-morado/5 p-4 space-y-3 ring-1 ring-acento-morado/20">
-              <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
-                <ShieldAlert size={16} className="text-acento-morado" />
-                Permiso Activo
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-base-white p-2.5">
-                  <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase">
-                    Desde
-                  </p>
-                  <p className="text-sm font-semibold text-base-eerieBlack mt-0.5">
-                    {registroActual.permisoInicio
-                      ? format(new Date(registroActual.permisoInicio + "T00:00:00"), "dd/MM")
-                      : "—"}
-                  </p>
+          {/* 2 & 3. Subpanel Desplegable: Permiso (Modo Asignación / Edición) */}
+          {panelActivo === "permiso" && (
+            <div className="rounded-xl bg-purple-50/60 p-4 space-y-3 ring-1 ring-purple-200 animate-in fade-in-50 duration-150">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-acento-morado" />
+                  {tienePermisoPrevio ? "Editar Permiso" : "Asignar Permiso"}
+                </h3>
+                {tienePermisoPrevio && (
+                  <span className="text-[10px] font-semibold text-acento-morado bg-purple-100 rounded-full px-2.5 py-0.5">
+                    Permiso Activo
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack block mb-1">
+                    Fecha de Inicio
+                  </label>
+                  <Popover open={openInicio} onOpenChange={setOpenInicio}>
+                    <PopoverTrigger
+                      type="button"
+                      className="flex h-9 w-full items-center justify-between rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                    >
+                      <span className="truncate">
+                        {fechaInicioObj
+                          ? format(fechaInicioObj, "dd/MM/yyyy", { locale: es })
+                          : "Seleccionar fecha"}
+                      </span>
+                      <CalendarIcon size={14} className="text-institucional-whiteSmokeBlack shrink-0" />
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-auto p-0"
+                      align="center"
+                      side="bottom"
+                      avoidCollisions={true}
+                      collisionBoundary={typeof window !== "undefined" ? document.body : undefined}
+                    >
+                      <Calendar
+                        mode="single"
+                        selected={fechaInicioObj}
+                        onSelect={(date) => {
+                          if (date) {
+                            setPermisoInicio(format(date, "yyyy-MM-dd"));
+                            setOpenInicio(false);
+                          }
+                        }}
+                        locale={es}
+                        autoFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                <div className="rounded-lg bg-base-white p-2.5">
-                  <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase">
-                    Hasta
-                  </p>
-                  <p className="text-sm font-semibold text-base-eerieBlack mt-0.5">
-                    {registroActual.permisoFin
-                      ? format(new Date(registroActual.permisoFin + "T00:00:00"), "dd/MM")
-                      : "—"}
-                  </p>
+
+                <div className="flex-1">
+                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack block mb-1">
+                    Fecha de Fin
+                  </label>
+                  <Popover open={openFin} onOpenChange={setOpenFin}>
+                    <PopoverTrigger
+                      type="button"
+                      className="flex h-9 w-full items-center justify-between rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                    >
+                      <span className="truncate">
+                        {fechaFinObj
+                          ? format(fechaFinObj, "dd/MM/yyyy", { locale: es })
+                          : "Seleccionar fecha"}
+                      </span>
+                      <CalendarIcon size={14} className="text-institucional-whiteSmokeBlack shrink-0" />
+                    </PopoverTrigger>
+                    <PopoverContent
+                      className="w-auto p-0"
+                      align="center"
+                      side="bottom"
+                      avoidCollisions={true}
+                      collisionBoundary={typeof window !== "undefined" ? document.body : undefined}
+                    >
+                      <Calendar
+                        mode="single"
+                        selected={fechaFinObj}
+                        onSelect={(date) => {
+                          if (date) {
+                            setPermisoFin(format(date, "yyyy-MM-dd"));
+                            setOpenFin(false);
+                          }
+                        }}
+                        locale={es}
+                        autoFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
-              {!editandoPermiso ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setEditandoPermiso(true)}
-                  className="w-full text-acento-morado border-acento-morado/30 hover:bg-acento-morado/5"
-                >
-                  <Edit3 size={14} className="mr-2" />
-                  Editar Permiso
-                </Button>
-              ) : (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
-                        Nuevo Inicio
-                      </label>
-                      <input
-                        type="date"
-                        value={permisoInicio}
-                        onChange={(e) => setPermisoInicio(e.target.value)}
-                        className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
-                        Nuevo Fin
-                      </label>
-                      <input
-                        type="date"
-                        value={permisoFin}
-                        onChange={(e) => setPermisoFin(e.target.value)}
-                        className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-                      />
-                    </div>
-                  </div>
-                  {error && (
-                    <p className="text-xs text-base-red font-medium">{error}</p>
-                  )}
-                  <Button
-                    onClick={handleAsignarPermiso}
-                    size="sm"
-                    className="w-full bg-acento-morado hover:bg-acento-morado/90 text-base-white"
-                  >
-                    Reasignar Permiso
-                  </Button>
-                </>
+
+              {permisoError && (
+                <p className="text-xs text-base-red font-medium">{permisoError}</p>
               )}
-            </div>
-          ) : (
-            /* Asignación de nuevo permiso (solo si no tiene permiso activo) */
-            <div className="rounded-xl bg-institucional-whiteSmoke p-4 space-y-3">
-              <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
-                <ShieldAlert size={16} className="text-acento-morado" />
-                Asignar Permiso
-              </h3>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
-                    Inicio
-                  </label>
-                  <input
-                    type="date"
-                    value={permisoInicio}
-                    onChange={(e) => setPermisoInicio(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack">
-                    Fin
-                  </label>
-                  <input
-                    type="date"
-                    value={permisoFin}
-                    onChange={(e) => setPermisoFin(e.target.value)}
-                    className="mt-1 h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-                  />
-                </div>
-              </div>
-              {error && (
-                <p className="text-xs text-base-red font-medium">{error}</p>
-              )}
-              <button
-                onClick={handleAsignarPermiso}
-                className="w-full h-9 rounded-lg bg-acento-morado hover:bg-acento-morado/90 text-base-white text-xs font-semibold transition-colors shadow-sm"
+
+              <Button
+                type="button"
+                onClick={handleGuardarPermiso}
+                size="sm"
+                className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold"
               >
-                Asignar Permiso
-              </button>
+                {tienePermisoPrevio ? "Editar Permiso" : "Asignar Permiso"}
+              </Button>
             </div>
           )}
         </div>
+
+        {/* Modal de Advertencia de Pérdida de Datos (shadcn/ui Dialog) */}
+        <Dialog
+          open={Boolean(confirmAlert?.isOpen)}
+          onOpenChange={(open) => {
+            if (!open) setConfirmAlert(null);
+          }}
+        >
+          <DialogContent
+            onInteractOutside={(e) => e.preventDefault()}
+            className="sm:max-w-md p-6"
+          >
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-base-red">
+                <AlertTriangle className="h-5 w-5" />
+                Advertencia de pérdida de datos
+              </DialogTitle>
+              <DialogDescription className="text-sm text-gray-900 font-medium pt-2 leading-relaxed">
+                {confirmAlert?.mensaje}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmAlert(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                className="bg-base-red hover:bg-base-red/90 text-white font-medium"
+                onClick={handleConfirmarCambio}
+              >
+                Aceptar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );
@@ -540,21 +744,29 @@ function PuestoCard({
   puesto,
   comerciante,
   estado,
+  fecha,
   onEstadoChange,
   onDoubleClick,
-  onObservacion,
-  isPermiso,
+  onObservacionGuardada,
+  onPermisoAsignado,
 }: {
   puesto: Puesto;
   comerciante: Comerciante | null;
   estado: EstadoAsistencia | "Vacante";
+  fecha: string;
   onEstadoChange: (estado: EstadoAsistencia) => void;
   onDoubleClick: () => void;
-  onObservacion: () => void;
-  isPermiso: boolean;
+  onObservacionGuardada: (comercianteId: string, texto: string) => void;
+  onPermisoAsignado: (comercianteId: string, inicio: string, fin: string) => void;
 }) {
   const config = ESTADO_CONFIG[estado];
   const isVacante = puesto.estado === "Vacante";
+
+  const [panelActivo, setPanelActivo] = useState<"observacion" | "permiso" | null>(null);
+  const [obsTexto, setObsTexto] = useState("");
+  const [permisoInicio, setPermisoInicio] = useState(fecha);
+  const [permisoFin, setPermisoFin] = useState(fecha);
+  const [permisoError, setPermisoError] = useState("");
 
   if (isVacante) {
     return (
@@ -576,70 +788,240 @@ function PuestoCard({
     );
   }
 
+  function handleGuardarObservacion(e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!comerciante || !obsTexto.trim()) return;
+    onObservacionGuardada(comerciante.idInterno, obsTexto.trim());
+    setObsTexto("");
+    setPanelActivo(null);
+  }
+
+  function handleGuardarPermiso(e: React.MouseEvent) {
+    e.stopPropagation();
+    setPermisoError("");
+    if (!comerciante) return;
+    if (!permisoInicio || !permisoFin) {
+      setPermisoError("Debe seleccionar fecha de inicio y fin.");
+      return;
+    }
+    if (permisoInicio > permisoFin) {
+      setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
+      return;
+    }
+    onPermisoAsignado(comerciante.idInterno, permisoInicio, permisoFin);
+    setPanelActivo(null);
+  }
+
   return (
     <article
-      className={`flex flex-col gap-3 rounded-xl bg-base-white px-4 py-3.5 shadow-sm ring-1 ${config.ring} sm:flex-row sm:items-center sm:justify-between cursor-pointer transition-all hover:shadow-md`}
+      className={`flex flex-col gap-3 rounded-xl bg-base-white px-4 py-3.5 shadow-sm ring-1 ${config.ring} cursor-pointer transition-all hover:shadow-md`}
       onDoubleClick={onDoubleClick}
       title="Doble clic para ver detalles"
     >
-      {/* Info */}
-      <div className="flex items-center gap-3 min-w-0">
-        <span
-          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.bg} text-sm font-bold ${config.text}`}
-        >
-          {comerciante?.contribuyente.charAt(0) ?? "?"}
-        </span>
-        <div className="min-w-0">
-          <p className="truncate font-semibold text-base-eerieBlack text-sm leading-tight">
-            {comerciante
-              ? `${comerciante.contribuyente}`
-              : "Sin asignar"}
-          </p>
-          <div className="flex items-center gap-2 mt-0.5">
-            <span className="text-[10px] text-institucional-whiteSmokeBlack">
-              {puesto.codigo}
-            </span>
-            {comerciante && (
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 w-full">
+        {/* Info */}
+        <div className="flex items-center gap-3 min-w-0">
+          <span
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.bg} text-sm font-bold ${config.text}`}
+          >
+            {comerciante?.contribuyente.charAt(0) ?? "?"}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-base-eerieBlack text-sm leading-tight">
+              {comerciante
+                ? `${comerciante.contribuyente}`
+                : "Sin asignar"}
+            </p>
+            <div className="flex items-center gap-2 mt-0.5">
               <span className="text-[10px] text-institucional-whiteSmokeBlack">
-                CIU: {comerciante.ciu}
+                {puesto.codigo}
               </span>
-            )}
-            <span
-              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${config.bg} ${config.text}`}
-            >
-              {config.label}
-            </span>
+              {comerciante && (
+                <span className="text-[10px] text-institucional-whiteSmokeBlack">
+                  CIU: {comerciante.ciu}
+                </span>
+              )}
+              <span
+                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${config.bg} ${config.text}`}
+              >
+                {config.label}
+              </span>
+            </div>
           </div>
+        </div>
+
+        {/* Botones de acción: Presente, Ausente, Observación, Permiso */}
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap w-full sm:w-auto">
+          <AccionBtn
+            label="Presente"
+            Icon={CheckCircle2}
+            activeClass="bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90"
+            inactiveClass="text-acento-verdeOliva1 border border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
+            isActive={estado === "Presente"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPanelActivo(null);
+              onEstadoChange("Presente");
+            }}
+          />
+          <AccionBtn
+            label="Ausente"
+            Icon={XCircle}
+            activeClass="bg-red-700 text-white hover:bg-red-700/90"
+            inactiveClass="text-red-700 border border-red-700/30 hover:bg-red-700/10"
+            isActive={estado === "Ausente"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPanelActivo(null);
+              onEstadoChange("Ausente");
+            }}
+          />
+          <AccionBtn
+            label="Observación"
+            Icon={EyeIcon}
+            activeClass="bg-blue-600 text-white hover:bg-blue-600/90"
+            inactiveClass="text-blue-600 border border-blue-600/30 hover:bg-blue-600/10"
+            isActive={estado === "Observacion" || panelActivo === "observacion"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPanelActivo((curr) => (curr === "observacion" ? null : "observacion"));
+            }}
+          />
+          <AccionBtn
+            label="Permiso"
+            Icon={ShieldAlert}
+            activeClass="bg-acento-morado text-white hover:bg-acento-morado/90"
+            inactiveClass="text-acento-morado border border-acento-morado/30 hover:bg-acento-morado/10"
+            isActive={estado === "Permiso" || panelActivo === "permiso"}
+            onClick={(e) => {
+              e.stopPropagation();
+              setPanelActivo((curr) => (curr === "permiso" ? null : "permiso"));
+            }}
+          />
         </div>
       </div>
 
-      {/* Botones de acción: Presente, Ausente, Observación */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <AccionBtn
-          label="Presente"
-          Icon={CheckCircle2}
-          colorClasses="bg-acento-verdeOliva1/15 text-acento-verdeOliva1 hover:bg-acento-verdeOliva1 hover:text-base-white"
-          isActive={estado === "Presente"}
-          onClick={() => onEstadoChange("Presente")}
-          disabled={isPermiso}
-        />
-        <AccionBtn
-          label="Ausente"
-          Icon={XCircle}
-          colorClasses="bg-base-red/10 text-base-red hover:bg-base-red hover:text-base-white"
-          isActive={estado === "Ausente"}
-          onClick={() => onEstadoChange("Ausente")}
-          disabled={isPermiso}
-        />
-        <AccionBtn
-          label="Observación"
-          Icon={EyeIcon}
-          colorClasses="bg-acento-naranjaSalmon1/15 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
-          isActive={estado === "Observacion"}
-          onClick={onObservacion}
-          disabled={isPermiso}
-        />
-      </div>
+      {/* ── Subpanel Desplegable: Observación ── */}
+      {panelActivo === "observacion" && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-2 w-full rounded-xl bg-blue-50/60 p-3.5 space-y-2.5 ring-1 ring-blue-200 animate-in fade-in-50 duration-150"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold text-base-eerieBlack flex items-center gap-1.5">
+              <EyeIcon size={14} className="text-blue-600" />
+              Registrar Observación
+            </h4>
+            <button
+              type="button"
+              onClick={() => setPanelActivo(null)}
+              className="rounded p-1 text-institucional-whiteSmokeBlack hover:text-base-eerieBlack transition-colors"
+              aria-label="Cerrar panel de observación"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <Textarea
+            placeholder="Describa la observación o situación observada..."
+            value={obsTexto}
+            onChange={(e) => setObsTexto(e.target.value)}
+            rows={2}
+            className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
+          />
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setPanelActivo(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!obsTexto.trim()}
+              className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+              onClick={handleGuardarObservacion}
+            >
+              Guardar Observación
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Subpanel Desplegable: Permiso ── */}
+      {panelActivo === "permiso" && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="mt-2 w-full rounded-xl bg-purple-50/60 p-3.5 space-y-2.5 ring-1 ring-purple-200 animate-in fade-in-50 duration-150"
+        >
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-semibold text-base-eerieBlack flex items-center gap-1.5">
+              <ShieldAlert size={14} className="text-acento-morado" />
+              Asignar Permiso
+            </h4>
+            <button
+              type="button"
+              onClick={() => setPanelActivo(null)}
+              className="rounded p-1 text-institucional-whiteSmokeBlack hover:text-base-eerieBlack transition-colors"
+              aria-label="Cerrar panel de permiso"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-medium text-institucional-whiteSmokeBlack">
+                Fecha de Inicio
+              </label>
+              <input
+                type="date"
+                value={permisoInicio}
+                onChange={(e) => setPermisoInicio(e.target.value)}
+                className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-medium text-institucional-whiteSmokeBlack">
+                Fecha de Fin
+              </label>
+              <input
+                type="date"
+                value={permisoFin}
+                onChange={(e) => setPermisoFin(e.target.value)}
+                className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+              />
+            </div>
+          </div>
+
+          {permisoError && (
+            <p className="text-[11px] text-base-red font-medium">{permisoError}</p>
+          )}
+
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setPanelActivo(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold"
+              onClick={handleGuardarPermiso}
+            >
+              Confirmar Permiso
+            </Button>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -647,74 +1029,33 @@ function PuestoCard({
 // ── Lista de Puestos ─────────────────────────────────────────────────────────
 
 function PuestosList({
-  nave,
+  items,
   fecha,
-  searchQuery,
-  overrides,
   onEstadoChange,
   onOpenModal,
-  onObservacion,
+  onObservacionGuardada,
+  onPermisoAsignado,
 }: {
-  nave: Nave;
+  items: {
+    puesto: Puesto;
+    comerciante: Comerciante | null;
+    estado: EstadoAsistencia | "Vacante";
+  }[];
   fecha: string;
-  searchQuery: string;
-  overrides: Record<string, EstadoAsistencia>;
   onEstadoChange: (comercianteId: string, estado: EstadoAsistencia) => void;
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
-  onObservacion: (comerciante: Comerciante) => void;
+  onObservacionGuardada: (comercianteId: string, texto: string) => void;
+  onPermisoAsignado: (comercianteId: string, inicio: string, fin: string) => void;
 }) {
-  const puestos = nave.puestos;
-  const asistenciaDelDia = getAsistenciaPorFecha(fecha);
-
-  const items = puestos.map((puesto) => {
-    const comerciante = puesto.comercianteId
-      ? getComerciantePorId(puesto.comercianteId)
-      : null;
-
-    let estado: EstadoAsistencia | "Vacante" = "Vacante";
-    if (puesto.estado === "Ocupado" && comerciante) {
-      const overrideKey = `${comerciante.idInterno}:${fecha}`;
-      if (overrides[overrideKey]) {
-        estado = overrides[overrideKey];
-      } else {
-        const registro = asistenciaDelDia.find(
-          (r) => r.comercianteId === comerciante.idInterno
-        );
-        estado = registro?.estado ?? "Pendiente";
-      }
-    }
-    return { puesto, comerciante, estado };
-  });
-
-  const filtered = searchQuery
-    ? items.filter((item) => {
-        if (item.puesto.estado === "Vacante") return false;
-        const q = searchQuery.toLowerCase();
-        const c = item.comerciante;
-        if (!c) return false;
-        return (
-          c.contribuyente.toLowerCase().includes(q) ||
-          c.ciu.toLowerCase().includes(q) ||
-          item.puesto.codigo.toLowerCase().includes(q)
-        );
-      })
-    : items;
-
-  const sorted = [...filtered].sort((a, b) => {
-    const prioA = a.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[a.estado] ?? 10);
-    const prioB = b.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[b.estado] ?? 10);
-    return prioA - prioB;
-  });
-
   return (
     <ul className="flex flex-col gap-2" role="list">
-      {sorted.map((item) => (
+      {items.map((item) => (
         <li key={item.puesto.id}>
           <PuestoCard
             puesto={item.puesto}
             comerciante={item.comerciante}
             estado={item.estado}
-            isPermiso={item.estado === "Permiso"}
+            fecha={fecha}
             onEstadoChange={(nuevoEstado) => {
               if (item.comerciante) {
                 onEstadoChange(item.comerciante.idInterno, nuevoEstado);
@@ -725,15 +1066,12 @@ function PuestosList({
                 onOpenModal(item.puesto, item.comerciante, item.estado as EstadoAsistencia);
               }
             }}
-            onObservacion={() => {
-              if (item.comerciante) {
-                onObservacion(item.comerciante);
-              }
-            }}
+            onObservacionGuardada={onObservacionGuardada}
+            onPermisoAsignado={onPermisoAsignado}
           />
         </li>
       ))}
-      {sorted.length === 0 && (
+      {items.length === 0 && (
         <li className="py-6 text-center text-sm text-institucional-whiteSmokeBlack">
           No se encontraron resultados.
         </li>
@@ -745,41 +1083,25 @@ function PuestosList({
 // ── Vista Treemap (Mapa de Árbol) ────────────────────────────────────────────
 
 function TreemapView({
-  nave,
-  fecha,
-  overrides,
+  items,
   onOpenModal,
 }: {
-  nave: Nave;
-  fecha: string;
-  overrides: Record<string, EstadoAsistencia>;
+  items: {
+    puesto: Puesto;
+    comerciante: Comerciante | null;
+    estado: EstadoAsistencia | "Vacante";
+  }[];
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
 }) {
-  const asistenciaDelDia = getAsistenciaPorFecha(fecha);
-  const puestos = nave.puestos;
-
   return (
     <div className="space-y-4">
-      <div>
+      {items.length === 0 ? (
+        <div className="py-12 text-center text-sm text-institucional-whiteSmokeBlack bg-base-white rounded-xl ring-1 ring-institucional-whiteSmokeBlack/10">
+          No se encontraron resultados.
+        </div>
+      ) : (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-          {puestos.map((puesto) => {
-            const comerciante = puesto.comercianteId
-              ? getComerciantePorId(puesto.comercianteId)
-              : null;
-
-            let estado: EstadoAsistencia | "Vacante" = "Vacante";
-            if (puesto.estado === "Ocupado" && comerciante) {
-              const overrideKey = `${comerciante.idInterno}:${fecha}`;
-              if (overrides[overrideKey]) {
-                estado = overrides[overrideKey];
-              } else {
-                const registro = asistenciaDelDia.find(
-                  (r) => r.comercianteId === comerciante.idInterno
-                );
-                estado = registro?.estado ?? "Pendiente";
-              }
-            }
-
+          {items.map(({ puesto, comerciante, estado }) => {
             const config = ESTADO_CONFIG[estado];
             const bgColorMap: Record<string, string> = {
               Presente: "bg-acento-verdeOliva1 text-white",
@@ -841,7 +1163,7 @@ function TreemapView({
             );
           })}
         </div>
-      </div>
+      )}
 
       {/* Leyenda */}
       <div className="flex flex-wrap gap-3 mt-4 px-1">
@@ -896,6 +1218,58 @@ export default function ListasPage() {
   const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
 
+  // ── Puestos y Comerciantes de la Nave con estado ───────────────────────────
+  const puestosConEstado = useMemo(() => {
+    if (!nave) return [];
+    const asistenciaDelDia = getAsistenciaPorFecha(fechaStr);
+
+    return nave.puestos.map((puesto) => {
+      const comerciante = puesto.comercianteId
+        ? getComerciantePorId(puesto.comercianteId)
+        : null;
+
+      let estado: EstadoAsistencia | "Vacante" = "Vacante";
+      if (puesto.estado === "Ocupado" && comerciante) {
+        const overrideKey = `${comerciante.idInterno}:${fechaStr}`;
+        if (overrides[overrideKey]) {
+          estado = overrides[overrideKey];
+        } else {
+          const registro = asistenciaDelDia.find(
+            (r) => r.comercianteId === comerciante.idInterno
+          );
+          estado = registro?.estado ?? "Pendiente";
+        }
+      }
+      return { puesto, comerciante, estado };
+    });
+  }, [nave, fechaStr, overrides]);
+
+  // ── Filtro Global y Ordenamiento Alfanumérico por Código de Puesto ────────
+  const comerciantesFiltrados = useMemo(() => {
+    const q = normalizeText(searchQuery.trim());
+    const filtrados = q
+      ? puestosConEstado.filter((item) => {
+          if (item.puesto.estado === "Vacante") {
+            return normalizeText(item.puesto.codigo).includes(q);
+          }
+          const c = item.comerciante;
+          if (!c) return normalizeText(item.puesto.codigo).includes(q);
+          return (
+            normalizeText(c.contribuyente).includes(q) ||
+            normalizeText(c.ciu).includes(q) ||
+            normalizeText(item.puesto.codigo).includes(q)
+          );
+        })
+      : puestosConEstado;
+
+    return [...filtrados].sort((a, b) =>
+      a.puesto.codigo.localeCompare(b.puesto.codigo, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      })
+    );
+  }, [puestosConEstado, searchQuery]);
+
   // Días anteriores (excluyendo hoy, para el contenedor con scroll independiente)
   const DIAS_MOSTRADOS = 14;
   const pastDates = useMemo(() => {
@@ -931,9 +1305,8 @@ export default function ListasPage() {
     setModalData({ puesto, comerciante, estado });
   }
 
-  function handlePermisoAsignado(inicio: string, fin: string) {
-    if (!modalData) return;
-    setPermisoComercianteRango(modalData.comerciante.idInterno, inicio, fin);
+  function handleAsignarPermisoDirecto(comercianteId: string, inicio: string, fin: string) {
+    setPermisoComercianteRango(comercianteId, inicio, fin);
 
     // Actualizar overrides para reflejar permiso en las fechas
     const startDate = new Date(inicio + "T00:00:00");
@@ -943,11 +1316,34 @@ export default function ListasPage() {
 
     while (current <= endDate) {
       const f = formatDate(current);
-      newOverrides[`${modalData.comerciante.idInterno}:${f}`] = "Permiso";
+      newOverrides[`${comercianteId}:${f}`] = "Permiso";
       current.setDate(current.getDate() + 1);
     }
 
     setOverrides(newOverrides);
+    toast.success("Permiso asignado exitosamente", {
+      description: `Rango: ${inicio} al ${fin}.`,
+    });
+  }
+
+  function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
+    const key = `${comercianteId}:${fechaStr}`;
+    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
+    setEstadoAsistencia(
+      comercianteId,
+      fechaStr,
+      "Observacion",
+      "Novedad reportada por supervisor",
+      texto
+    );
+    toast.success("Observación registrada exitosamente", {
+      description: "Se ha actualizado la novedad del comerciante.",
+    });
+  }
+
+  function handlePermisoAsignado(inicio: string, fin: string) {
+    if (!modalData) return;
+    handleAsignarPermisoDirecto(modalData.comerciante.idInterno, inicio, fin);
     setModalData(null);
   }
 
@@ -960,30 +1356,14 @@ export default function ListasPage() {
   // Guardar observación → estado cambia a Novedad
   function handleObservacionSave(texto: string) {
     if (!obsCommerciante) return;
-    const key = `${obsCommerciante.idInterno}:${fechaStr}`;
-    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
-    setEstadoAsistencia(
-      obsCommerciante.idInterno,
-      fechaStr,
-      "Observacion",
-      "Novedad reportada por supervisor",
-      texto
-    );
+    handleObservacionSaveDirecto(obsCommerciante.idInterno, texto);
     setObsDialogOpen(false);
     setObsCommerciante(null);
   }
 
   // Manejar novedad desde el modal de detalle
   function handleNovedadDesdeModal(comercianteId: string, texto: string) {
-    const key = `${comercianteId}:${fechaStr}`;
-    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
-    setEstadoAsistencia(
-      comercianteId,
-      fechaStr,
-      "Observacion",
-      "Novedad reportada por supervisor",
-      texto
-    );
+    handleObservacionSaveDirecto(comercianteId, texto);
     // Actualizar el estado del modal
     if (modalData && modalData.comerciante.idInterno === comercianteId) {
       setModalData({ ...modalData, estado: "Observacion" });
@@ -1077,10 +1457,10 @@ export default function ListasPage() {
           </div>
         </div>
 
-        {/* Barra de búsqueda + toggle vista */}
+        {/* Barra de búsqueda + toggle vista (forzado en una sola fila en móviles) */}
         {nave && (
-          <div className="mt-4 flex items-center gap-3 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
+          <div className="mt-4 flex w-full items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search
                 size={16}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
@@ -1090,7 +1470,7 @@ export default function ListasPage() {
                 placeholder="Buscar por nombre, CIU o puesto..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-10 pr-4 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                className="h-10 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-10 pr-4 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
             </div>
 
@@ -1100,14 +1480,14 @@ export default function ListasPage() {
               onClick={() =>
                 setViewMode((v) => (v === "lista" ? "treemap" : "lista"))
               }
-              className="flex items-center gap-2 rounded-lg bg-base-white px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40"
+              className="flex shrink-0 whitespace-nowrap items-center gap-2 rounded-lg bg-base-white px-3 sm:px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40"
             >
               {viewMode === "lista" ? (
-                <ToggleLeft size={18} className="text-institucional-green" />
+                <ToggleLeft size={18} className="text-institucional-green shrink-0" />
               ) : (
-                <ToggleRight size={18} className="text-institucional-green" />
+                <ToggleRight size={18} className="text-institucional-green shrink-0" />
               )}
-              {viewMode === "lista" ? "Vista Lista" : "Mapa de Árbol"}
+              <span>{viewMode === "lista" ? "Vista Lista" : "Mapa de Árbol"}</span>
             </button>
           </div>
         )}
@@ -1164,20 +1544,17 @@ export default function ListasPage() {
             {viewMode === "lista" ? (
               <div className="flex flex-col gap-3">
                 <PuestosList
-                  nave={nave}
+                  items={comerciantesFiltrados}
                   fecha={fechaStr}
-                  searchQuery={searchQuery}
-                  overrides={overrides}
                   onEstadoChange={handleEstadoChange}
                   onOpenModal={handleOpenModal}
-                  onObservacion={handleObservacion}
+                  onObservacionGuardada={handleObservacionSaveDirecto}
+                  onPermisoAsignado={handleAsignarPermisoDirecto}
                 />
               </div>
             ) : (
               <TreemapView
-                nave={nave}
-                fecha={fechaStr}
-                overrides={overrides}
+                items={comerciantesFiltrados}
                 onOpenModal={handleOpenModal}
               />
             )}
@@ -1195,7 +1572,10 @@ export default function ListasPage() {
           onClose={() => setModalData(null)}
           onPermisoAsignado={handlePermisoAsignado}
           onNovedadGuardada={handleNovedadDesdeModal}
-          onEstadoChange={(e) => handleEstadoChange(modalData.comerciante.idInterno, e)}
+          onEstadoChange={(e) => {
+            handleEstadoChange(modalData.comerciante.idInterno, e);
+            setModalData((prev) => (prev ? { ...prev, estado: e } : null));
+          }}
         />
       )}
 

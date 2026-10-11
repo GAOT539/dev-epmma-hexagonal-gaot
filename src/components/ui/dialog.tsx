@@ -43,13 +43,15 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  onInteractOutside,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
+  onInteractOutside?: (event: any) => void
 }) {
   return (
     <DialogPortal>
-      <DialogOverlay />
+      <DialogOverlay onClick={(e) => onInteractOutside?.(e)} />
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
