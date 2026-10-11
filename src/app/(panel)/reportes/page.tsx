@@ -32,7 +32,6 @@ import type { DateRange } from "react-day-picker";
 const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: string }> = {
   Presente: { bg: "bg-acento-verdeOliva1", text: "text-base-white", hex: "#45743B" },
   Ausente: { bg: "bg-base-red", text: "text-base-white", hex: "#FF0000" },
-  Novedad: { bg: "bg-acento-naranjaSalmon1", text: "text-base-white", hex: "#C95D52" },
   Observacion: { bg: "bg-acento-azul1", text: "text-base-white", hex: "#2E78CC" },
   Permiso: { bg: "bg-acento-morado", text: "text-base-white", hex: "#6A1B9A" },
   Pendiente: { bg: "bg-institucional-whiteSmokeBlack/40", text: "text-base-white", hex: "#C4C4C4" },
@@ -41,7 +40,6 @@ const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: string }> 
 const ESTADO_LABELS: Record<string, string> = {
   Presente: "P",
   Ausente: "A",
-  Novedad: "N",
   Observacion: "O",
   Permiso: "Pm",
   Pendiente: "—",
@@ -67,6 +65,7 @@ export default function ReportesPage() {
   const [selectedNaveId, setSelectedNaveId] = useState(naves[0]?.id ?? "");
   const [searchComerciante, setSearchComerciante] = useState("");
   const [selectedComercianteId, setSelectedComercianteId] = useState<string | null>(null);
+  const [incluirObservaciones, setIncluirObservaciones] = useState(true);
 
   // DateRangePicker state
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -164,8 +163,20 @@ export default function ReportesPage() {
       .map((r) => `${r.fecha}: ${r.observacion}`)
       .join(" | ");
 
-    return { comerciante: com, estados, todoPresente, observaciones };
-  }, [modo, selectedComercianteId, fechaInicio, fechaFin, fechas, todosLosComerciantes]);
+    let puestoCode = "—";
+    let naveNombre = "—";
+
+    for (const n of allNaves) {
+      const p = n.puestos.find((p) => p.comercianteId === com.idInterno);
+      if (p) {
+        puestoCode = p.codigo;
+        naveNombre = n.nombre;
+        break;
+      }
+    }
+
+    return { comerciante: com, estados, todoPresente, observaciones, puestoCode, naveNombre };
+  }, [modo, selectedComercianteId, fechaInicio, fechaFin, fechas, todosLosComerciantes, allNaves]);
 
   // Búsqueda de comerciantes
   const comerciantesFiltrados = useMemo(() => {
@@ -174,8 +185,7 @@ export default function ReportesPage() {
     return todosLosComerciantes
       .filter(
         (c) =>
-          c.nombres.toLowerCase().includes(q) ||
-          c.apellidos.toLowerCase().includes(q) ||
+          c.contribuyente.toLowerCase().includes(q) ||
           c.ciu.toLowerCase().includes(q) ||
           c.cedula.includes(q)
       )
@@ -235,31 +245,45 @@ export default function ReportesPage() {
       format(new Date(f + "T00:00:00"), "dd/MM", { locale: es })
     );
 
+    const baseHeaders = ["#", "CIU", "CÉDULA", "CONTRIBUYENTE", "ACTIVIDAD", "NAVE", "PUESTO"];
     const headers = [
-      ["#", "Comerciante", "Puesto", ...fechaHeaders, "Obs."],
+      [...baseHeaders, ...fechaHeaders, ...(incluirObservaciones ? ["Obs."] : [])],
     ];
+
+    const naveNombre = naves.find((n) => n.id === selectedNaveId)?.nombre ?? "";
 
     const data =
       modo === "nave"
-        ? reporteNave.map((row, i) => [
-            String(i + 1),
-            `${row.comerciante.nombres} ${row.comerciante.apellidos}`,
-            row.puestoCode,
-            ...row.estados.map((e) => ESTADO_LABELS[e] ?? "—"),
-            row.todoPresente ? "✓ 100%" : row.observaciones || "—",
-          ])
+        ? reporteNave.map((row, i) => {
+            const baseRow = [
+              String(i + 1),
+              row.comerciante.ciu,
+              row.comerciante.cedula,
+              row.comerciante.contribuyente,
+              row.comerciante.actividad,
+              naveNombre,
+              row.puestoCode,
+            ];
+            const datesRow = row.estados.map((e) => ESTADO_LABELS[e] ?? "—");
+            const obsRow = incluirObservaciones ? [row.todoPresente ? "✓ 100%" : row.observaciones || "—"] : [];
+            return [...baseRow, ...datesRow, ...obsRow];
+          })
         : reporteIndividual
           ? [
               [
                 "1",
-                `${reporteIndividual.comerciante.nombres} ${reporteIndividual.comerciante.apellidos}`,
-                reporteIndividual.comerciante.puestoId ?? "—",
+                reporteIndividual.comerciante.ciu,
+                reporteIndividual.comerciante.cedula,
+                reporteIndividual.comerciante.contribuyente,
+                reporteIndividual.comerciante.actividad,
+                reporteIndividual.naveNombre,
+                reporteIndividual.puestoCode,
                 ...reporteIndividual.estados.map(
                   (e) => ESTADO_LABELS[e] ?? "—"
                 ),
-                reporteIndividual.todoPresente
+                ...(incluirObservaciones ? [reporteIndividual.todoPresente
                   ? "✓ 100%"
-                  : reporteIndividual.observaciones || "—",
+                  : reporteIndividual.observaciones || "—"] : []),
               ],
             ]
           : [];
@@ -278,21 +302,24 @@ export default function ReportesPage() {
       },
       columnStyles: {
         0: { cellWidth: 8 },
-        1: { cellWidth: 35 },
+        1: { cellWidth: 15 },
         2: { cellWidth: 18 },
+        3: { cellWidth: 25 },
+        4: { cellWidth: 20 },
+        5: { cellWidth: 15 },
+        6: { cellWidth: 15 },
       },
       didDrawCell: (cellData: { section: string; column: { index: number }; cell: { x: number; y: number; width: number; height: number; text: string[] } }) => {
         // Colorear celdas de estado
         if (
           cellData.section === "body" &&
-          cellData.column.index >= 3 &&
-          cellData.column.index < 3 + fechas.length
+          cellData.column.index >= 7 &&
+          cellData.column.index < 7 + fechas.length
         ) {
           const value = cellData.cell.text[0];
           const colorMap: Record<string, [number, number, number]> = {
             P: [69, 116, 59],
             A: [255, 0, 0],
-            N: [201, 93, 82],
             O: [46, 120, 204],
             Pm: [106, 27, 154],
           };
@@ -324,7 +351,7 @@ export default function ReportesPage() {
     doc.setFontSize(7);
     doc.setTextColor(0, 0, 0);
     doc.text(
-      "P = Presente | A = Ausente | N = Novedad | O = Observación | Pm = Permiso",
+      "P = Presente | A = Ausente | O = Observación | Pm = Permiso",
       10,
       finalY + 6
     );
@@ -430,14 +457,14 @@ export default function ReportesPage() {
                         onClick={() => {
                           setSelectedComercianteId(c.idInterno);
                           setSearchComerciante(
-                            `${c.nombres} ${c.apellidos} (${c.ciu})`
+                            `${c.contribuyente} (${c.ciu})`
                           );
                         }}
                         className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-institucional-green/5 transition-colors"
                       >
                         <User size={14} className="text-institucional-green shrink-0" />
                         <span className="font-medium text-base-eerieBlack truncate">
-                          {c.nombres} {c.apellidos}
+                          {c.contribuyente}
                         </span>
                         <span className="ml-auto text-institucional-whiteSmokeBlack shrink-0">
                           {c.ciu}
@@ -493,6 +520,20 @@ export default function ReportesPage() {
               </Popover>
             </div>
 
+            {/* Toggle de observaciones */}
+            <div className="flex items-center gap-2 h-9 mb-1">
+              <input
+                type="checkbox"
+                id="toggle-obs"
+                checked={incluirObservaciones}
+                onChange={(e) => setIncluirObservaciones(e.target.checked)}
+                className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4"
+              />
+              <label htmlFor="toggle-obs" className="text-xs font-semibold text-institucional-whiteSmokeBlack cursor-pointer">
+                Incluir Observaciones
+              </label>
+            </div>
+
             {/* Botón PDF */}
             <button
               type="button"
@@ -520,11 +561,23 @@ export default function ReportesPage() {
                   <th className="sticky left-0 bg-institucional-green px-3 py-2.5 text-left font-semibold z-10">
                     #
                   </th>
+                  <th className="px-3 py-2.5 text-left font-semibold min-w-[80px]">
+                    CIU
+                  </th>
+                  <th className="px-3 py-2.5 text-left font-semibold min-w-[90px]">
+                    CÉDULA
+                  </th>
                   <th className="sticky left-8 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[160px] z-10">
-                    Comerciante
+                    CONTRIBUYENTE
+                  </th>
+                  <th className="px-3 py-2.5 text-left font-semibold min-w-[120px]">
+                    ACTIVIDAD
+                  </th>
+                  <th className="px-3 py-2.5 text-left font-semibold min-w-[100px]">
+                    NAVE
                   </th>
                   <th className="px-2 py-2.5 text-center font-semibold min-w-[60px]">
-                    Puesto
+                    PUESTO
                   </th>
                   {fechas.map((f) => (
                     <th
@@ -540,9 +593,11 @@ export default function ReportesPage() {
                       </span>
                     </th>
                   ))}
-                  <th className="px-3 py-2.5 text-left font-semibold min-w-[150px]">
-                    Observaciones
-                  </th>
+                  {incluirObservaciones && (
+                    <th className="px-3 py-2.5 text-left font-semibold min-w-[150px]">
+                      Observaciones
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -554,13 +609,22 @@ export default function ReportesPage() {
                     <td className="sticky left-0 bg-base-white px-3 py-2 text-institucional-whiteSmokeBlack font-medium z-10">
                       {i + 1}
                     </td>
+                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                      {row.comerciante.ciu}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                      {row.comerciante.cedula}
+                    </td>
                     <td className="sticky left-8 bg-base-white px-3 py-2 font-semibold text-base-eerieBlack z-10">
                       <div className="truncate max-w-[200px]">
-                        {row.comerciante.nombres} {row.comerciante.apellidos}
+                        {row.comerciante.contribuyente}
                       </div>
-                      <span className="text-[9px] text-institucional-whiteSmokeBlack">
-                        {row.comerciante.ciu}
-                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-institucional-whiteSmokeBlack">
+                      {row.comerciante.actividad}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                      {naves.find((n) => n.id === selectedNaveId)?.nombre}
                     </td>
                     <td className="px-2 py-2 text-center font-medium text-base-eerieBlack">
                       {row.puestoCode}
@@ -582,18 +646,20 @@ export default function ReportesPage() {
                         </td>
                       );
                     })}
-                    <td className="px-3 py-2 text-institucional-whiteSmokeBlack max-w-[200px]">
-                      {row.todoPresente ? (
-                        <span className="inline-flex items-center gap-1 text-acento-verdeOliva1 font-semibold">
-                          <span className="inline-block h-2 w-2 rounded-full bg-acento-verdeOliva1" />
-                          100% Asistencia
-                        </span>
-                      ) : (
-                        <span className="line-clamp-2 text-[10px]">
-                          {row.observaciones || "—"}
-                        </span>
-                      )}
-                    </td>
+                    {incluirObservaciones && (
+                      <td className="px-3 py-2 text-institucional-whiteSmokeBlack max-w-[200px]">
+                        {row.todoPresente ? (
+                          <span className="inline-flex items-center gap-1 text-acento-verdeOliva1 font-semibold">
+                            <span className="inline-block h-2 w-2 rounded-full bg-acento-verdeOliva1" />
+                            100% Asistencia
+                          </span>
+                        ) : (
+                          <span className="line-clamp-2 text-[10px]">
+                            {row.observaciones || "—"}
+                          </span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -607,12 +673,11 @@ export default function ReportesPage() {
             <div className="p-5 border-b border-institucional-whiteSmokeBlack/15">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-institucional-green/10 text-institucional-green font-bold">
-                  {reporteIndividual.comerciante.nombres.charAt(0)}
+                  {reporteIndividual.comerciante.contribuyente.charAt(0)}
                 </div>
                 <div>
                   <p className="font-bold text-base-eerieBlack">
-                    {reporteIndividual.comerciante.nombres}{" "}
-                    {reporteIndividual.comerciante.apellidos}
+                    {reporteIndividual.comerciante.contribuyente}
                   </p>
                   <p className="text-xs text-institucional-whiteSmokeBlack">
                     CIU: {reporteIndividual.comerciante.ciu} · Cédula:{" "}
@@ -629,9 +694,11 @@ export default function ReportesPage() {
                       {format(new Date(f + "T00:00:00"), "dd/MM")}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-left font-semibold text-base-eerieBlack min-w-[120px]">
-                    Obs.
-                  </th>
+                  {incluirObservaciones && (
+                    <th className="px-3 py-2 text-left font-semibold text-base-eerieBlack min-w-[120px]">
+                      Obs.
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -653,17 +720,19 @@ export default function ReportesPage() {
                       </td>
                     );
                   })}
-                  <td className="px-3 py-2">
-                    {reporteIndividual.todoPresente ? (
-                      <span className="text-acento-verdeOliva1 font-semibold text-xs">
-                        ✓ 100% Asistencia
-                      </span>
-                    ) : (
-                      <span className="text-[10px] text-institucional-whiteSmokeBlack">
-                        {reporteIndividual.observaciones || "—"}
-                      </span>
-                    )}
-                  </td>
+                  {incluirObservaciones && (
+                    <td className="px-3 py-2">
+                      {reporteIndividual.todoPresente ? (
+                        <span className="text-acento-verdeOliva1 font-semibold text-xs">
+                          ✓ 100% Asistencia
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-institucional-whiteSmokeBlack">
+                          {reporteIndividual.observaciones || "—"}
+                        </span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               </tbody>
             </table>

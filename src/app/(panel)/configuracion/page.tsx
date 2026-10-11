@@ -28,8 +28,24 @@ import {
   eliminarUsuario,
 } from "@/infrastructure/mocks/auth.mock";
 import { getNaves } from "@/infrastructure/mocks/mercado.mock";
-import type { Rol } from "@/domain/models/comerciante.model";
+import {
+  generarRegistrosEjemplo,
+  simularImportacion,
+  parsearXML,
+  parsearCSV,
+  XML_EJEMPLO,
+  CSV_EJEMPLO,
+} from "@/infrastructure/mocks/importador.mock";
+import type { Rol, ImportacionRegistro, ImportacionResultado } from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
+import {
+  FileText,
+  FileSpreadsheet,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -44,7 +60,7 @@ import { Button } from "@/components/ui/button";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
-type ActiveView = "main" | "permisos" | "usuarios";
+type ActiveView = "main" | "permisos" | "usuarios" | "carga-masiva";
 
 interface SupervisorConfig {
   persistencia: boolean;
@@ -262,7 +278,7 @@ function UserFormDialog({
           <DialogDescription>
             {isEdit
               ? "Modifique los datos del usuario."
-              : "Complete los datos para crear un nuevo usuario. La contraseña por defecto será 123456789*."}
+              : "Complete los datos para crear un nuevo usuario. La contraseña por defecto será cedula*."}
           </DialogDescription>
         </DialogHeader>
 
@@ -398,6 +414,62 @@ export default function ConfiguracionPage() {
   } | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  // ── Estado Carga Masiva ──
+  const [registros, setRegistros] = useState<ImportacionRegistro[]>([]);
+  const [resultado, setResultado] = useState<ImportacionResultado | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [archivoNombre, setArchivoNombre] = useState("");
+  const [paso, setPaso] = useState<"cargar" | "preview" | "resultado">("cargar");
+
+  // Funciones de carga masiva
+  function handleFileInput(contenido: string, nombre: string) {
+    setArchivoNombre(nombre);
+    let parsed: ImportacionRegistro[];
+    if (nombre.endsWith(".xml")) {
+      parsed = parsearXML(contenido);
+    } else if (nombre.endsWith(".csv")) {
+      parsed = parsearCSV(contenido);
+    } else {
+      toast.error("Formato no soportado");
+      return;
+    }
+    if (parsed.length === 0) {
+      toast.error("Archivo vacío");
+      return;
+    }
+    setRegistros(parsed);
+    setPaso("preview");
+    toast.success(`${parsed.length} registros cargados`);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => handleFileInput(ev.target?.result as string, file.name);
+    reader.readAsText(file);
+  }
+
+  function handleCargarEjemploXML() { handleFileInput(XML_EJEMPLO, "ejemplo.xml"); }
+  function handleCargarEjemploCSV() { handleFileInput(CSV_EJEMPLO, "ejemplo.csv"); }
+
+  function handleProcesar() {
+    const res = simularImportacion(registros);
+    setResultado(res);
+    setPaso("resultado");
+    if (res.errores.length === 0) toast.success("Importación completada");
+    else toast.warning("Importación con errores");
+  }
+
+  function handleReiniciar() {
+    setRegistros([]);
+    setResultado(null);
+    setArchivoNombre("");
+    setPaso("cargar");
+  }
 
   function togglePersistencia(supId: string) {
     setConfigs((prev) => ({
@@ -847,8 +919,8 @@ export default function ConfiguracionPage() {
                   <UserCog size={20} strokeWidth={1.75} className="text-acento-azul1" aria-hidden="true" />
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Editar Perfil</p>
-                  <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Cambia tu contraseña de acceso.</p>
+                  <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Cambiar Contraseña</p>
+                  <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Actualiza tus credenciales de acceso.</p>
                 </div>
                 <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
               </button>
@@ -896,6 +968,27 @@ export default function ConfiguracionPage() {
               </li>
             )}
 
+            {/* 3.5. Ingreso Masivo (solo TIC / SUPERADMIN) */}
+            {isAdmin && (
+              <li>
+                <button
+                  type="button"
+                  id="ingreso-masivo"
+                  onClick={() => setActiveView("carga-masiva")}
+                  className="group flex w-full items-center gap-4 rounded-xl bg-base-white px-5 py-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 transition-all duration-150 hover:ring-institucional-green/30 hover:bg-institucional-green/5"
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-institucional-green/10">
+                    <Upload size={20} strokeWidth={1.75} className="text-institucional-green" aria-hidden="true" />
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Ingreso Masivo de Catastro</p>
+                    <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Importa comerciantes desde XML o CSV.</p>
+                  </div>
+                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                </button>
+              </li>
+            )}
+
             {/* 4. Cerrar Sesión */}
             <li>
               <button
@@ -917,6 +1010,112 @@ export default function ConfiguracionPage() {
           </ul>
         </section>
       </div>
+
+      {/* ── Vista: Carga Masiva ── */}
+      {activeView === "carga-masiva" && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-institucional-whiteSmoke">
+          <div className="w-full max-w-4xl mx-auto px-4 py-8">
+            {backButton}
+            <h1 className="text-2xl font-bold text-institucional-green mb-6">Ingreso Masivo de Catastro</h1>
+
+            {/* ── Paso 1: Carga ── */}
+            {paso === "cargar" && (
+              <>
+                <div
+                  className={[
+                    "flex min-h-[220px] flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 transition-all mb-6",
+                    isDragOver ? "border-institucional-green bg-institucional-green/5" : "border-institucional-whiteSmokeBlack/30 bg-base-white",
+                  ].join(" ")}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                >
+                  <Upload size={40} className="text-institucional-whiteSmokeBlack/40" />
+                  <p className="mt-3 text-sm font-medium text-base-eerieBlack">Arrastre un archivo XML o CSV aquí</p>
+                  <label className="mt-4 cursor-pointer">
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-institucional-green px-5 py-2.5 text-xs font-semibold text-base-white shadow-sm transition-colors hover:bg-acento-verdeOliva1">
+                      <FileSpreadsheet size={14} /> Seleccionar archivo
+                    </span>
+                    <input
+                      type="file" accept=".xml,.csv" className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => handleFileInput(ev.target?.result as string, file.name);
+                        reader.readAsText(file);
+                      }}
+                    />
+                  </label>
+                </div>
+                <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
+                  <h2 className="text-sm font-bold text-base-eerieBlack mb-3">Cargar Datos de Ejemplo</h2>
+                  <div className="flex gap-3">
+                    <button onClick={handleCargarEjemploXML} className="flex-1 rounded-lg bg-acento-azul1/10 px-4 py-3 text-xs font-semibold text-acento-azul1 hover:bg-acento-azul1/20">XML (3 registros)</button>
+                    <button onClick={handleCargarEjemploCSV} className="flex-1 rounded-lg bg-acento-verdeOliva1/10 px-4 py-3 text-xs font-semibold text-acento-verdeOliva1 hover:bg-acento-verdeOliva1/20">CSV (5 registros)</button>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── Paso 2: Preview ── */}
+            {paso === "preview" && (
+              <div className="rounded-2xl bg-base-white shadow-sm overflow-hidden">
+                <div className="px-5 py-4 border-b border-institucional-whiteSmokeBlack/15 flex justify-between">
+                  <div>
+                    <h2 className="font-bold">Vista Previa</h2>
+                    <p className="text-xs">{registros.length} registros</p>
+                  </div>
+                  <button onClick={handleReiniciar} className="text-base-red text-xs"><X size={14} /> Cancelar</button>
+                </div>
+                <div className="overflow-x-auto max-h-[400px]">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-institucional-green/10">
+                        <th className="px-4 py-2 text-left">Nave</th>
+                        <th className="px-4 py-2 text-left">Contribuyente</th>
+                        <th className="px-4 py-2 text-left">Puesto</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {registros.map((r, i) => (
+                        <tr key={i} className="border-t hover:bg-institucional-whiteSmoke/50">
+                          <td className="px-4 py-2">{r.nave}</td>
+                          <td className="px-4 py-2">{r.contribuyente}</td>
+                          <td className="px-4 py-2">{r.numBodega}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="p-4 flex justify-end gap-3 border-t">
+                  <button onClick={handleReiniciar} className="h-9 px-5 rounded-lg border text-xs">Cancelar</button>
+                  <button onClick={handleProcesar} className="h-9 px-5 rounded-lg bg-institucional-green text-white text-xs">Procesar</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Paso 3: Resultado ── */}
+            {paso === "resultado" && resultado && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="rounded-xl bg-base-white p-5 ring-1 ring-acento-verdeOliva1/20">
+                    <p className="text-2xl font-bold text-acento-verdeOliva1">{resultado.exitosos}</p>
+                    <p className="text-xs">Exitosos</p>
+                  </div>
+                  <div className="rounded-xl bg-base-white p-5 ring-1 ring-base-red/20">
+                    <p className="text-2xl font-bold text-base-red">{resultado.errores.length}</p>
+                    <p className="text-xs">Errores</p>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={handleReiniciar} className="h-9 px-6 rounded-lg bg-institucional-green text-white text-xs">Nueva Importación</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Modal de cambio de contraseña ── */}
       <ChangePasswordDialog

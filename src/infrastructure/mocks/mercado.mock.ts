@@ -2,7 +2,6 @@
 
 import type {
   Nave,
-  Sector,
   Puesto,
   Comerciante,
   RegistroAsistencia,
@@ -34,9 +33,6 @@ const APELLIDOS = [
   "Altamirano", "Quishpe", "Chávez", "Bonilla", "Acosta",
   "Caicedo", "Velasteguí",
 ];
-
-// Jerarquía estricta: Nave -> Sector (sin Zonas)
-const SECTOR_NOMBRES = ["Sector 1", "Sector 2", "Sector 3", "Sector 4"];
 
 // ── Textos de novedad para generación ────────────────────────────────────────
 
@@ -89,22 +85,6 @@ const NAVES_CONFIG = [
 
 const LIMITE_PUESTOS = 100;
 
-// Generar sectores (sin Zonas — directamente Sector 1..4 por nave)
-function generarSectores(): Map<string, Sector[]> {
-  const map = new Map<string, Sector[]>();
-  for (const nave of NAVES_CONFIG) {
-    const sectores: Sector[] = SECTOR_NOMBRES.map((nombre, i) => ({
-      id: `${nave.id}-sector-${i + 1}`,
-      nombre,
-      naveId: nave.id,
-    }));
-    map.set(nave.id, sectores);
-  }
-  return map;
-}
-
-const sectoresMap = generarSectores();
-
 // Generar puestos y comerciantes
 let comercianteIndex = 0;
 
@@ -116,54 +96,48 @@ function generarPuestosYComerciantes(): {
   const comerciantes: Comerciante[] = [];
 
   for (const nave of NAVES_CONFIG) {
-    const sectores = sectoresMap.get(nave.id) ?? [];
-    const puestosPorSector = Math.floor(LIMITE_PUESTOS / sectores.length);
+    for (let j = 0; j < LIMITE_PUESTOS; j++) {
+      const globalIndex = puestos.length;
+      const puestoId = `P-${nave.nombre.replace("Nave ", "")}${String(globalIndex + 1).padStart(3, "0")}`;
 
-    for (const sector of sectores) {
-      for (let j = 0; j < puestosPorSector; j++) {
-        const globalIndex = puestos.length;
-        const puestoId = `P-${nave.nombre.replace("Nave ", "")}${String(globalIndex + 1).padStart(3, "0")}`;
+      // ~85% ocupados, ~15% vacantes
+      const esVacante = rand() < 0.15;
 
-        // ~85% ocupados, ~15% vacantes
-        const esVacante = rand() < 0.15;
+      if (esVacante) {
+        puestos.push({
+          id: puestoId,
+          codigo: puestoId,
+          naveId: nave.id,
+          estado: "Vacante",
+          comercianteId: null,
+        });
+      } else {
+        const cedula = genCedula(comercianteIndex);
+        const ciu = genCIU(comercianteIndex);
+        const comId = `com-${String(comercianteIndex + 1).padStart(4, "0")}`;
 
-        if (esVacante) {
-          puestos.push({
-            id: puestoId,
-            codigo: puestoId,
-            naveId: nave.id,
-            sectorId: sector.id,
-            estado: "Vacante",
-            comercianteId: null,
-          });
-        } else {
-          const cedula = genCedula(comercianteIndex);
-          const ciu = genCIU(comercianteIndex);
-          const comId = `com-${String(comercianteIndex + 1).padStart(4, "0")}`;
+        const comerciante: Comerciante = {
+          idInterno: comId,
+          ciu,
+          cedula,
+          contribuyente: `${pick(NOMBRES)} ${pick(APELLIDOS)} ${pick(APELLIDOS)}`,
+          actividad: pick(ACTIVIDADES),
+          puestoId: puestoId,
+          estadoRegistro: "Habilitado",
+          creadoPor: "sistema",
+        };
 
-          const comerciante: Comerciante = {
-            idInterno: comId,
-            ciu,
-            cedula,
-            nombres: pick(NOMBRES),
-            apellidos: `${pick(APELLIDOS)} ${pick(APELLIDOS)}`,
-            actividad: pick(ACTIVIDADES),
-            puestoId: puestoId,
-          };
+        comerciantes.push(comerciante);
 
-          comerciantes.push(comerciante);
+        puestos.push({
+          id: puestoId,
+          codigo: puestoId,
+          naveId: nave.id,
+          estado: "Ocupado",
+          comercianteId: comId,
+        });
 
-          puestos.push({
-            id: puestoId,
-            codigo: puestoId,
-            naveId: nave.id,
-            sectorId: sector.id,
-            estado: "Ocupado",
-            comercianteId: comId,
-          });
-
-          comercianteIndex++;
-        }
+        comercianteIndex++;
       }
     }
   }
@@ -175,7 +149,7 @@ const { puestos: allPuestos, comerciantes: allComerciantes } =
   generarPuestosYComerciantes();
 
 // ── Generar asistencia histórica (últimos 30 días) ──────────────────────────
-// Regla de transición: Si ayer = Novedad, hoy = Observacion con observacionTexto heredada
+// Regla de transición: Si ayer = Ausente reiterado -> hoy = Observacion
 
 function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
   const map = new Map<string, RegistroAsistencia[]>();
@@ -183,7 +157,6 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
 
   for (const comerciante of allComerciantes) {
     let estadoAnterior: EstadoAsistencia = "Pendiente";
-    let textoNovedadAnterior: string | undefined = undefined;
 
     for (let d = 30; d >= 0; d--) {
       const fecha = format(subDays(hoy, d), "yyyy-MM-dd");
@@ -193,27 +166,16 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
       let observacionTexto: string | undefined = undefined;
       let observacion: string | undefined = undefined;
 
-      // Regla de transición: Novedad ayer → Observacion hoy con texto heredado
-      if (estadoAnterior === "Novedad") {
-        estado = "Observacion";
-        observacion = "En observación por novedad previa";
-        observacionTexto = textoNovedadAnterior;
-      } else {
-        // Distribución aleatoria
-        const r = rand();
-        if (r < 0.70) estado = "Presente";
-        else if (r < 0.82) estado = "Ausente";
-        else if (r < 0.90) estado = "Novedad";
-        else if (r < 0.95) estado = "Observacion";
-        else estado = "Permiso";
-      }
+      // Distribución aleatoria
+      const r = rand();
+      if (r < 0.70) estado = "Presente";
+      else if (r < 0.85) estado = "Ausente";
+      else if (r < 0.95) estado = "Observacion";
+      else estado = "Permiso";
 
-      // Generar texto de novedad si el estado es Novedad
-      if (estado === "Novedad") {
-        observacionTexto = pick(TEXTOS_NOVEDAD);
-        observacion = "Novedad reportada por supervisor";
-      } else if (estado === "Observacion" && !observacion) {
+      if (estado === "Observacion" && !observacion) {
         observacion = "En observación";
+        observacionTexto = pick(TEXTOS_NOVEDAD);
       } else if (estado === "Permiso") {
         observacion = "Permiso concedido";
       }
@@ -237,8 +199,6 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
       existing.push(registro);
       map.set(key, existing);
 
-      // Guardar estado y texto para la transición del día siguiente
-      textoNovedadAnterior = estado === "Novedad" ? observacionTexto : undefined;
       estadoAnterior = estado;
     }
   }
@@ -255,16 +215,8 @@ export function getNaves(): Nave[] {
     id: nc.id,
     nombre: nc.nombre,
     limitePuestos: LIMITE_PUESTOS,
-    sectores: sectoresMap.get(nc.id) ?? [],
+    puestos: allPuestos.filter(p => p.naveId === nc.id),
   }));
-}
-
-export function getSectoresPorNave(naveId: string): Sector[] {
-  return sectoresMap.get(naveId) ?? [];
-}
-
-export function getPuestosPorSector(sectorId: string): Puesto[] {
-  return allPuestos.filter((p) => p.sectorId === sectorId);
 }
 
 export function getPuestosPorNave(naveId: string): Puesto[] {
@@ -272,15 +224,15 @@ export function getPuestosPorNave(naveId: string): Puesto[] {
 }
 
 export function getComerciantes(): Comerciante[] {
-  return allComerciantes;
+  return allComerciantes.filter(c => c.estadoRegistro !== "Deshabilitado");
 }
 
 export function getComerciantePorId(id: string): Comerciante | null {
-  return allComerciantes.find((c) => c.idInterno === id) ?? null;
+  return allComerciantes.find((c) => c.idInterno === id && c.estadoRegistro !== "Deshabilitado") ?? null;
 }
 
 export function getComerciantePorPuesto(puestoId: string): Comerciante | null {
-  return allComerciantes.find((c) => c.puestoId === puestoId) ?? null;
+  return allComerciantes.find((c) => c.puestoId === puestoId && c.estadoRegistro !== "Deshabilitado") ?? null;
 }
 
 export function getAsistenciaPorFecha(fecha: string): RegistroAsistencia[] {
@@ -405,11 +357,9 @@ let nextComerciante = allComerciantes.length + 1;
 
 export function agregarComerciante(data: {
   ciu: string;
-  nombres: string;
-  apellidos: string;
+  contribuyente: string;
   actividad: string;
   naveId: string;
-  sectorId: string;
   puestoId: string;
 }): Comerciante {
   const comId = `com-${String(nextComerciante++).padStart(4, "0")}`;
@@ -419,10 +369,11 @@ export function agregarComerciante(data: {
     idInterno: comId,
     ciu: data.ciu,
     cedula,
-    nombres: data.nombres,
-    apellidos: data.apellidos,
+    contribuyente: data.contribuyente,
     actividad: data.actividad,
     puestoId: data.puestoId,
+    estadoRegistro: "Habilitado",
+    creadoPor: "sistema"
   };
 
   allComerciantes.push(comerciante);
@@ -441,12 +392,12 @@ export function editarComerciante(
   idInterno: string,
   data: {
     ciu?: string;
-    nombres?: string;
-    apellidos?: string;
+    contribuyente?: string;
     actividad?: string;
     naveId?: string;
-    sectorId?: string;
     puestoId?: string;
+    estadoRegistro?: "Habilitado" | "Deshabilitado";
+    deshabilitadoPor?: string;
   }
 ): Comerciante | null {
   const idx = allComerciantes.findIndex((c) => c.idInterno === idInterno);
@@ -471,10 +422,11 @@ export function editarComerciante(
   allComerciantes[idx] = {
     ...old,
     ...(data.ciu !== undefined && { ciu: data.ciu }),
-    ...(data.nombres !== undefined && { nombres: data.nombres }),
-    ...(data.apellidos !== undefined && { apellidos: data.apellidos }),
+    ...(data.contribuyente !== undefined && { contribuyente: data.contribuyente }),
     ...(data.actividad !== undefined && { actividad: data.actividad }),
     ...(data.puestoId !== undefined && { puestoId: data.puestoId }),
+    ...(data.estadoRegistro !== undefined && { estadoRegistro: data.estadoRegistro }),
+    ...(data.deshabilitadoPor !== undefined && { deshabilitadoPor: data.deshabilitadoPor }),
   };
 
   return allComerciantes[idx];
@@ -486,6 +438,10 @@ export function eliminarComerciante(idInterno: string): boolean {
 
   const com = allComerciantes[idx];
 
+  // Soft delete en lugar de borrar
+  com.estadoRegistro = "Deshabilitado";
+  com.deshabilitadoPor = "sistema";
+
   // Liberar puesto
   if (com.puestoId) {
     const puesto = allPuestos.find((p) => p.id === com.puestoId);
@@ -493,15 +449,15 @@ export function eliminarComerciante(idInterno: string): boolean {
       puesto.estado = "Vacante";
       puesto.comercianteId = null;
     }
+    com.puestoId = null;
   }
-
-  allComerciantes.splice(idx, 1);
+  
   return true;
 }
 
-/** Obtener puestos vacantes para un sector específico */
-export function getPuestosVacantesPorSector(sectorId: string): Puesto[] {
+/** Obtener puestos vacantes para una nave específica */
+export function getPuestosVacantesPorNave(naveId: string): Puesto[] {
   return allPuestos.filter(
-    (p) => p.sectorId === sectorId && p.estado === "Vacante"
+    (p) => p.naveId === naveId && p.estado === "Vacante"
   );
 }

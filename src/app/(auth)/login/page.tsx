@@ -210,7 +210,7 @@ export default function LoginPage() {
     });
 
     setTimeout(() => {
-      router.push("/dashboard");
+      router.push("/listas");
     }, 600);
   }
 
@@ -220,7 +220,7 @@ export default function LoginPage() {
       description: "Bienvenido al Sistema de Gestión EPMMA.",
     });
     setTimeout(() => {
-      router.push("/dashboard");
+      router.push("/listas");
     }, 600);
   }
 

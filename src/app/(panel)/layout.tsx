@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
   Home,
@@ -20,10 +21,9 @@ import { useEffect } from "react";
 // ── Definición completa de todos los enlaces ─────────────────────────────────
 
 const allLinks = [
-  { href: "/dashboard",     label: "Inicio",     Icon: Home          },
   { href: "/listas",        label: "Listas",     Icon: ClipboardList },
   { href: "/reportes",      label: "Reportes",   Icon: BarChart3     },
-  { href: "/tic",           label: "Catastro",   Icon: Monitor       },
+  { href: "/catastro",      label: "Catastro",   Icon: Monitor       },
   { href: "/auditoria",     label: "Auditoría",  Icon: ScrollText    },
   { href: "/configuracion", label: "Config",     Icon: Settings      },
 ] as const;
@@ -131,9 +131,14 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       >
         {/* Logo corporativo */}
         <div className="flex h-16 shrink-0 items-center gap-3 border-b border-institucional-whiteSmokeBlack/20 px-5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-institucional-green">
-            <span className="text-base font-black leading-none text-base-white">E</span>
-          </div>
+          <Image
+            src="/icon.png"
+            alt="Logo EPMMA"
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0 object-contain"
+            priority
+          />
           <div className="min-w-0">
             <p className="truncate text-sm font-bold leading-tight text-base-eerieBlack">
               EPMMA

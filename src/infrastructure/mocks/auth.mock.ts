@@ -199,8 +199,8 @@ export function crearUsuario(data: {
     apellidos: data.apellidos,
     rol: data.rol,
     mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    passwordHash: `${data.cedula}*`,
+    passwordActual: `${data.cedula}*`,
     navesAsignadas: data.navesAsignadas,
   };
   usuarios.push(nuevoUsuario);
@@ -258,9 +258,10 @@ function toUsuario(m: MockUsuario): Usuario {
 
 /** Mapa de ítems de menú permitidos por rol */
 export const MENU_POR_ROL: Record<Rol, string[]> = {
-  SUPERADMIN: ["/dashboard", "/listas", "/reportes", "/tic", "/auditoria", "/configuracion"],
-  TIC: ["/dashboard", "/tic", "/auditoria", "/configuracion"],
-  DIRECTOR: ["/dashboard", "/reportes", "/configuracion"],
-  JEFE_OPERATIVO: ["/dashboard", "/reportes", "/configuracion"],
-  SUPERVISOR: ["/dashboard", "/listas", "/configuracion"],
+  SUPERADMIN: ["/listas", "/reportes", "/catastro", "/auditoria", "/configuracion"],
+  TIC: ["/catastro", "/auditoria", "/configuracion"],
+  TI: ["/catastro", "/auditoria", "/configuracion"],
+  DIRECTOR: ["/reportes", "/configuracion"],
+  JEFE_OPERATIVO: ["/reportes", "/configuracion"],
+  SUPERVISOR: ["/listas", "/configuracion"],
 };

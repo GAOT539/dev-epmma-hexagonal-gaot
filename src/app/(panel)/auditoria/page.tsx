@@ -8,7 +8,10 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  Download,
 } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getLogsFiltrados } from "@/infrastructure/mocks/auditoria.mock";
@@ -72,21 +75,87 @@ export default function AuditoriaPage() {
     setPagina(1);
   }
 
+  function handleExportPDF() {
+    const doc = new jsPDF({ orientation: "landscape" });
+
+    // Logo y Encabezado
+    const logoUrl = "/logopdf.png";
+    doc.addImage(logoUrl, "PNG", 10, 10, 30, 30);
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text(
+      "EMPRESA PÚBLICA – EMPRESA MUNICIPAL\nMERCADO MAYORISTA AMBATO",
+      doc.internal.pageSize.width / 2,
+      20,
+      { align: "center" }
+    );
+
+    doc.setFontSize(12);
+    doc.text("Reporte de Auditoría", doc.internal.pageSize.width / 2, 35, { align: "center" });
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Fecha de exportación: ${format(new Date(), "dd/MM/yyyy HH:mm")}`, doc.internal.pageSize.width / 2, 42, { align: "center" });
+
+    // Tabla
+    const headers = [["Fecha", "Hora", "Usuario", "Acción", "Detalle"]];
+    const data = logs.map(log => [
+      format(new Date(log.timestamp), "dd/MM/yyyy"),
+      format(new Date(log.timestamp), "HH:mm:ss"),
+      log.usuarioNombre,
+      log.accion.replace(/_/g, " "),
+      log.detalle
+    ]);
+
+    autoTable(doc, {
+      head: headers,
+      body: data,
+      startY: 50,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [69, 116, 59], textColor: [255, 255, 255] },
+      columnStyles: {
+        0: { cellWidth: 25 },
+        1: { cellWidth: 20 },
+        2: { cellWidth: 40 },
+        3: { cellWidth: 40 },
+        4: { cellWidth: "auto" }
+      }
+    });
+
+    doc.save("auditoria.pdf");
+  }
+
   return (
     <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
-      <header className="mb-6 max-w-5xl mx-auto">
-        <div className="flex items-center gap-2">
-          <ScrollText size={22} className="text-institucional-green" aria-hidden="true" />
-          <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
-            Auditoría del Sistema
-          </h1>
+      <header className="mb-6 w-full max-w-none px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <ScrollText size={22} className="text-institucional-green" aria-hidden="true" />
+            <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
+              Auditoría del Sistema
+            </h1>
+          </div>
+          <p className="mt-2 text-sm text-institucional-whiteSmokeBlack">
+            Registro de todas las acciones realizadas en el sistema.
+          </p>
         </div>
-        <p className="mt-2 text-sm text-institucional-whiteSmokeBlack">
-          Registro de todas las acciones realizadas en el sistema.
-        </p>
+        <button
+          type="button"
+          onClick={handleExportPDF}
+          disabled={logs.length === 0}
+          className={[
+            "flex items-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors",
+            logs.length > 0
+              ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
+              : "bg-institucional-whiteSmokeBlack/30 text-institucional-whiteSmokeBlack cursor-not-allowed",
+          ].join(" ")}
+        >
+          <Download size={14} />
+          Descargar PDF
+        </button>
       </header>
 
-      <div className="mx-auto max-w-5xl space-y-4">
+      <div className="w-full max-w-none px-4 space-y-4">
         {/* ── Filtros ── */}
         <div className="rounded-2xl bg-base-white p-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
           <div className="flex flex-wrap items-end gap-3">

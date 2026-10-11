@@ -3,7 +3,6 @@
 import { useCallback, useMemo, useState } from "react";
 import {
   getNaves,
-  getPuestosPorSector,
   getComerciantePorId,
   getAsistenciaPorFecha,
   setEstadoAsistencia,
@@ -15,7 +14,6 @@ import type {
   Nave,
   Puesto,
   Comerciante,
-  Sector,
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
 import {
@@ -49,7 +47,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { addDays, format, isToday, isFuture, subDays } from "date-fns";
+import { addDays, eachDayOfInterval, format, isToday, isFuture, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 
 // ── Colores por estado ───────────────────────────────────────────────────────
@@ -69,12 +67,6 @@ const ESTADO_CONFIG: Record<
     text: "text-base-red",
     ring: "ring-base-red/30",
     label: "Ausente",
-  },
-  Novedad: {
-    bg: "bg-acento-naranjaSalmon1/15",
-    text: "text-acento-naranjaSalmon1",
-    ring: "ring-acento-naranjaSalmon1/30",
-    label: "Novedad",
   },
   Observacion: {
     bg: "bg-acento-azul1/15",
@@ -107,10 +99,9 @@ const ESTADO_CONFIG: Record<
 const ESTADO_PRIORIDAD: Record<string, number> = {
   Ausente: 0,
   Observacion: 1,
-  Novedad: 2,
-  Permiso: 3,
-  Pendiente: 4,
-  Presente: 5,
+  Permiso: 2,
+  Pendiente: 3,
+  Presente: 4,
 };
 
 // ── Helper: formatear fecha ──────────────────────────────────────────────────
@@ -197,7 +188,7 @@ function ObservacionDialog({
           </DialogTitle>
           <DialogDescription>
             {comerciante
-              ? `Ingrese el detalle de la observación para ${comerciante.nombres} ${comerciante.apellidos} (${comerciante.ciu}).`
+              ? `Ingrese el detalle de la observación para ${comerciante.contribuyente} (${comerciante.ciu}).`
               : "Ingrese el detalle de la observación."}
           </DialogDescription>
         </DialogHeader>
@@ -225,8 +216,6 @@ function ObservacionDialog({
   );
 }
 
-// ── Modal de detalle del comerciante ─────────────────────────────────────────
-
 function ComercianteModal({
   comerciante,
   puesto,
@@ -235,6 +224,7 @@ function ComercianteModal({
   onClose,
   onPermisoAsignado,
   onNovedadGuardada,
+  onEstadoChange,
 }: {
   comerciante: Comerciante;
   puesto: Puesto;
@@ -243,12 +233,15 @@ function ComercianteModal({
   onClose: () => void;
   onPermisoAsignado: (inicio: string, fin: string) => void;
   onNovedadGuardada: (comercianteId: string, texto: string) => void;
+  onEstadoChange: (estado: EstadoAsistencia) => void;
 }) {
   const [permisoInicio, setPermisoInicio] = useState("");
   const [permisoFin, setPermisoFin] = useState("");
   const [error, setError] = useState("");
   const [novedadTexto, setNovedadTexto] = useState("");
   const [editandoPermiso, setEditandoPermiso] = useState(false);
+
+  const [mostrarObservacion, setMostrarObservacion] = useState(estado === "Observacion");
 
   const estadoConfig = ESTADO_CONFIG[estado];
   const isPermiso = estado === "Permiso";
@@ -266,7 +259,7 @@ function ComercianteModal({
     fechaAyer
   );
   const observacionAnterior =
-    registroAyer?.estado === "Novedad" ? registroAyer.observacionTexto : null;
+    registroAyer?.estado === "Observacion" ? registroAyer.observacionTexto : null;
 
   function handleAsignarPermiso() {
     setError("");
@@ -288,33 +281,24 @@ function ComercianteModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-base-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-lg rounded-2xl bg-base-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
+      {/* @ts-expect-error shadcn dialog onInteractOutside missing type */}
+      <DialogContent onInteractOutside={(e: any) => e.preventDefault()} className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0">
         {/* Header */}
         <div className="bg-institucional-green px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white font-bold text-lg">
-              {comerciante.nombres.charAt(0)}
+              {comerciante.contribuyente.charAt(0)}
             </div>
             <div>
-              <h2 className="text-base font-bold text-base-white">
-                {comerciante.nombres} {comerciante.apellidos}
-              </h2>
-              <p className="text-sm text-base-white/80">CIU: {comerciante.ciu}</p>
+              <DialogTitle className="text-base font-bold text-base-white m-0">
+                {comerciante.contribuyente}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-base-white/80 m-0">
+                CIU: {comerciante.ciu}
+              </DialogDescription>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-base-white/10 text-base-white hover:bg-base-white/20 transition-colors"
-          >
-            <X size={18} />
-          </button>
         </div>
 
         {/* Contenido */}
@@ -344,40 +328,72 @@ function ComercianteModal({
             )}
           </div>
 
-          {/* ── Sección Novedad (textarea + observación anterior) ── */}
-          <div className="rounded-xl bg-acento-naranjaSalmon1/5 p-4 space-y-3 ring-1 ring-acento-naranjaSalmon1/20">
-            <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
-              <AlertTriangle size={16} className="text-acento-naranjaSalmon1" />
-              Registrar Novedad
-            </h3>
-            <Textarea
-              placeholder="Escriba la novedad o situación a reportar..."
-              value={novedadTexto}
-              onChange={(e) => setNovedadTexto(e.target.value)}
-              rows={3}
-              className="resize-none text-sm"
-            />
-            <Button
-              onClick={handleGuardarNovedad}
-              disabled={!novedadTexto.trim()}
-              size="sm"
-              className="w-full bg-acento-naranjaSalmon1 text-base-white hover:bg-acento-naranjaSalmon2"
-            >
-              Guardar Novedad
-            </Button>
+          {/* Acciones Rápidas */}
+          {!isPermiso && (
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={estado === "Presente" ? "default" : "outline"}
+                className={estado === "Presente" ? "bg-acento-verdeOliva1 hover:bg-acento-verdeOliva1" : "text-acento-verdeOliva1"}
+                onClick={() => onEstadoChange("Presente")}
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" /> Presente
+              </Button>
+              <Button
+                variant={estado === "Ausente" ? "default" : "outline"}
+                className={estado === "Ausente" ? "bg-base-red hover:bg-base-red" : "text-base-red"}
+                onClick={() => onEstadoChange("Ausente")}
+              >
+                <XCircle className="w-4 h-4 mr-2" /> Ausente
+              </Button>
+              <Button
+                variant={estado === "Observacion" ? "default" : "outline"}
+                className={estado === "Observacion" ? "bg-acento-azul1 hover:bg-acento-azul1 text-base-white" : "text-acento-azul1"}
+                onClick={() => {
+                  onEstadoChange("Observacion");
+                  setMostrarObservacion(true);
+                }}
+              >
+                <EyeIcon className="w-4 h-4 mr-2" /> Observación
+              </Button>
+            </div>
+          )}
 
-            {/* Observación heredada del día anterior */}
-            {observacionAnterior && (
-              <div className="mt-2 rounded-lg bg-acento-azul1/10 p-3 ring-1 ring-acento-azul1/20">
-                <p className="text-[11px] font-semibold text-acento-azul1 mb-1">
-                  📋 Observación anterior:
-                </p>
-                <p className="text-xs text-acento-azul2 leading-relaxed">
-                  {observacionAnterior}
-                </p>
-              </div>
-            )}
-          </div>
+          {/* ── Sección Novedad (textarea + observación anterior) ── */}
+          {mostrarObservacion && !isPermiso && (
+            <div className="rounded-xl bg-acento-azul1/5 p-4 space-y-3 ring-1 ring-acento-azul1/20">
+              <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
+                <AlertTriangle size={16} className="text-acento-azul1" />
+                Registrar Observación
+              </h3>
+              <Textarea
+                placeholder="Escriba la observación o situación a reportar..."
+                value={novedadTexto}
+                onChange={(e) => setNovedadTexto(e.target.value)}
+                rows={3}
+                className="resize-none text-sm"
+              />
+              <Button
+                onClick={handleGuardarNovedad}
+                disabled={!novedadTexto.trim()}
+                size="sm"
+                className="w-full bg-acento-azul1 text-base-white hover:bg-acento-azul1/90"
+              >
+                Guardar Observación
+              </Button>
+
+              {/* Observación heredada del día anterior */}
+              {observacionAnterior && (
+                <div className="mt-2 rounded-lg bg-acento-azul1/10 p-3 ring-1 ring-acento-azul1/20">
+                  <p className="text-[11px] font-semibold text-acento-azul1 mb-1">
+                    📋 Observación anterior:
+                  </p>
+                  <p className="text-xs text-acento-azul2 leading-relaxed">
+                    {observacionAnterior}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Sección Permiso ── */}
           {isPermiso && registroActual ? (
@@ -500,8 +516,8 @@ function ComercianteModal({
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -571,12 +587,12 @@ function PuestoCard({
         <span
           className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${config.bg} text-sm font-bold ${config.text}`}
         >
-          {comerciante?.nombres.charAt(0) ?? "?"}
+          {comerciante?.contribuyente.charAt(0) ?? "?"}
         </span>
         <div className="min-w-0">
           <p className="truncate font-semibold text-base-eerieBlack text-sm leading-tight">
             {comerciante
-              ? `${comerciante.nombres} ${comerciante.apellidos}`
+              ? `${comerciante.contribuyente}`
               : "Sin asignar"}
           </p>
           <div className="flex items-center gap-2 mt-0.5">
@@ -619,7 +635,7 @@ function PuestoCard({
           label="Observación"
           Icon={EyeIcon}
           colorClasses="bg-acento-naranjaSalmon1/15 text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1 hover:text-base-white"
-          isActive={estado === "Novedad" || estado === "Observacion"}
+          isActive={estado === "Observacion"}
           onClick={onObservacion}
           disabled={isPermiso}
         />
@@ -628,33 +644,28 @@ function PuestoCard({
   );
 }
 
-// ── Bloque de sector ─────────────────────────────────────────────────────────
+// ── Lista de Puestos ─────────────────────────────────────────────────────────
 
-function SectorBlock({
-  sector,
+function PuestosList({
+  nave,
   fecha,
-  isOpen,
-  onToggle,
   searchQuery,
   overrides,
   onEstadoChange,
   onOpenModal,
   onObservacion,
 }: {
-  sector: Sector;
+  nave: Nave;
   fecha: string;
-  isOpen: boolean;
-  onToggle: () => void;
   searchQuery: string;
   overrides: Record<string, EstadoAsistencia>;
   onEstadoChange: (comercianteId: string, estado: EstadoAsistencia) => void;
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
   onObservacion: (comerciante: Comerciante) => void;
 }) {
-  const puestos = getPuestosPorSector(sector.id);
+  const puestos = nave.puestos;
   const asistenciaDelDia = getAsistenciaPorFecha(fecha);
 
-  // Construir datos de renderizado
   const items = puestos.map((puesto) => {
     const comerciante = puesto.comercianteId
       ? getComerciantePorId(puesto.comercianteId)
@@ -662,7 +673,6 @@ function SectorBlock({
 
     let estado: EstadoAsistencia | "Vacante" = "Vacante";
     if (puesto.estado === "Ocupado" && comerciante) {
-      // Check overrides first
       const overrideKey = `${comerciante.idInterno}:${fecha}`;
       if (overrides[overrideKey]) {
         estado = overrides[overrideKey];
@@ -673,11 +683,9 @@ function SectorBlock({
         estado = registro?.estado ?? "Pendiente";
       }
     }
-
     return { puesto, comerciante, estado };
   });
 
-  // Filtrar por búsqueda
   const filtered = searchQuery
     ? items.filter((item) => {
         if (item.puesto.estado === "Vacante") return false;
@@ -685,96 +693,52 @@ function SectorBlock({
         const c = item.comerciante;
         if (!c) return false;
         return (
-          c.nombres.toLowerCase().includes(q) ||
-          c.apellidos.toLowerCase().includes(q) ||
+          c.contribuyente.toLowerCase().includes(q) ||
           c.ciu.toLowerCase().includes(q) ||
           item.puesto.codigo.toLowerCase().includes(q)
         );
       })
     : items;
 
-  // Ordenar: Ausente → Observacion → Novedad → Permiso → Pendiente → Presente → Vacante
   const sorted = [...filtered].sort((a, b) => {
     const prioA = a.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[a.estado] ?? 10);
     const prioB = b.estado === "Vacante" ? 99 : (ESTADO_PRIORIDAD[b.estado] ?? 10);
     return prioA - prioB;
   });
 
-  const totalOcupados = items.filter((i) => i.puesto.estado === "Ocupado").length;
-  const totalVacantes = items.filter((i) => i.puesto.estado === "Vacante").length;
-
   return (
-    <section className="overflow-hidden rounded-xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={isOpen}
-        aria-controls={`sector-content-${sector.id}`}
-        className="flex w-full items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-institucional-green/5"
-      >
-        <Tag
-          size={13}
-          strokeWidth={2}
-          className="text-institucional-whiteSmokeBlack"
-          aria-hidden="true"
-        />
-        <h3 className="text-sm font-bold text-base-eerieBlack">{sector.nombre}</h3>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="rounded-full bg-acento-verdeOliva1/10 px-2 py-0.5 text-[10px] font-medium text-acento-verdeOliva1">
-            {totalOcupados} ocupados
-          </span>
-          {totalVacantes > 0 && (
-            <span className="rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-medium text-institucional-whiteSmokeBlack">
-              {totalVacantes} vacantes
-            </span>
-          )}
-        </div>
-        <ChevronDown
-          className={`text-institucional-green transition-transform ${isOpen ? "rotate-180" : ""}`}
-          size={18}
-          aria-hidden="true"
-        />
-      </button>
-
-      {isOpen && (
-        <ul
-          id={`sector-content-${sector.id}`}
-          className="flex flex-col gap-2 border-t border-institucional-whiteSmokeBlack/15 bg-institucional-whiteSmoke/50 p-3"
-          role="list"
-        >
-          {sorted.map((item) => (
-            <li key={item.puesto.id}>
-              <PuestoCard
-                puesto={item.puesto}
-                comerciante={item.comerciante}
-                estado={item.estado}
-                isPermiso={item.estado === "Permiso"}
-                onEstadoChange={(nuevoEstado) => {
-                  if (item.comerciante) {
-                    onEstadoChange(item.comerciante.idInterno, nuevoEstado);
-                  }
-                }}
-                onDoubleClick={() => {
-                  if (item.comerciante && item.estado !== "Vacante") {
-                    onOpenModal(item.puesto, item.comerciante, item.estado as EstadoAsistencia);
-                  }
-                }}
-                onObservacion={() => {
-                  if (item.comerciante) {
-                    onObservacion(item.comerciante);
-                  }
-                }}
-              />
-            </li>
-          ))}
-          {sorted.length === 0 && (
-            <li className="py-6 text-center text-sm text-institucional-whiteSmokeBlack">
-              No se encontraron resultados.
-            </li>
-          )}
-        </ul>
+    <ul className="flex flex-col gap-2" role="list">
+      {sorted.map((item) => (
+        <li key={item.puesto.id}>
+          <PuestoCard
+            puesto={item.puesto}
+            comerciante={item.comerciante}
+            estado={item.estado}
+            isPermiso={item.estado === "Permiso"}
+            onEstadoChange={(nuevoEstado) => {
+              if (item.comerciante) {
+                onEstadoChange(item.comerciante.idInterno, nuevoEstado);
+              }
+            }}
+            onDoubleClick={() => {
+              if (item.comerciante && item.estado !== "Vacante") {
+                onOpenModal(item.puesto, item.comerciante, item.estado as EstadoAsistencia);
+              }
+            }}
+            onObservacion={() => {
+              if (item.comerciante) {
+                onObservacion(item.comerciante);
+              }
+            }}
+          />
+        </li>
+      ))}
+      {sorted.length === 0 && (
+        <li className="py-6 text-center text-sm text-institucional-whiteSmokeBlack">
+          No se encontraron resultados.
+        </li>
       )}
-    </section>
+    </ul>
   );
 }
 
@@ -792,119 +756,106 @@ function TreemapView({
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
 }) {
   const asistenciaDelDia = getAsistenciaPorFecha(fecha);
+  const puestos = nave.puestos;
 
   return (
     <div className="space-y-4">
-      {nave.sectores.map((sector) => {
-        const puestos = getPuestosPorSector(sector.id);
+      <div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+          {puestos.map((puesto) => {
+            const comerciante = puesto.comercianteId
+              ? getComerciantePorId(puesto.comercianteId)
+              : null;
 
-        return (
-          <div key={sector.id}>
-            <h3 className="text-sm font-bold text-base-eerieBlack mb-2">
-              {sector.nombre}
-            </h3>
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
-              {puestos.map((puesto) => {
-                const comerciante = puesto.comercianteId
-                  ? getComerciantePorId(puesto.comercianteId)
-                  : null;
-
-                let estado: EstadoAsistencia | "Vacante" = "Vacante";
-                if (puesto.estado === "Ocupado" && comerciante) {
-                  const overrideKey = `${comerciante.idInterno}:${fecha}`;
-                  if (overrides[overrideKey]) {
-                    estado = overrides[overrideKey];
-                  } else {
-                    const registro = asistenciaDelDia.find(
-                      (r) => r.comercianteId === comerciante.idInterno
-                    );
-                    estado = registro?.estado ?? "Pendiente";
-                  }
-                }
-
-                const config = ESTADO_CONFIG[estado];
-                const bgColorMap: Record<string, string> = {
-                  Presente: "bg-acento-verdeOliva1",
-                  Ausente: "bg-base-red",
-                  Novedad: "bg-acento-naranjaSalmon1",
-                  Observacion: "bg-acento-azul1",
-                  Permiso: "bg-acento-morado",
-                  Pendiente: "bg-institucional-whiteSmokeBlack/40",
-                  Vacante: "bg-institucional-whiteSmokeBlack/20",
-                };
-
-                const isInteractive = !!comerciante && estado !== "Vacante";
-
-                return (
-                  <div
-                    key={puesto.id}
-                    onClick={() => {
-                      if (isInteractive && comerciante) {
-                        onOpenModal(puesto, comerciante, estado as EstadoAsistencia);
-                      }
-                    }}
-                    className={[
-                      "min-h-[120px] p-4 rounded-lg flex flex-col justify-between transition-all relative",
-                      bgColorMap[estado],
-                      isInteractive
-                        ? "cursor-pointer hover:scale-[1.03] hover:shadow-lg hover:z-10"
-                        : "cursor-default opacity-60",
-                    ].join(" ")}
-                    title={
-                      comerciante
-                        ? `${puesto.codigo}: ${comerciante.nombres} ${comerciante.apellidos} — ${config.label}`
-                        : `${puesto.codigo}: Vacante`
-                    }
-                  >
-                    {/* Código de puesto */}
-                    <span className="text-[9px] font-bold text-base-white/70 uppercase tracking-wider">
-                      {puesto.codigo}
-                    </span>
-
-                    {comerciante ? (
-                      <div className="mt-auto">
-                        <p className="text-xs font-bold text-base-white leading-tight truncate">
-                          {comerciante.nombres}
-                        </p>
-                        <p className="text-[10px] text-base-white/80 truncate">
-                          {comerciante.apellidos}
-                        </p>
-                        <p className="text-[9px] text-base-white/60 font-mono mt-1">
-                          {comerciante.ciu}
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="mt-auto text-[10px] text-base-white/50 font-medium">
-                        Vacante
-                      </p>
-                    )}
-
-                    {/* Badge de estado */}
-                    <span className="absolute top-2 right-2 text-[8px] font-bold text-base-white/80 bg-base-black/20 rounded px-1.5 py-0.5">
-                      {config.label}
-                    </span>
-                  </div>
+            let estado: EstadoAsistencia | "Vacante" = "Vacante";
+            if (puesto.estado === "Ocupado" && comerciante) {
+              const overrideKey = `${comerciante.idInterno}:${fecha}`;
+              if (overrides[overrideKey]) {
+                estado = overrides[overrideKey];
+              } else {
+                const registro = asistenciaDelDia.find(
+                  (r) => r.comercianteId === comerciante.idInterno
                 );
-              })}
-            </div>
-          </div>
-        );
-      })}
+                estado = registro?.estado ?? "Pendiente";
+              }
+            }
+
+            const config = ESTADO_CONFIG[estado];
+            const bgColorMap: Record<string, string> = {
+              Presente: "bg-acento-verdeOliva1 text-white",
+              Ausente: "bg-red-700 text-white",
+              Observacion: "bg-acento-azul1 text-white",
+              Permiso: "bg-acento-morado text-white",
+              Pendiente: "bg-amber-600 text-white",
+              Vacante: "bg-gray-700 text-white",
+            };
+
+            const isInteractive = !!comerciante && estado !== "Vacante";
+
+            return (
+              <div
+                key={puesto.id}
+                onClick={() => {
+                  if (isInteractive && comerciante) {
+                    onOpenModal(puesto, comerciante, estado as EstadoAsistencia);
+                  }
+                }}
+                className={[
+                  "min-h-[120px] p-4 rounded-lg flex flex-col justify-between transition-all relative shadow-sm",
+                  bgColorMap[estado],
+                  isInteractive
+                    ? "cursor-pointer hover:scale-[1.03] hover:shadow-lg hover:z-10"
+                    : "cursor-default opacity-85",
+                ].join(" ")}
+                title={
+                  comerciante
+                    ? `${puesto.codigo}: ${comerciante.contribuyente} — ${config.label}`
+                    : `${puesto.codigo}: Vacante`
+                }
+              >
+                {/* Código de puesto */}
+                <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">
+                  {puesto.codigo}
+                </span>
+
+                {comerciante ? (
+                  <div className="mt-auto">
+                    <p className="text-xs font-bold text-white leading-tight truncate">
+                      {comerciante.contribuyente}
+                    </p>
+                    <p className="text-[9px] text-white/75 font-mono mt-1">
+                      {comerciante.ciu}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="mt-auto text-[10px] text-white/70 font-medium">
+                    Vacante
+                  </p>
+                )}
+
+                {/* Badge de estado */}
+                <span className="absolute top-2 right-2 text-[8px] font-bold text-white bg-black/30 rounded px-1.5 py-0.5">
+                  {config.label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Leyenda */}
       <div className="flex flex-wrap gap-3 mt-4 px-1">
         {(
-          ["Presente", "Ausente", "Novedad", "Observacion", "Permiso", "Pendiente", "Vacante"] as const
+          ["Presente", "Ausente", "Observacion", "Permiso", "Pendiente", "Vacante"] as const
         ).map((key) => {
           const config = ESTADO_CONFIG[key];
           const bgMap: Record<string, string> = {
             Presente: "bg-acento-verdeOliva1",
-            Ausente: "bg-base-red",
-            Novedad: "bg-acento-naranjaSalmon1",
+            Ausente: "bg-red-700",
             Observacion: "bg-acento-azul1",
             Permiso: "bg-acento-morado",
-            Pendiente: "bg-institucional-whiteSmokeBlack/40",
-            Vacante: "bg-institucional-whiteSmokeBlack/20",
+            Pendiente: "bg-amber-600",
+            Vacante: "bg-gray-700",
           };
           return (
             <div key={key} className="flex items-center gap-1.5">
@@ -925,7 +876,6 @@ function TreemapView({
 export default function ListasPage() {
   const naves = getNaves();
   const [selectedNaveId, setSelectedNaveId] = useState<string | null>(null);
-  const [openSector, setOpenSector] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -946,22 +896,28 @@ export default function ListasPage() {
   const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
 
-  // Selector de fechas horizontal
-  const endDate = isToday(selectedDate) ? selectedDate : addDays(selectedDate, 1);
-  const recentDates = Array.from({ length: 6 }, (_, index) =>
-    subDays(endDate, 5 - index)
-  );
+  // Días anteriores (excluyendo hoy, para el contenedor con scroll independiente)
+  const DIAS_MOSTRADOS = 14;
+  const pastDates = useMemo(() => {
+    const today = new Date();
+    const start = subDays(today, DIAS_MOSTRADOS);
+    const end = subDays(today, 1);
+    const dates = eachDayOfInterval({ start, end });
+    // Si se seleccionó una fecha pasada fuera del intervalo, la incluimos
+    if (!isToday(selectedDate) && !dates.some((d) => formatDate(d) === formatDate(selectedDate))) {
+      dates.push(selectedDate);
+      dates.sort((a, b) => a.getTime() - b.getTime());
+    }
+    return dates;
+  }, [selectedDate]);
 
   function selectNave(naveId: string) {
-    const selected = naves.find((n) => n.id === naveId);
     setSelectedNaveId(naveId);
-    setOpenSector(selected?.sectores[0]?.id ?? null);
     setSearchQuery("");
   }
 
   function goBackToNaves() {
     setSelectedNaveId(null);
-    setOpenSector(null);
     setSearchQuery("");
   }
 
@@ -1005,11 +961,11 @@ export default function ListasPage() {
   function handleObservacionSave(texto: string) {
     if (!obsCommerciante) return;
     const key = `${obsCommerciante.idInterno}:${fechaStr}`;
-    setOverrides((prev) => ({ ...prev, [key]: "Novedad" }));
+    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
     setEstadoAsistencia(
       obsCommerciante.idInterno,
       fechaStr,
-      "Novedad",
+      "Observacion",
       "Novedad reportada por supervisor",
       texto
     );
@@ -1020,23 +976,23 @@ export default function ListasPage() {
   // Manejar novedad desde el modal de detalle
   function handleNovedadDesdeModal(comercianteId: string, texto: string) {
     const key = `${comercianteId}:${fechaStr}`;
-    setOverrides((prev) => ({ ...prev, [key]: "Novedad" }));
+    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
     setEstadoAsistencia(
       comercianteId,
       fechaStr,
-      "Novedad",
+      "Observacion",
       "Novedad reportada por supervisor",
       texto
     );
     // Actualizar el estado del modal
     if (modalData && modalData.comerciante.idInterno === comercianteId) {
-      setModalData({ ...modalData, estado: "Novedad" });
+      setModalData({ ...modalData, estado: "Observacion" });
     }
   }
 
   return (
     <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
-      <header className="mb-6 max-w-4xl mx-auto">
+      <header className="mb-6 w-full">
         <div className="flex items-center gap-2">
           <CalendarDays size={22} className="text-institucional-green" aria-hidden="true" />
           <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
@@ -1046,60 +1002,79 @@ export default function ListasPage() {
 
         {/* Selector de fechas */}
         <div
-          className="mt-5 flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+          className="mt-5 flex items-center justify-between gap-4 w-full"
           aria-label="Seleccionar fecha"
         >
-          {recentDates.map((date) => {
-            const dateValue = formatDate(date);
-            const isSelected = fechaStr === dateValue;
-            const isFutureDate = isFuture(date) && !isToday(date);
-            return (
-              <button
-                key={dateValue}
-                type="button"
-                onClick={() => !isFutureDate && setSelectedDate(date)}
-                disabled={isFutureDate}
-                aria-pressed={isSelected}
-                className={[
-                  "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-colors",
-                  isFutureDate
-                    ? "bg-institucional-whiteSmokeBlack/10 text-institucional-whiteSmokeBlack/40 cursor-not-allowed"
-                    : isSelected
-                      ? "bg-institucional-green text-base-white shadow-sm"
-                      : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green",
-                ].join(" ")}
-              >
-                {isToday(date)
-                  ? "Hoy"
-                  : format(date, "EEE, d 'de' MMM", { locale: es })}
-              </button>
-            );
-          })}
+          {/* Contenedor izquierdo: pastillas de fechas anteriores con scroll horizontal */}
+          <div className="flex-1 flex items-center overflow-x-auto gap-2 scrollbar-hide py-1.5 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            {pastDates.map((date) => {
+              const dateValue = formatDate(date);
+              const isSelected = fechaStr === dateValue;
+              const isFutureDate = isFuture(date) && !isToday(date);
 
-          {/* Calendar popover */}
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:text-institucional-green hover:ring-institucional-green/40"
-              aria-label="Seleccionar otra fecha"
+              return (
+                <button
+                  key={dateValue}
+                  type="button"
+                  onClick={() => !isFutureDate && setSelectedDate(date)}
+                  disabled={isFutureDate}
+                  aria-pressed={isSelected}
+                  className={[
+                    "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-all duration-150",
+                    isFutureDate
+                      ? "bg-institucional-whiteSmokeBlack/10 text-institucional-whiteSmokeBlack/40 cursor-not-allowed"
+                      : isSelected
+                        ? "bg-institucional-green text-base-white shadow-sm font-bold"
+                        : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
+                  ].join(" ")}
+                >
+                  {format(date, "EEE, d 'de' MMM", { locale: es })}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Contenedor derecho: botones fijos de acción ("Hoy" y DatePicker) */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setSelectedDate(new Date())}
+              aria-pressed={isToday(selectedDate)}
+              className={[
+                "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-all duration-150",
+                isToday(selectedDate)
+                  ? "bg-institucional-green text-base-white shadow-md font-bold ring-2 ring-institucional-green/30"
+                  : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
+              ].join(" ")}
             >
-              <CalendarIcon size={16} strokeWidth={2} aria-hidden="true" />
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-auto p-0">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={(date) => {
-                  if (date) {
-                    setSelectedDate(date);
-                    setCalendarOpen(false);
-                  }
-                }}
-                disabled={(date) => isFuture(date) && !isToday(date)}
-                locale={es}
-                autoFocus
-              />
-            </PopoverContent>
-          </Popover>
+              Hoy
+            </button>
+
+            {/* Calendar popover */}
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:text-institucional-green hover:ring-institucional-green/40 shadow-sm"
+                aria-label="Seleccionar otra fecha"
+              >
+                <CalendarIcon size={16} strokeWidth={2} aria-hidden="true" />
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-auto p-0">
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    if (date) {
+                      setSelectedDate(date);
+                      setCalendarOpen(false);
+                    }
+                  }}
+                  disabled={(date) => isFuture(date) && !isToday(date)}
+                  locale={es}
+                  autoFocus
+                />
+              </PopoverContent>
+            </Popover>
+          </div>
         </div>
 
         {/* Barra de búsqueda + toggle vista */}
@@ -1138,7 +1113,7 @@ export default function ListasPage() {
         )}
       </header>
 
-      <div className="mx-auto flex max-w-4xl flex-col gap-4">
+      <div className="w-full flex flex-col gap-4">
         {!nave ? (
           /* ── Selección de nave ── */
           naves.map((item) => (
@@ -1156,7 +1131,7 @@ export default function ListasPage() {
                   {item.nombre}
                 </span>
                 <span className="text-sm text-institucional-whiteSmokeBlack">
-                  {item.sectores.length} sectores · {item.limitePuestos} puestos
+                  {item.limitePuestos} puestos
                 </span>
               </span>
               <ChevronDown
@@ -1169,42 +1144,34 @@ export default function ListasPage() {
         ) : (
           /* ── Vista de nave seleccionada ── */
           <section aria-labelledby={`nave-${nave.id}`}>
-            <button
-              type="button"
-              onClick={goBackToNaves}
-              className="mb-4 inline-flex items-center gap-2 text-sm font-semibold text-institucional-green hover:underline"
-            >
-              <ArrowLeft size={18} aria-hidden="true" />
-              Volver a naves
-            </button>
+            {/* Encabezado unificado */}
+            <div className="flex items-center justify-between w-full mb-4">
+              <button
+                type="button"
+                onClick={goBackToNaves}
+                className="inline-flex items-center gap-2 text-sm font-semibold text-institucional-green hover:underline"
+              >
+                <ArrowLeft size={18} aria-hidden="true" />
+                Volver a naves
+              </button>
 
-            <div className="mb-5 flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-institucional-green/10 text-institucional-green">
-                <Building2 size={20} aria-hidden="true" />
+              <div className="flex items-center gap-2 font-semibold text-lg text-base-eerieBlack">
+                <Building2 size={20} className="text-institucional-green" aria-hidden="true" />
+                <h2 id={`nave-${nave.id}`}>{nave.nombre}</h2>
               </div>
-              <h2 id={`nave-${nave.id}`} className="text-xl font-bold text-base-eerieBlack">
-                {nave.nombre}
-              </h2>
             </div>
 
             {viewMode === "lista" ? (
               <div className="flex flex-col gap-3">
-                {nave.sectores.map((sector) => (
-                  <SectorBlock
-                    key={sector.id}
-                    sector={sector}
-                    fecha={fechaStr}
-                    isOpen={openSector === sector.id}
-                    onToggle={() =>
-                      setOpenSector(openSector === sector.id ? null : sector.id)
-                    }
-                    searchQuery={searchQuery}
-                    overrides={overrides}
-                    onEstadoChange={handleEstadoChange}
-                    onOpenModal={handleOpenModal}
-                    onObservacion={handleObservacion}
-                  />
-                ))}
+                <PuestosList
+                  nave={nave}
+                  fecha={fechaStr}
+                  searchQuery={searchQuery}
+                  overrides={overrides}
+                  onEstadoChange={handleEstadoChange}
+                  onOpenModal={handleOpenModal}
+                  onObservacion={handleObservacion}
+                />
               </div>
             ) : (
               <TreemapView
@@ -1228,6 +1195,7 @@ export default function ListasPage() {
           onClose={() => setModalData(null)}
           onPermisoAsignado={handlePermisoAsignado}
           onNovedadGuardada={handleNovedadDesdeModal}
+          onEstadoChange={(e) => handleEstadoChange(modalData.comerciante.idInterno, e)}
         />
       )}
 

@@ -5,6 +5,7 @@
 export type Rol =
   | "SUPERADMIN"
   | "TIC"
+  | "TI"
   | "DIRECTOR"
   | "JEFE_OPERATIVO"
   | "SUPERVISOR";
@@ -27,10 +28,10 @@ export interface Usuario {
 export type EstadoAsistencia =
   | "Presente"
   | "Ausente"
-  | "Novedad"
   | "Observacion"
   | "Permiso"
-  | "Pendiente";
+  | "Pendiente"
+  | "Vacante";
 
 export type EstadoPuesto = "Ocupado" | "Vacante";
 
@@ -40,34 +41,30 @@ export interface Comerciante {
   idInterno: string;
   ciu: string;
   cedula: string;
-  nombres: string;
-  apellidos: string;
+  contribuyente: string;
   actividad: string;
   puestoId: string | null;
+  estadoRegistro: "Habilitado" | "Deshabilitado";
+  creadoPor?: string;
+  modificadoPor?: string;
+  deshabilitadoPor?: string;
 }
 
-// ── Puesto, Sector, Nave ─────────────────────────────────────────────────────
+// ── Puesto, Nave ─────────────────────────────────────────────────────────────
 
 export interface Puesto {
   id: string;
   codigo: string;
   naveId: string;
-  sectorId: string;
   estado: EstadoPuesto;
   comercianteId: string | null;
-}
-
-export interface Sector {
-  id: string;
-  nombre: string;
-  naveId: string;
 }
 
 export interface Nave {
   id: string;
   nombre: string;
   limitePuestos: number;
-  sectores: Sector[];
+  puestos: Puesto[];
 }
 
 // ── Asistencia ───────────────────────────────────────────────────────────────
