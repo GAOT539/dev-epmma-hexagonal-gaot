@@ -251,7 +251,7 @@ export default function NavesPage() {
                     </td>
 
                     {/* CANTIDAD DE PUESTOS */}
-                    <td className="px-4 py-2.5 text-center text-institucional-whiteSmokeBlack font-mono">
+                    <td className="px-4 py-2.5 text-center text-gray-900 font-mono">
                       {nave.cantidadPuestos}
                     </td>
 

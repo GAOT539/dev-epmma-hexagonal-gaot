@@ -202,6 +202,7 @@ export function crearUsuario(data: {
     passwordHash: `${data.cedula}*`,
     passwordActual: `${data.cedula}*`,
     navesAsignadas: data.navesAsignadas,
+    estado: "Habilitado",
   };
   usuarios.push(nuevoUsuario);
   return toUsuario(nuevoUsuario);
@@ -237,7 +238,25 @@ export function eliminarUsuario(id: string): boolean {
   if (idx === -1) return false;
   // No permitir eliminar al superadmin
   if (usuarios[idx].id === "u-super") return false;
-  usuarios.splice(idx, 1);
+  usuarios[idx] = {
+    ...usuarios[idx],
+    estado: "Deshabilitado",
+  };
+  return true;
+}
+
+export function restablecerPasswordUsuario(id: string): boolean {
+  const idx = usuarios.findIndex((u) => u.id === id);
+  if (idx === -1) return false;
+  const user = usuarios[idx];
+  const newPass = `${user.cedula}*`;
+  usuarios[idx] = {
+    ...user,
+    passwordActual: newPass,
+    passwordHash: newPass,
+    mustChangePassword: true,
+    debeCambiarPassword: true,
+  };
   return true;
 }
 
@@ -251,8 +270,10 @@ function toUsuario(m: MockUsuario): Usuario {
     apellidos: m.apellidos,
     rol: m.rol,
     mustChangePassword: m.mustChangePassword,
+    debeCambiarPassword: m.debeCambiarPassword ?? m.mustChangePassword,
     passwordHash: m.passwordHash,
     navesAsignadas: m.navesAsignadas,
+    estado: m.estado ?? "Habilitado",
   };
 }
 
@@ -260,6 +281,7 @@ function toUsuario(m: MockUsuario): Usuario {
 export const MENU_POR_ROL: Record<Rol, string[]> = {
   SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/configuracion"],
   TIC: ["/catastro", "/naves", "/auditoria", "/configuracion"],
+  TICs: ["/catastro", "/naves", "/auditoria", "/configuracion"],
   TI: ["/catastro", "/naves", "/auditoria", "/configuracion"],
   DIRECTOR: ["/reportes", "/naves", "/configuracion"],
   JEFE_OPERATIVO: ["/reportes", "/configuracion"],

@@ -632,7 +632,7 @@ export default function ReportesPage() {
                         {row.comerciante.contribuyente}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-institucional-whiteSmokeBlack">
+                    <td className="px-3 py-2 font-semibold text-gray-900">
                       {row.comerciante.actividad}
                     </td>
                     <td className="px-3 py-2 font-medium text-base-eerieBlack">
@@ -659,14 +659,14 @@ export default function ReportesPage() {
                       );
                     })}
                     {incluirObservaciones && (
-                      <td className="px-3 py-2 text-institucional-whiteSmokeBlack max-w-[200px]">
+                      <td className="px-3 py-2 max-w-[200px]">
                         {row.todoPresente ? (
                           <span className="inline-flex items-center gap-1 text-green-700 font-semibold">
                             <span className="inline-block h-2 w-2 rounded-full bg-green-700" />
                             100% Asistencia
                           </span>
                         ) : (
-                          <span className="line-clamp-2 text-[10px]">
+                          <span className="line-clamp-2 text-[10px] font-semibold text-gray-900">
                             {row.observaciones || "—"}
                           </span>
                         )}
@@ -739,7 +739,7 @@ export default function ReportesPage() {
                           ✓ 100% Asistencia
                         </span>
                       ) : (
-                        <span className="text-[10px] text-institucional-whiteSmokeBlack">
+                        <span className="text-[10px] font-semibold text-gray-900">
                           {reporteIndividual.observaciones || "—"}
                         </span>
                       )}

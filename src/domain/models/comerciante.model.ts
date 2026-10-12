@@ -5,6 +5,7 @@
 export type Rol =
   | "SUPERADMIN"
   | "TIC"
+  | "TICs"
   | "TI"
   | "DIRECTOR"
   | "JEFE_OPERATIVO"
@@ -17,10 +18,12 @@ export interface Usuario {
   apellidos: string;
   rol: Rol;
   mustChangePassword: boolean;
+  debeCambiarPassword?: boolean;
   /** Hash simulado – en mock simplemente comparamos strings */
   passwordHash: string;
   /** Naves asignadas al supervisor (solo aplica para rol SUPERVISOR) */
   navesAsignadas?: string[];
+  estado?: "Habilitado" | "Deshabilitado";
 }
 
 // ── Estados ──────────────────────────────────────────────────────────────────

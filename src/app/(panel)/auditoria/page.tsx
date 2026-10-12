@@ -312,7 +312,7 @@ export default function AuditoriaPage() {
                           {log.accion.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-institucional-whiteSmokeBlack max-w-[300px]">
+                      <td className="px-4 py-3 text-gray-700 max-w-[300px]">
                         <span className="line-clamp-2">{log.detalle}</span>
                       </td>
                     </tr>

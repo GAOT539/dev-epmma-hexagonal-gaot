@@ -475,7 +475,7 @@ export default function TicPage() {
                         <td className="px-4 py-2.5 font-mono text-acento-azul1 font-medium">
                           {com.ciu}
                         </td>
-                        <td className="px-4 py-2.5 text-institucional-whiteSmokeBlack">
+                        <td className="px-4 py-2.5 text-gray-900">
                           {com.cedula}
                         </td>
                         <td className="px-4 py-2.5 font-semibold text-base-eerieBlack flex flex-col gap-1">
@@ -486,13 +486,13 @@ export default function TicPage() {
                             </span>
                           )}
                         </td>
-                        <td className="px-4 py-2.5 text-institucional-whiteSmokeBlack">
+                        <td className="px-4 py-2.5 text-gray-900">
                           {com.actividad}
                         </td>
-                        <td className="px-4 py-2.5 text-institucional-whiteSmokeBlack">
+                        <td className="px-4 py-2.5 text-gray-900">
                           {naveNombre}
                         </td>
-                        <td className="px-4 py-2.5 text-institucional-whiteSmokeBlack font-mono">
+                        <td className="px-4 py-2.5 text-gray-900 font-mono">
                           {puestoCodigo}
                         </td>
                         <td className="px-4 py-2.5 text-center">
