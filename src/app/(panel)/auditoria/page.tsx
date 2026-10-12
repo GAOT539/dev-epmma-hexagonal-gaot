@@ -24,7 +24,7 @@ import type { DateRange } from "react-day-picker";
 
 const ACCION_COLORES: Record<string, { bg: string; text: string }> = {
   LOGIN: { bg: "bg-acento-verdeOliva1/15", text: "text-acento-verdeOliva1" },
-  LOGOUT: { bg: "bg-institucional-whiteSmokeBlack/15", text: "text-institucional-whiteSmokeBlack" },
+  LOGOUT: { bg: "bg-institucional-whiteSmokeBlack/15", text: "text-gray-700" },
   CAMBIO_ESTADO: { bg: "bg-acento-azul1/15", text: "text-acento-azul1" },
   IMPORTACION_XML: { bg: "bg-acento-morado/15", text: "text-acento-morado" },
   CAMBIO_CONTRASEÑA: { bg: "bg-acento-naranjaSalmon1/15", text: "text-acento-naranjaSalmon1" },
@@ -135,7 +135,7 @@ export default function AuditoriaPage() {
               Auditoría del Sistema
             </h1>
           </div>
-          <p className="mt-2 text-sm text-institucional-whiteSmokeBlack">
+          <p className="mt-2 text-sm text-gray-700 font-medium">
             Registro de todas las acciones realizadas en el sistema.
           </p>
         </div>
@@ -147,7 +147,7 @@ export default function AuditoriaPage() {
             "flex items-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors",
             logs.length > 0
               ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
-              : "bg-institucional-whiteSmokeBlack/30 text-institucional-whiteSmokeBlack cursor-not-allowed",
+              : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",
           ].join(" ")}
         >
           <Download size={14} />
@@ -161,27 +161,27 @@ export default function AuditoriaPage() {
           <div className="flex flex-wrap items-end gap-3">
             {/* Búsqueda */}
             <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
                 Buscar
               </label>
               <div className="relative mt-1">
                 <Search
                   size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700"
                 />
                 <input
                   type="text"
                   placeholder="Buscar en acciones, detalles o usuarios..."
                   value={busqueda}
                   onChange={(e) => handleBusquedaChange(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+                  className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
                 />
               </div>
             </div>
 
             {/* Filtro por usuario */}
             <div>
-              <label className="text-[10px] font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
                 Usuario
               </label>
               <select
@@ -203,14 +203,14 @@ export default function AuditoriaPage() {
 
             {/* DateRangePicker */}
             <div>
-              <label className="text-[10px] font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
                 Rango de Fechas
               </label>
               <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                 <PopoverTrigger
                     className="mt-1 h-9 inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[220px] hover:bg-muted transition-all outline-none"
                   >
-                    <CalendarIcon size={14} className="mr-2 text-institucional-whiteSmokeBlack" />
+                    <CalendarIcon size={14} className="mr-2 text-gray-700" />
                     {dateRange?.from ? (
                       dateRange.to ? (
                         <>
@@ -221,7 +221,7 @@ export default function AuditoriaPage() {
                         format(dateRange.from, "dd/MM/yyyy")
                       )
                     ) : (
-                      <span className="text-institucional-whiteSmokeBlack">
+                      <span className="text-gray-700">
                         Todas las fechas
                       </span>
                     )}
@@ -252,7 +252,7 @@ export default function AuditoriaPage() {
         <div className="rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
           {/* Header de la tabla */}
           <div className="px-5 py-3 border-b border-institucional-whiteSmokeBlack/15 flex items-center justify-between">
-            <p className="text-xs font-medium text-institucional-whiteSmokeBlack">
+            <p className="text-xs font-medium text-gray-700">
               {logs.length} registros encontrados
             </p>
           </div>
@@ -280,7 +280,7 @@ export default function AuditoriaPage() {
                   const accionColor =
                     ACCION_COLORES[log.accion] ?? {
                       bg: "bg-institucional-whiteSmokeBlack/10",
-                      text: "text-institucional-whiteSmokeBlack",
+                      text: "text-gray-700",
                     };
                   return (
                     <tr
@@ -291,7 +291,7 @@ export default function AuditoriaPage() {
                         <p className="font-medium">
                           {format(new Date(log.timestamp), "dd/MM/yyyy")}
                         </p>
-                        <p className="text-[10px] text-institucional-whiteSmokeBlack">
+                        <p className="text-[10px] text-gray-700 font-medium">
                           {format(new Date(log.timestamp), "HH:mm:ss")}
                         </p>
                       </td>
@@ -323,7 +323,7 @@ export default function AuditoriaPage() {
                   <tr>
                     <td
                       colSpan={4}
-                      className="px-4 py-10 text-center text-institucional-whiteSmokeBlack"
+                      className="px-4 py-10 text-center text-gray-700"
                     >
                       No se encontraron registros con los filtros aplicados.
                     </td>
@@ -336,7 +336,7 @@ export default function AuditoriaPage() {
           {/* Paginación */}
           {totalPaginas > 1 && (
             <div className="px-5 py-3 border-t border-institucional-whiteSmokeBlack/15 flex items-center justify-between">
-              <p className="text-xs text-institucional-whiteSmokeBlack">
+              <p className="text-xs text-gray-700 font-medium">
                 Página {pagina} de {totalPaginas}
               </p>
               <div className="flex items-center gap-1">

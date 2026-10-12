@@ -185,14 +185,14 @@ export default function NavesPage() {
           <div className="relative flex-1">
             <Search
               size={14}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700"
             />
             <Input
               type="text"
               placeholder="Buscar nave por nombre o código..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+              className="h-9 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
             />
           </div>
 
@@ -209,7 +209,7 @@ export default function NavesPage() {
         {/* ── Tabla de Naves (Replicando exactamente el diseño de Comerciantes) ── */}
         <div className="rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
           <div className="px-5 py-3 border-b border-institucional-whiteSmokeBlack/15">
-            <p className="text-xs font-medium text-institucional-whiteSmokeBlack">
+            <p className="text-xs font-medium text-gray-700">
               {navesFiltradas.length} de {naves.length} naves
             </p>
           </div>
@@ -256,7 +256,7 @@ export default function NavesPage() {
                     </td>
 
                     {/* SUPERVISOR(ES) */}
-                    <td className="px-4 py-2.5 text-institucional-whiteSmokeBlack">
+                    <td className="px-4 py-2.5 text-gray-700">
                       <div className="flex flex-wrap gap-1">
                         {nave.supervisores && nave.supervisores.length > 0 ? (
                           nave.supervisores.map((sup, idx) => (
@@ -268,7 +268,7 @@ export default function NavesPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-institucional-whiteSmokeBlack/60 italic">
+                          <span className="text-xs text-gray-700 italic">
                             Sin asignar
                           </span>
                         )}
@@ -306,7 +306,7 @@ export default function NavesPage() {
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-4 py-10 text-center text-institucional-whiteSmokeBlack"
+                      className="px-4 py-10 text-center text-gray-700"
                     >
                       No se encontraron naves que coincidan con la búsqueda.
                     </td>
@@ -330,7 +330,7 @@ export default function NavesPage() {
               <Building2 className="text-institucional-green" size={20} />
               Crear Nueva Nave
             </DialogTitle>
-            <DialogDescription className="text-xs text-institucional-whiteSmokeBlack pt-1">
+            <DialogDescription className="text-xs text-gray-700 pt-1">
               Ingrese los datos identificadores, la capacidad y los supervisores asignados.
             </DialogDescription>
           </DialogHeader>
@@ -428,7 +428,7 @@ export default function NavesPage() {
               <Pencil className="text-institucional-green" size={18} />
               Editar Nave
             </DialogTitle>
-            <DialogDescription className="text-xs text-institucional-whiteSmokeBlack pt-1">
+            <DialogDescription className="text-xs text-gray-700 pt-1">
               Modifique el nombre, la cantidad de puestos y los supervisores asignados.
             </DialogDescription>
           </DialogHeader>

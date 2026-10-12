@@ -66,7 +66,7 @@ function PasswordChangeModal({
         ) : (
           <X size={14} className="text-base-red" />
         )}
-        <span className={met ? "text-acento-verdeOliva1" : "text-institucional-whiteSmokeBlack"}>
+        <span className={met ? "text-acento-verdeOliva1" : "text-gray-700 font-medium"}>
           {label}
         </span>
       </li>
@@ -105,12 +105,12 @@ function PasswordChangeModal({
                 value={newPass}
                 onChange={(e) => setNewPass(e.target.value)}
                 placeholder="Ingrese nueva contraseña"
-                className="h-11 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-11 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                className="h-11 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-11 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
               <button
                 type="button"
                 onClick={() => setShowNew(!showNew)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack hover:text-institucional-green transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-700 hover:text-institucional-green transition-colors"
               >
                 {showNew ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -137,12 +137,12 @@ function PasswordChangeModal({
                 value={confirmPass}
                 onChange={(e) => setConfirmPass(e.target.value)}
                 placeholder="Repita la nueva contraseña"
-                className="h-11 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-11 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                className="h-11 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-11 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
               <button
                 type="button"
                 onClick={() => setShowConfirm(!showConfirm)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack hover:text-institucional-green transition-colors"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-700 hover:text-institucional-green transition-colors"
               >
                 {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
@@ -274,7 +274,7 @@ export default function LoginPage() {
                 placeholder="Ingrese su cédula o usuario"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
-                className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 text-base text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 text-base text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
             </div>
 
@@ -296,14 +296,14 @@ export default function LoginPage() {
                   placeholder="Ingrese su contraseña"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-12 text-base text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                  className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 pr-12 text-base text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
                 />
                 <button
                   id="toggle-password-visibility"
                   type="button"
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack hover:text-institucional-green transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-institucional-green/50 rounded"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-700 hover:text-institucional-green transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-institucional-green/50 rounded"
                 >
                   {showPassword ? (
                     <EyeOff size={20} strokeWidth={1.8} />
@@ -336,7 +336,7 @@ export default function LoginPage() {
           </form>
 
           {/* Footer */}
-          <p className="mt-6 text-center text-sm text-institucional-whiteSmokeBlack">
+          <p className="mt-6 text-center text-sm text-gray-700 font-medium">
             © {new Date().getFullYear()} EPMMA · Todos los derechos reservados
           </p>
         </div>

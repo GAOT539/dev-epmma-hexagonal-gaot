@@ -386,7 +386,7 @@ export default function ReportesPage() {
           <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 lg:gap-6 w-full">
             {/* Modo */}
             <div className="flex flex-col gap-1.5 w-full md:w-auto">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Tipo de Reporte
               </label>
               <div className="flex rounded-lg overflow-hidden ring-1 ring-institucional-whiteSmokeBlack/30 w-full md:w-auto">
@@ -418,7 +418,7 @@ export default function ReportesPage() {
             {/* Selector de nave o comerciante */}
             {modo === "nave" ? (
               <div className="flex flex-col gap-1.5 w-full md:w-auto">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Nave
                 </label>
                 <select
@@ -435,13 +435,13 @@ export default function ReportesPage() {
               </div>
             ) : (
               <div className="flex flex-col gap-1.5 w-full md:w-auto relative">
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                   Comerciante
                 </label>
                 <div className="relative w-full md:w-64">
                   <Search
                     size={14}
-                    className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700"
                   />
                   <input
                     type="text"
@@ -451,7 +451,7 @@ export default function ReportesPage() {
                       setSearchComerciante(e.target.value);
                       setSelectedComercianteId(null);
                     }}
-                    className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+                    className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
                   />
                 </div>
                 {/* Dropdown de resultados */}
@@ -473,7 +473,7 @@ export default function ReportesPage() {
                         <span className="font-medium text-base-eerieBlack truncate">
                           {c.contribuyente}
                         </span>
-                        <span className="ml-auto text-institucional-whiteSmokeBlack shrink-0">
+                        <span className="ml-auto text-gray-700 font-medium shrink-0">
                           {c.ciu}
                         </span>
                       </button>
@@ -485,14 +485,14 @@ export default function ReportesPage() {
 
             {/* DateRangePicker */}
             <div className="flex flex-col gap-1.5 w-full md:w-auto">
-              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Rango de Fechas
               </label>
               <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                 <PopoverTrigger
                   className="h-9 w-full md:w-auto inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[240px] hover:bg-muted transition-all outline-none"
                 >
-                  <CalendarIcon size={14} className="mr-2 text-institucional-whiteSmokeBlack shrink-0" />
+                  <CalendarIcon size={14} className="mr-2 text-gray-700 shrink-0" />
                   {dateRange?.from ? (
                     dateRange.to ? (
                       <span className="truncate">
@@ -503,7 +503,7 @@ export default function ReportesPage() {
                       format(dateRange.from, "dd/MM/yyyy")
                     )
                   ) : (
-                    <span className="text-institucional-whiteSmokeBlack">
+                    <span className="text-gray-700">
                       Seleccionar rango
                     </span>
                   )}
@@ -539,7 +539,7 @@ export default function ReportesPage() {
                 />
                 <label
                   htmlFor="toggle-obs"
-                  className="text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                  className="text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer select-none"
                 >
                   Incluir Observaciones
                 </label>
@@ -555,7 +555,7 @@ export default function ReportesPage() {
                 "flex items-center justify-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors w-full md:w-auto mt-2 md:mt-0",
                 hayDatos
                   ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2"
-                  : "bg-institucional-whiteSmokeBlack/30 text-institucional-whiteSmokeBlack cursor-not-allowed",
+                  : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",
               ].join(" ")}
             >
               <Download size={14} />
@@ -618,7 +618,7 @@ export default function ReportesPage() {
                     key={row.comerciante.idInterno}
                     className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
                   >
-                    <td className="sticky left-0 bg-base-white px-3 py-2 text-institucional-whiteSmokeBlack font-medium z-10">
+                    <td className="sticky left-0 bg-base-white px-3 py-2 text-gray-700 font-medium z-10">
                       {i + 1}
                     </td>
                     <td className="px-3 py-2 font-medium text-base-eerieBlack">
@@ -691,7 +691,7 @@ export default function ReportesPage() {
                   <p className="font-bold text-base-eerieBlack">
                     {reporteIndividual.comerciante.contribuyente}
                   </p>
-                  <p className="text-xs text-institucional-whiteSmokeBlack">
+                  <p className="text-xs text-gray-700 font-medium">
                     CIU: {reporteIndividual.comerciante.ciu} · Cédula:{" "}
                     {reporteIndividual.comerciante.cedula}
                   </p>
@@ -755,8 +755,8 @@ export default function ReportesPage() {
         {modo === "individual" && !selectedComercianteId && (
           <div className="flex min-h-[200px] items-center justify-center rounded-2xl border-2 border-dashed border-institucional-whiteSmokeBlack/30 bg-base-white p-8">
             <div className="text-center">
-              <Search size={32} className="mx-auto mb-2 text-institucional-whiteSmokeBlack/40" />
-              <p className="text-sm text-institucional-whiteSmokeBlack">
+              <Search size={32} className="mx-auto mb-2 text-gray-700/40" />
+              <p className="text-sm text-gray-700">
                 Busque y seleccione un comerciante para generar su reporte.
               </p>
             </div>
@@ -764,7 +764,7 @@ export default function ReportesPage() {
         )}
 
         {/* Leyenda */}
-        <div className="flex flex-wrap items-center gap-4 text-xs text-institucional-whiteSmokeBlack px-1">
+        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 px-1">
           <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
           {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
             const config = ESTADO_COLORES[estado];

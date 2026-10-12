@@ -50,10 +50,10 @@ function NavItem({
       <Link
         href={href}
         className={clsx(
-          "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-xs font-medium transition-colors",
+          "flex shrink-0 min-w-[72px] flex-1 flex-col items-center justify-center gap-0.5 py-2 px-1 text-xs font-medium transition-colors",
           isActive
             ? "text-institucional-green"
-            : "text-institucional-whiteSmokeBlack hover:text-institucional-green"
+            : "text-gray-700 hover:text-institucional-green"
         )}
         aria-current={isActive ? "page" : undefined}
       >
@@ -104,7 +104,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
       <div className="min-h-screen bg-institucional-whiteSmoke flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 rounded-full border-4 border-institucional-green/30 border-t-institucional-green animate-spin" />
-          <p className="text-sm text-institucional-whiteSmokeBlack">Cargando...</p>
+          <p className="text-sm text-gray-700 font-medium">Cargando...</p>
         </div>
       </div>
     );
@@ -115,9 +115,6 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   const filteredLinks = allLinks.filter((link) =>
     allowedPaths.includes(link.href)
   );
-
-  // Para bottom nav, tomar los últimos 4 (o menos)
-  const bottomLinks = filteredLinks.slice(0, 4);
 
   function handleLogout() {
     logout();
@@ -145,7 +142,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             <p className="truncate text-sm font-bold leading-tight text-base-eerieBlack">
               EPMMA
             </p>
-            <p className="truncate text-[10px] leading-tight text-institucional-whiteSmokeBlack">
+            <p className="truncate text-[10px] leading-tight text-gray-700 font-medium">
               Sistema de Gestión
             </p>
           </div>
@@ -179,7 +176,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               <p className="truncate text-xs font-semibold text-base-eerieBlack">
                 {user.nombres} {user.apellidos}
               </p>
-              <p className="truncate text-[10px] text-institucional-whiteSmokeBlack">
+              <p className="truncate text-[10px] text-gray-700 font-medium">
                 {user.rol.replace("_", " ")}
               </p>
             </div>
@@ -195,7 +192,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             Cerrar sesión
           </button>
 
-          <p className="text-[10px] text-institucional-whiteSmokeBlack">
+          <p className="text-[10px] text-gray-700 font-medium">
             © {new Date().getFullYear()} EPMMA
           </p>
         </div>
@@ -215,10 +212,10 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
       {/* ── BOTTOM NAVIGATION MOBILE (hasta md) ──────────────────────── */}
       <nav
-        className="fixed bottom-0 left-0 z-30 flex w-full items-stretch border-t border-institucional-whiteSmokeBlack/30 bg-base-white shadow-[0_-1px_6px_rgba(0,0,0,0.07)] md:hidden"
+        className="fixed bottom-0 left-0 z-30 flex w-full items-stretch overflow-x-auto flex-nowrap border-t border-institucional-whiteSmokeBlack/30 bg-base-white shadow-[0_-1px_6px_rgba(0,0,0,0.07)] scrollbar-hide md:hidden"
         aria-label="Navegación inferior"
       >
-        {bottomLinks.map(({ href, label, Icon }) => (
+        {filteredLinks.map(({ href, label, Icon }) => (
           <NavItem
             key={href}
             href={href}

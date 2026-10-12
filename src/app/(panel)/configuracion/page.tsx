@@ -572,7 +572,7 @@ export default function ConfiguracionPage() {
               Permisos y Roles
             </h1>
             {isSupervisor && (
-              <p className="text-sm text-institucional-whiteSmokeBlack">
+              <p className="text-sm text-gray-700 font-medium">
                 Ajustes de persistencia y vista por defecto para tu cuenta.
               </p>
             )}
@@ -589,7 +589,7 @@ export default function ConfiguracionPage() {
                   <RefreshCw size={16} className="text-institucional-green" />
                   Preferencias de Asistencia
                 </h2>
-                <p className="text-xs text-institucional-whiteSmokeBlack mt-0.5">
+                <p className="text-xs text-gray-700 font-medium mt-0.5">
                   Ajustes de persistencia y vista por defecto para tu cuenta.
                 </p>
               </div>
@@ -605,13 +605,13 @@ export default function ConfiguracionPage() {
                     {configs[user.id]?.persistencia ? (
                       <ToggleRight size={20} className="text-acento-verdeOliva1" />
                     ) : (
-                      <ToggleLeft size={20} className="text-institucional-whiteSmokeBlack" />
+                      <ToggleLeft size={20} className="text-gray-700" />
                     )}
                     <span
                       className={`font-medium ${
                         configs[user.id]?.persistencia
                           ? "text-acento-verdeOliva1"
-                          : "text-institucional-whiteSmokeBlack"
+                          : "text-gray-700"
                       }`}
                     >
                       Persistencia de Asistencia
@@ -1119,7 +1119,7 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                   <AlertCircle className="text-acento-amarillo1" size={20} />
                   Confirmar Carga de Datos
                 </DialogTitle>
-                <DialogDescription className="text-xs text-institucional-whiteSmokeBlack pt-1">
+                <DialogDescription className="text-xs text-gray-700 pt-1">
                   ¿Está seguro? Subir este archivo podría modificar y sobrescribir los datos internos del sistema.
                 </DialogDescription>
               </DialogHeader>
@@ -1154,7 +1154,7 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
           <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
             Configuración del Sistema
           </h1>
-          <p className="mt-1 text-sm text-institucional-whiteSmokeBlack">
+          <p className="mt-1 text-sm text-gray-700 font-medium">
             Administra tu cuenta y las preferencias de la aplicación.
           </p>
         </header>
@@ -1175,9 +1175,9 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Cambiar Contraseña</p>
-                  <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Actualiza tus credenciales de acceso.</p>
+                  <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Actualiza tus credenciales de acceso.</p>
                 </div>
-                <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
               </button>
             </li>
 
@@ -1194,11 +1194,11 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Permisos y Roles</p>
-                  <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">
+                  <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">
                     Tu rol actual: {user?.rol?.replace("_", " ") ?? "—"}
                   </p>
                 </div>
-                <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
               </button>
             </li>
 
@@ -1216,9 +1216,9 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Gestión de Usuarios</p>
-                    <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Administración de accesos y roles del sistema.</p>
+                    <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Administración de accesos y roles del sistema.</p>
                   </div>
-                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
                 </button>
               </li>
             )}
@@ -1237,9 +1237,9 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                   </div>
                   <div className="flex-1 min-w-0 text-left">
                     <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Ingreso Masivo de Catastro</p>
-                    <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Importa comerciantes desde XML o CSV.</p>
+                    <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Importa comerciantes desde XML o CSV.</p>
                   </div>
-                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-institucional-whiteSmokeBlack transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
+                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
                 </button>
               </li>
             )}
@@ -1257,7 +1257,7 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                 </div>
                 <div className="flex-1 min-w-0 text-left">
                   <p className="font-semibold text-sm leading-tight text-base-red">Cerrar Sesión</p>
-                  <p className="mt-0.5 text-xs text-institucional-whiteSmokeBlack line-clamp-1">Finaliza tu sesión actual de forma segura.</p>
+                  <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Finaliza tu sesión actual de forma segura.</p>
                 </div>
                 <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-base-red/50 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
               </button>

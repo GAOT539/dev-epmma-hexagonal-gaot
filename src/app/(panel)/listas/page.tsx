@@ -83,13 +83,13 @@ const ESTADO_CONFIG: Record<
   },
   Pendiente: {
     bg: "bg-institucional-whiteSmokeBlack/15",
-    text: "text-institucional-whiteSmokeBlack",
+    text: "text-gray-700",
     ring: "ring-institucional-whiteSmokeBlack/30",
     label: "Pendiente",
   },
   Vacante: {
     bg: "bg-institucional-whiteSmokeBlack/10",
-    text: "text-institucional-whiteSmokeBlack",
+    text: "text-gray-700",
     ring: "ring-institucional-whiteSmokeBlack/20",
     label: "Vacante",
   },
@@ -457,7 +457,7 @@ function ComercianteModal({
 
           {/* Estado actual */}
           <div className="flex items-center gap-2 mt-2">
-            <span className="text-xs font-medium text-institucional-whiteSmokeBlack">Estado:</span>
+            <span className="text-xs font-medium text-gray-700">Estado:</span>
             <span
               className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${estadoConfig.bg} ${estadoConfig.text}`}
             >
@@ -588,7 +588,7 @@ function ComercianteModal({
 
               <div className="flex flex-col sm:flex-row gap-4">
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack block mb-1">
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
                     Fecha de Inicio
                   </label>
                   <Popover open={openInicio} onOpenChange={setOpenInicio}>
@@ -598,10 +598,10 @@ function ComercianteModal({
                     >
                       <span className="truncate">
                         {fechaInicioObj
-                          ? format(fechaInicioObj, "dd/MM/yyyy", { locale: es })
+                           ? format(fechaInicioObj, "dd/MM/yyyy", { locale: es })
                           : "Seleccionar fecha"}
                       </span>
-                      <CalendarIcon size={14} className="text-institucional-whiteSmokeBlack shrink-0" />
+                      <CalendarIcon size={14} className="text-gray-700 shrink-0" />
                     </PopoverTrigger>
                     <PopoverContent
                       className="w-auto p-0"
@@ -627,7 +627,7 @@ function ComercianteModal({
                 </div>
 
                 <div className="flex-1">
-                  <label className="text-xs font-medium text-institucional-whiteSmokeBlack block mb-1">
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
                     Fecha de Fin
                   </label>
                   <Popover open={openFin} onOpenChange={setOpenFin}>
@@ -640,7 +640,7 @@ function ComercianteModal({
                           ? format(fechaFinObj, "dd/MM/yyyy", { locale: es })
                           : "Seleccionar fecha"}
                       </span>
-                      <CalendarIcon size={14} className="text-institucional-whiteSmokeBlack shrink-0" />
+                      <CalendarIcon size={14} className="text-gray-700 shrink-0" />
                     </PopoverTrigger>
                     <PopoverContent
                       className="w-auto p-0"
@@ -728,7 +728,7 @@ function ComercianteModal({
 function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-institucional-whiteSmoke p-2.5">
-      <p className="text-[10px] font-medium text-institucional-whiteSmokeBlack uppercase tracking-wider">
+      <p className="text-[10px] font-medium text-gray-700 uppercase tracking-wider">
         {label}
       </p>
       <p className="text-sm font-semibold text-base-eerieBlack mt-0.5 truncate">
@@ -773,14 +773,14 @@ function PuestoCard({
       <article
         className={`flex items-center gap-3 rounded-xl bg-base-white/60 px-4 py-3 ring-1 ${config.ring} opacity-60`}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-whiteSmokeBlack/10 text-xs font-bold text-institucional-whiteSmokeBlack">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-whiteSmokeBlack/10 text-xs font-bold text-gray-700">
           —
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-institucional-whiteSmokeBlack">
+          <p className="text-sm font-medium text-gray-700">
             {puesto.codigo}
           </p>
-          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-semibold text-institucional-whiteSmokeBlack mt-0.5">
+          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-semibold text-gray-700 mt-0.5">
             Vacante
           </span>
         </div>
@@ -833,11 +833,11 @@ function PuestoCard({
                 : "Sin asignar"}
             </p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] text-institucional-whiteSmokeBlack">
+              <span className="text-[10px] text-gray-700 font-medium">
                 {puesto.codigo}
               </span>
               {comerciante && (
-                <span className="text-[10px] text-institucional-whiteSmokeBlack">
+                <span className="text-[10px] text-gray-700 font-medium">
                   CIU: {comerciante.ciu}
                 </span>
               )}
@@ -974,7 +974,7 @@ function PuestoCard({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-institucional-whiteSmokeBlack">
+              <label className="text-[11px] font-medium text-gray-700">
                 Fecha de Inicio
               </label>
               <input
@@ -985,7 +985,7 @@ function PuestoCard({
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-institucional-whiteSmokeBlack">
+              <label className="text-[11px] font-medium text-gray-700">
                 Fecha de Fin
               </label>
               <input
@@ -1096,7 +1096,7 @@ function TreemapView({
   return (
     <div className="space-y-4">
       {items.length === 0 ? (
-        <div className="py-12 text-center text-sm text-institucional-whiteSmokeBlack bg-base-white rounded-xl ring-1 ring-institucional-whiteSmokeBlack/10">
+        <div className="py-12 text-center text-sm text-gray-700 font-medium bg-base-white rounded-xl ring-1 ring-institucional-whiteSmokeBlack/10">
           No se encontraron resultados.
         </div>
       ) : (
@@ -1405,7 +1405,7 @@ export default function ListasPage() {
                       ? "bg-institucional-whiteSmokeBlack/10 text-institucional-whiteSmokeBlack/40 cursor-not-allowed"
                       : isSelected
                         ? "bg-institucional-green text-base-white shadow-sm font-bold"
-                        : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
+                        : "bg-base-white text-gray-700 ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
                   ].join(" ")}
                 >
                   {format(date, "EEE, d 'de' MMM", { locale: es })}
@@ -1424,7 +1424,7 @@ export default function ListasPage() {
                 "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-all duration-150",
                 isToday(selectedDate)
                   ? "bg-institucional-green text-base-white shadow-md font-bold ring-2 ring-institucional-green/30"
-                  : "bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
+                  : "bg-base-white text-gray-700 ring-1 ring-institucional-whiteSmokeBlack/20 hover:text-institucional-green hover:bg-base-white/80",
               ].join(" ")}
             >
               Hoy
@@ -1433,7 +1433,7 @@ export default function ListasPage() {
             {/* Calendar popover */}
             <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
               <PopoverTrigger
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-white text-institucional-whiteSmokeBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:text-institucional-green hover:ring-institucional-green/40 shadow-sm"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-base-white text-gray-700 ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:text-institucional-green hover:ring-institucional-green/40 shadow-sm"
                 aria-label="Seleccionar otra fecha"
               >
                 <CalendarIcon size={16} strokeWidth={2} aria-hidden="true" />
@@ -1463,14 +1463,14 @@ export default function ListasPage() {
             <div className="relative flex-1 min-w-0">
               <Search
                 size={16}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700"
               />
               <input
                 type="text"
                 placeholder="Buscar por nombre, CIU o puesto..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-10 pr-4 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                className="h-10 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-10 pr-4 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
               />
             </div>
 
@@ -1510,7 +1510,7 @@ export default function ListasPage() {
                 <span className="block text-lg font-bold text-base-eerieBlack">
                   {item.nombre}
                 </span>
-                <span className="text-sm text-institucional-whiteSmokeBlack">
+                <span className="text-sm text-gray-700 font-medium">
                   {item.limitePuestos} puestos
                 </span>
               </span>
