@@ -16,8 +16,7 @@ import { format } from "date-fns";
 import { es } from "date-fns/locale";
 import { getLogsFiltrados } from "@/infrastructure/mocks/auditoria.mock";
 import { getUsuarios } from "@/infrastructure/mocks/auth.mock";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 
 // ── Colores por tipo de acción ───────────────────────────────────────────────
@@ -48,7 +47,6 @@ export default function AuditoriaPage() {
 
   // DateRangePicker state
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const fechaDesde = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
   const fechaHasta = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
@@ -206,44 +204,15 @@ export default function AuditoriaPage() {
               <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Rango de Fechas
               </label>
-              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                <PopoverTrigger
-                    className="mt-1 h-9 inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[220px] hover:bg-muted transition-all outline-none"
-                  >
-                    <CalendarIcon size={14} className="mr-2 text-gray-700" />
-                    {dateRange?.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "dd/MM/yyyy")} –{" "}
-                          {format(dateRange.to, "dd/MM/yyyy")}
-                        </>
-                      ) : (
-                        format(dateRange.from, "dd/MM/yyyy")
-                      )
-                    ) : (
-                      <span className="text-gray-700">
-                        Todas las fechas
-                      </span>
-                    )}
-                  </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={(range) => {
-                      setDateRange(range);
-                      setPagina(1);
-                      if (range?.from && range?.to) {
-                        setDatePickerOpen(false);
-                      }
-                    }}
-                    disabled={(date) => date > new Date()}
-                    numberOfMonths={2}
-                    locale={es}
-                    autoFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateRangePicker
+                date={dateRange}
+                setDate={(range) => {
+                  setDateRange(range);
+                  setPagina(1);
+                }}
+                placeholder="Todas las fechas"
+                className="mt-1"
+              />
             </div>
           </div>
         </div>

@@ -23,8 +23,7 @@ import type {
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
 import { useAuth } from "@/infrastructure/auth/auth-context";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 
 // ── Colores por estado ───────────────────────────────────────────────────────
@@ -81,7 +80,6 @@ export default function ReportesPage() {
     from: subDays(new Date(), 14),
     to: new Date(),
   });
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const fechaInicio = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
   const fechaFin = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
@@ -488,43 +486,12 @@ export default function ReportesPage() {
               <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Rango de Fechas
               </label>
-              <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
-                <PopoverTrigger
-                  className="h-9 w-full md:w-auto inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[240px] hover:bg-muted transition-all outline-none"
-                >
-                  <CalendarIcon size={14} className="mr-2 text-gray-700 shrink-0" />
-                  {dateRange?.from ? (
-                    dateRange.to ? (
-                      <span className="truncate">
-                        {format(dateRange.from, "dd/MM/yyyy")} –{" "}
-                        {format(dateRange.to, "dd/MM/yyyy")}
-                      </span>
-                    ) : (
-                      format(dateRange.from, "dd/MM/yyyy")
-                    )
-                  ) : (
-                    <span className="text-gray-700">
-                      Seleccionar rango
-                    </span>
-                  )}
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="range"
-                    selected={dateRange}
-                    onSelect={(range) => {
-                      setDateRange(range);
-                      if (range?.from && range?.to) {
-                        setDatePickerOpen(false);
-                      }
-                    }}
-                    disabled={(date) => date > new Date()}
-                    numberOfMonths={2}
-                    locale={es}
-                    autoFocus
-                  />
-                </PopoverContent>
-              </Popover>
+              <DateRangePicker
+                date={dateRange}
+                setDate={setDateRange}
+                placeholder="Seleccionar rango"
+                className="w-full md:w-auto min-w-[240px]"
+              />
             </div>
 
             {/* Toggle de observaciones */}

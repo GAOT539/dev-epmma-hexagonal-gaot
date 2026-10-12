@@ -144,6 +144,7 @@ function generarPuestosYComerciantes(): {
           contribuyente: `${pick(NOMBRES)} ${pick(APELLIDOS)} ${pick(APELLIDOS)}`,
           actividad: pick(ACTIVIDADES),
           puestoId: puestoId,
+          nave: nave.nombre.toUpperCase(),
           estadoRegistro: "Habilitado",
           creadoPor: "sistema",
         };
@@ -251,6 +252,8 @@ export function getPuestosPorNave(naveId: string): Puesto[] {
 export function getComerciantes(): Comerciante[] {
   return allComerciantes.filter(c => c.estadoRegistro !== "Deshabilitado");
 }
+
+export const obtenerComerciantes = getComerciantes;
 
 export function getComerciantePorId(id: string): Comerciante | null {
   return allComerciantes.find((c) => c.idInterno === id && c.estadoRegistro !== "Deshabilitado") ?? null;

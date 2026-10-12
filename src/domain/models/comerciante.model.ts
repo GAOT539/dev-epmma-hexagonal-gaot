@@ -47,6 +47,7 @@ export interface Comerciante {
   contribuyente: string;
   actividad: string;
   puestoId: string | null;
+  nave?: string;
   estadoRegistro: "Habilitado" | "Deshabilitado";
   creadoPor?: string;
   modificadoPor?: string;

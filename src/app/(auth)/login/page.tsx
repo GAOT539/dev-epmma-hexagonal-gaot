@@ -8,7 +8,31 @@ import { toast } from "sonner";
 import { useAuth } from "@/infrastructure/auth/auth-context";
 import { validatePassword } from "@/infrastructure/mocks/auth.mock";
 
-// ── Modal de cambio de contraseña obligatorio ────────────────────────────────
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
+
+// ── Requisito de contraseña (extraído fuera para evitar re-montajes y cumplir ESLint) ──
+
+function Requirement({ met, label }: { met: boolean; label: string }) {
+  return (
+    <li className="flex items-center gap-2 text-xs">
+      {met ? (
+        <Check size={14} className="text-acento-verdeOliva1" />
+      ) : (
+        <X size={14} className="text-base-red" />
+      )}
+      <span className={met ? "text-acento-verdeOliva1" : "text-gray-700 font-medium"}>
+        {label}
+      </span>
+    </li>
+  );
+}
+
+// ── Modal de cambio de contraseña obligatorio (Dialog ineludible con disablePointerDismissal) ──
 
 function PasswordChangeModal({
   onSuccess,
@@ -58,36 +82,21 @@ function PasswordChangeModal({
     }
   }
 
-  function Requirement({ met, label }: { met: boolean; label: string }) {
-    return (
-      <li className="flex items-center gap-2 text-xs">
-        {met ? (
-          <Check size={14} className="text-acento-verdeOliva1" />
-        ) : (
-          <X size={14} className="text-base-red" />
-        )}
-        <span className={met ? "text-acento-verdeOliva1" : "text-gray-700 font-medium"}>
-          {label}
-        </span>
-      </li>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-base-black/60 backdrop-blur-sm p-4">
-      <div className="w-full max-w-md rounded-2xl bg-base-white shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    <Dialog open={true} disablePointerDismissal={true}>
+      <DialogContent showCloseButton={false} className="sm:max-w-md p-0 overflow-hidden rounded-2xl bg-base-white border-0 shadow-2xl">
         {/* Header */}
         <div className="bg-acento-naranjaSalmon1 px-6 py-5 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20">
             <Lock size={20} className="text-base-white" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-base-white">
+            <DialogTitle className="text-lg font-bold text-base-white">
               Cambio de Contraseña Obligatorio
-            </h2>
-            <p className="text-sm text-base-white/80">
+            </DialogTitle>
+            <DialogDescription className="text-sm text-base-white/80 mt-0.5">
               Es su primer ingreso. Debe establecer una nueva contraseña.
-            </p>
+            </DialogDescription>
           </div>
         </div>
 
@@ -168,8 +177,8 @@ function PasswordChangeModal({
             {isSubmitting ? "Actualizando..." : "Cambiar Contraseña"}
           </button>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -177,7 +186,7 @@ function PasswordChangeModal({
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, user } = useAuth();
+  const { login } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
@@ -225,7 +234,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-institucional-whiteSmoke p-4 sm:p-6 md:p-8">
+    <main className="min-h-[100dvh] flex items-center justify-center bg-institucional-whiteSmoke p-4 sm:p-6 md:p-8">
 
       <div className="w-full max-w-sm sm:max-w-md bg-base-white rounded-2xl shadow-xl flex flex-col items-center overflow-hidden border border-institucional-whiteSmokeBlack/30">
 
@@ -312,16 +321,6 @@ export default function LoginPage() {
                   )}
                 </button>
               </div>
-            </div>
-
-            {/* Olvidé mi contraseña */}
-            <div className="flex justify-end">
-              <a
-                href="#"
-                className="text-sm text-acento-azul1 hover:text-acento-azul2 hover:underline transition-colors"
-              >
-                ¿Olvidó su contraseña?
-              </a>
             </div>
 
             {/* Botón Ingresar */}

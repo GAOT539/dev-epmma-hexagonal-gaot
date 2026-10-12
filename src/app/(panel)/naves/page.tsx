@@ -17,6 +17,7 @@ import {
   eliminarNave,
   obtenerSupervisoresDisponibles,
 } from "@/infrastructure/mocks/naves.mock";
+import { obtenerComerciantes } from "@/infrastructure/mocks/mercado.mock";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -45,6 +46,7 @@ export default function NavesPage() {
   const [editNombre, setEditNombre] = useState("");
   const [editCantidad, setEditCantidad] = useState("");
   const [editSupervisores, setEditSupervisores] = useState<string[]>([]);
+  const [puestosOcupados, setPuestosOcupados] = useState(0);
   const [editarError, setEditarError] = useState("");
 
   // Filtrado de naves por búsqueda
@@ -110,6 +112,15 @@ export default function NavesPage() {
     setEditCantidad(String(nave.cantidadPuestos));
     setEditSupervisores(nave.supervisores ? [...nave.supervisores] : []);
     setEditarError("");
+
+    // Cálculo de puestos actualmente ocupados por comerciantes en esta nave
+    const comerciantes = obtenerComerciantes();
+    const ocupados = comerciantes.filter(
+      (c) =>
+        c.nave?.toLowerCase() === nave.nombre.toLowerCase() ||
+        c.nave === nave.nombre
+    ).length;
+    setPuestosOcupados(ocupados);
   }
 
   function handleToggleSupervisorEdit(sup: string) {
@@ -132,6 +143,16 @@ export default function NavesPage() {
     const cantidad = parseInt(editCantidad, 10);
     if (isNaN(cantidad) || cantidad <= 0) {
       setEditarError("Debe ingresar una cantidad válida mayor a cero.");
+      return;
+    }
+
+    // Regla de Negocio: No se puede reducir la capacidad por debajo de los comerciantes ocupados
+    if (cantidad < puestosOcupados) {
+      toast.error(
+        "No se puede reducir la capacidad. Hay " +
+          puestosOcupados +
+          " comerciantes actualmente asignados a esta nave."
+      );
       return;
     }
 
@@ -459,13 +480,16 @@ export default function NavesPage() {
                 </label>
                 <Input
                   type="number"
-                  min={1}
+                  min={puestosOcupados}
                   max={1000}
                   value={editCantidad}
                   onChange={(e) => setEditCantidad(e.target.value)}
                   className="bg-base-white text-sm h-9"
                   required
                 />
+                <p className="text-sm text-gray-700 mt-1.5">
+                  Puestos actualmente ocupados: {puestosOcupados}. No puede reducir la capacidad por debajo de este número.
+                </p>
               </div>
 
               {/* Asignar Supervisor(es) */}
