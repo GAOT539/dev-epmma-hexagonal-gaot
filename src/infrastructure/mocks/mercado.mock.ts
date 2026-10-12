@@ -387,11 +387,14 @@ export function agregarComerciante(data: {
   ciu: string;
   contribuyente: string;
   actividad: string;
-  naveId: string;
-  puestoId: string;
+  naveId?: string;
+  puestoId: string | null;
+  cedula?: string;
+  nave?: string;
+  estadoRegistro?: "Habilitado" | "Deshabilitado";
 }): Comerciante {
   const comId = `com-${String(nextComerciante++).padStart(4, "0")}`;
-  const cedula = genCedula(nextComerciante);
+  const cedula = data.cedula || genCedula(nextComerciante);
 
   const comerciante: Comerciante = {
     idInterno: comId,
@@ -399,18 +402,21 @@ export function agregarComerciante(data: {
     cedula,
     contribuyente: data.contribuyente,
     actividad: data.actividad,
-    puestoId: data.puestoId,
-    estadoRegistro: "Habilitado",
+    puestoId: data.puestoId ?? null,
+    nave: data.nave,
+    estadoRegistro: data.estadoRegistro ?? "Habilitado",
     creadoPor: "sistema"
   };
 
   allComerciantes.push(comerciante);
 
-  // Marcar puesto como ocupado
-  const puesto = allPuestos.find((p) => p.id === data.puestoId);
-  if (puesto) {
-    puesto.estado = "Ocupado";
-    puesto.comercianteId = comId;
+  // Marcar puesto como ocupado si tiene puestoId
+  if (data.puestoId) {
+    const puesto = allPuestos.find((p) => p.id === data.puestoId);
+    if (puesto) {
+      puesto.estado = "Ocupado";
+      puesto.comercianteId = comId;
+    }
   }
 
   return comerciante;
@@ -423,9 +429,12 @@ export function editarComerciante(
     contribuyente?: string;
     actividad?: string;
     naveId?: string;
-    puestoId?: string;
+    puestoId?: string | null;
+    nave?: string;
+    cedula?: string;
     estadoRegistro?: "Habilitado" | "Deshabilitado";
     deshabilitadoPor?: string;
+    modificadoPor?: string;
   }
 ): Comerciante | null {
   const idx = allComerciantes.findIndex((c) => c.idInterno === idInterno);

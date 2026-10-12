@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Monitor,
   Upload,
@@ -17,12 +17,9 @@ import {
 } from "lucide-react";
 // Removido importador
 import {
-  getComerciantes,
   getNaves,
-  agregarComerciante,
-  editarComerciante,
-  eliminarComerciante,
 } from "@/infrastructure/mocks/mercado.mock";
+import { comercianteService } from "@/application/services/comerciante.service";
 import type { Comerciante } from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
 import {
@@ -88,7 +85,7 @@ function ComercianteFormDialog({
   const [puesto, setPuesto] = useState(initialPuesto);
   const [error, setError] = useState("");
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setError("");
 
     if (!ciu.trim() || !contribuyente.trim() || !actividad.trim()) {
@@ -97,7 +94,7 @@ function ComercianteFormDialog({
     }
 
     if (isEdit && comerciante) {
-      editarComerciante(comerciante.idInterno, {
+      await comercianteService.actualizarComerciante(comerciante.idInterno, {
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),
@@ -114,16 +111,14 @@ function ComercianteFormDialog({
         setError("Debe seleccionar Nave e ingresar un Puesto.");
         return;
       }
-      const nuevo = agregarComerciante({
+      const nuevo = await comercianteService.crearComerciante({
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),
-        naveId,
         puestoId: puesto.trim(),
+        cedula: cedula.trim() || "1800000000",
+        estadoRegistro: "Habilitado",
       });
-      if (cedula.trim()) {
-        nuevo.cedula = cedula.trim();
-      }
       toast.success("Comerciante creado", {
         description: `${contribuyente} agregado correctamente.`,
       });
@@ -319,9 +314,15 @@ export default function TicPage() {
   const [deleteTarget, setDeleteTarget] = useState<Comerciante | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedNaveId, setSelectedNaveId] = useState("");
+  const [comerciantes, setComerciantes] = useState<Comerciante[]>([]);
 
   const naves = getNaves();
-  const comerciantes = getComerciantes();
+
+  useEffect(() => {
+    comercianteService.obtenerComerciantes().then((datos) => {
+      setComerciantes(datos);
+    });
+  }, [refreshKey]);
 
   // Filtrar comerciantes
   const comerciantesFiltrados = comerciantes.filter((c) => {
@@ -358,11 +359,11 @@ export default function TicPage() {
     setDeleteTarget(com);
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
     if (!deleteTarget) return;
     
     // Soft Delete: en lugar de eliminar, deshabilitamos
-    editarComerciante(deleteTarget.idInterno, {
+    await comercianteService.actualizarComerciante(deleteTarget.idInterno, {
       deshabilitadoPor: user ? `${user.nombres} ${user.apellidos}` : "Sistema"
     });
     
@@ -520,9 +521,10 @@ export default function TicPage() {
                               type="button"
                               onClick={() => {
                                 if (isDisabled) {
-                                  editarComerciante(com.idInterno, { deshabilitadoPor: undefined });
-                                  toast.success("Habilitado");
-                                  setRefreshKey(k => k + 1);
+                                  comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined }).then(() => {
+                                    toast.success("Habilitado");
+                                    setRefreshKey(k => k + 1);
+                                  });
                                 } else {
                                   handleEliminar(com);
                                 }

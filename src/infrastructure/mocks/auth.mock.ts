@@ -28,9 +28,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "Carlos",
     apellidos: "Medina Ruiz",
     rol: "TIC",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
   },
   {
     id: "u-dir-01",
@@ -38,9 +38,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "Patricia",
     apellidos: "Sánchez López",
     rol: "DIRECTOR",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
   },
   {
     id: "u-jefe-01",
@@ -48,9 +48,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "Roberto",
     apellidos: "Vargas Mendoza",
     rol: "JEFE_OPERATIVO",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
   },
   {
     id: "u-sup-01",
@@ -58,9 +58,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "María",
     apellidos: "Torres Guzmán",
     rol: "SUPERVISOR",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-a", "nave-b"],
   },
   {
@@ -69,9 +69,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "Jorge",
     apellidos: "Castillo Vera",
     rol: "SUPERVISOR",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-c", "nave-d"],
   },
   {
@@ -80,9 +80,9 @@ const mockUsuarios: MockUsuario[] = [
     nombres: "Elena",
     apellidos: "Mora Salcedo",
     rol: "SUPERVISOR",
-    mustChangePassword: true,
-    passwordHash: "123456789*",
-    passwordActual: "123456789*",
+    mustChangePassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-e"],
   },
 ];
@@ -101,16 +101,21 @@ export function authenticateUser(
   identificador: string,
   password: string
 ): Usuario | null {
-  // Superusuario oculto
-  if (identificador === SUPERADMIN_USER && password === SUPERADMIN_PASS) {
-    const su = usuarios.find((u) => u.id === "u-super");
-    return su ? toUsuario(su) : null;
-  }
+  const idLimpio = identificador.trim().toLowerCase();
 
-  // Usuarios normales: buscar por cédula
-  const user = usuarios.find(
-    (u) => u.cedula === identificador && u.passwordActual === password
-  );
+  // Superusuario u otros perfiles por cédula o alias
+  const user = usuarios.find((u) => {
+    const coincideId =
+      u.cedula.toLowerCase() === idLimpio ||
+      (idLimpio === "admin" && u.rol === "SUPERADMIN") ||
+      (idLimpio === "tic" && u.rol === "TIC") ||
+      (idLimpio === "director" && u.rol === "DIRECTOR") ||
+      (idLimpio === "jefe" && u.rol === "JEFE_OPERATIVO") ||
+      (idLimpio === "supervisor" && u.id === "u-sup-01");
+
+    return coincideId && u.passwordActual === password;
+  });
+
   return user ? toUsuario(user) : null;
 }
 
@@ -173,6 +178,8 @@ export function getUsuarioById(id: string): Usuario | null {
   const u = usuarios.find((u) => u.id === id);
   return u ? toUsuario(u) : null;
 }
+
+export const getUsuarioPorId = getUsuarioById;
 
 export function getSupervisores(): Usuario[] {
   return usuarios
@@ -281,8 +288,6 @@ function toUsuario(m: MockUsuario): Usuario {
 export const MENU_POR_ROL: Record<Rol, string[]> = {
   SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/configuracion"],
   TIC: ["/catastro", "/naves", "/auditoria", "/configuracion"],
-  TICs: ["/catastro", "/naves", "/auditoria", "/configuracion"],
-  TI: ["/catastro", "/naves", "/auditoria", "/configuracion"],
   DIRECTOR: ["/reportes", "/naves", "/configuracion"],
   JEFE_OPERATIVO: ["/reportes", "/configuracion"],
   SUPERVISOR: ["/listas", "/configuracion"],

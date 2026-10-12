@@ -166,7 +166,7 @@ function UserFormDialog({
               onChange={(e) => setRol(e.target.value as Rol)}
               className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
             >
-              <option value="TICs">TICs</option>
+              <option value="TIC">TIC</option>
               <option value="DIRECTOR">Director</option>
               <option value="JEFE_OPERATIVO">Jefe Operativo</option>
               <option value="SUPERVISOR">Supervisor</option>
@@ -266,7 +266,7 @@ export default function ConfiguracionUsuariosPage() {
   }
 
   const usuariosGestionables = allUsuarios
-    .filter((u) => u.rol !== "SUPERADMIN" && u.rol !== "TIC" && u.rol !== "TICs")
+    .filter((u) => u.rol !== "SUPERADMIN" && u.rol !== "TIC")
     .filter((u) => u.estado !== "Deshabilitado");
 
   return (

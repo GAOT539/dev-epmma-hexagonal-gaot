@@ -146,7 +146,7 @@ export default function ConfiguracionPage() {
   const { user, logout, changePassword } = useAuth();
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
 
-  const isAdmin = user?.rol === "TIC" || user?.rol === "TICs" || user?.rol === "SUPERADMIN";
+  const isAdmin = user?.rol === "TIC" || user?.rol === "SUPERADMIN";
 
   function handleLogout() {
     logout();

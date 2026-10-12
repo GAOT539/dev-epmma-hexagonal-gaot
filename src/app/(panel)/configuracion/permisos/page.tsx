@@ -26,7 +26,7 @@ export default function ConfiguracionPermisosPage() {
   const naves = getNaves();
 
   const isSupervisor = user?.rol === "SUPERVISOR";
-  const isAdmin = user?.rol === "TIC" || user?.rol === "TICs" || user?.rol === "SUPERADMIN";
+  const isAdmin = user?.rol === "TIC" || user?.rol === "SUPERADMIN";
 
   const [configs, setConfigs] = useState<Record<string, SupervisorConfig>>(() => {
     const initial: Record<string, SupervisorConfig> = {};
