@@ -8,6 +8,27 @@ import type {
   EstadoAsistencia,
 } from "@/domain/models/comerciante.model";
 import { format, subDays } from "date-fns";
+import {
+  obtenerNaves,
+  obtenerNavePorId,
+  crearNave,
+  actualizarNave,
+  actualizarPuestosNave,
+  eliminarNave,
+  cambiarEstadoNave,
+  obtenerSupervisoresDisponibles,
+} from "./naves.mock";
+
+export {
+  obtenerNaves,
+  obtenerNavePorId,
+  crearNave,
+  actualizarNave,
+  actualizarPuestosNave,
+  eliminarNave,
+  cambiarEstadoNave,
+  obtenerSupervisoresDisponibles,
+};
 
 // ── Pools de datos ───────────────────────────────────────────────────────────
 
@@ -211,11 +232,15 @@ const asistenciaHistorica = generarAsistenciaHistorica();
 // ── API pública ──────────────────────────────────────────────────────────────
 
 export function getNaves(): Nave[] {
-  return NAVES_CONFIG.map((nc) => ({
+  const naves = obtenerNaves();
+  return naves.map((nc) => ({
     id: nc.id,
     nombre: nc.nombre,
-    limitePuestos: LIMITE_PUESTOS,
-    puestos: allPuestos.filter(p => p.naveId === nc.id),
+    cantidadPuestos: nc.cantidadPuestos,
+    supervisores: nc.supervisores ?? [],
+    estadoRegistro: nc.estadoRegistro,
+    limitePuestos: nc.cantidadPuestos ?? LIMITE_PUESTOS,
+    puestos: allPuestos.filter((p) => p.naveId === nc.id),
   }));
 }
 

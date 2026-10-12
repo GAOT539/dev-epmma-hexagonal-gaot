@@ -30,10 +30,11 @@ import type { DateRange } from "react-day-picker";
 // ── Colores por estado ───────────────────────────────────────────────────────
 
 const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: string }> = {
-  Presente: { bg: "bg-acento-verdeOliva1", text: "text-base-white", hex: "#45743B" },
-  Ausente: { bg: "bg-base-red", text: "text-base-white", hex: "#FF0000" },
-  Observacion: { bg: "bg-acento-azul1", text: "text-base-white", hex: "#2E78CC" },
-  Permiso: { bg: "bg-acento-morado", text: "text-base-white", hex: "#6A1B9A" },
+  Presente: { bg: "bg-green-700", text: "text-white", hex: "#15803D" },
+  Ausente: { bg: "bg-red-700", text: "text-white", hex: "#B91C1C" },
+  Observacion: { bg: "bg-blue-600", text: "text-white", hex: "#2563EB" },
+  Permiso: { bg: "bg-purple-700", text: "text-white", hex: "#7E22CE" },
+  Vacante: { bg: "bg-gray-700", text: "text-white", hex: "#374151" },
   Pendiente: { bg: "bg-institucional-whiteSmokeBlack/40", text: "text-base-white", hex: "#C4C4C4" },
 };
 
@@ -42,7 +43,15 @@ const ESTADO_LABELS: Record<string, string> = {
   Ausente: "A",
   Observacion: "O",
   Permiso: "Pm",
+  Vacante: "V",
   Pendiente: "—",
+};
+
+// ── Normalización de texto (insensible a tildes y mayúsculas) ───────────────
+
+const normalizeText = (text: string) => {
+  if (!text) return "";
+  return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 };
 
 // ── Página de Reportes ───────────────────────────────────────────────────────
@@ -178,16 +187,16 @@ export default function ReportesPage() {
     return { comerciante: com, estados, todoPresente, observaciones, puestoCode, naveNombre };
   }, [modo, selectedComercianteId, fechaInicio, fechaFin, fechas, todosLosComerciantes, allNaves]);
 
-  // Búsqueda de comerciantes
+  // Búsqueda de comerciantes (normalizada e insensible a tildes y mayúsculas)
   const comerciantesFiltrados = useMemo(() => {
     if (!searchComerciante.trim()) return [];
-    const q = searchComerciante.toLowerCase();
+    const q = normalizeText(searchComerciante.trim());
     return todosLosComerciantes
       .filter(
         (c) =>
-          c.contribuyente.toLowerCase().includes(q) ||
-          c.ciu.toLowerCase().includes(q) ||
-          c.cedula.includes(q)
+          normalizeText(c.contribuyente).includes(q) ||
+          normalizeText(c.ciu).includes(q) ||
+          normalizeText(c.cedula).includes(q)
       )
       .slice(0, 8);
   }, [searchComerciante, todosLosComerciantes]);
@@ -318,10 +327,11 @@ export default function ReportesPage() {
         ) {
           const value = cellData.cell.text[0];
           const colorMap: Record<string, [number, number, number]> = {
-            P: [69, 116, 59],
-            A: [255, 0, 0],
-            O: [46, 120, 204],
-            Pm: [106, 27, 154],
+            P: [21, 128, 61],
+            A: [185, 28, 28],
+            O: [37, 99, 235],
+            Pm: [126, 34, 206],
+            V: [55, 65, 81],
           };
           const color = colorMap[value];
           if (color) {
@@ -351,7 +361,7 @@ export default function ReportesPage() {
     doc.setFontSize(7);
     doc.setTextColor(0, 0, 0);
     doc.text(
-      "P = Presente | A = Ausente | O = Observación | Pm = Permiso",
+      "P = Presente | A = Ausente | O = Observación | Pm = Permiso | V = Vacante",
       10,
       finalY + 6
     );
@@ -368,25 +378,22 @@ export default function ReportesPage() {
             Reportes Operativos
           </h1>
         </div>
-        <p className="mt-2 text-sm text-institucional-whiteSmokeBlack">
-          Genera reportes de asistencia por nave o de manera individual.
-        </p>
       </header>
 
       <div className="mx-auto max-w-full space-y-6">
         {/* ── Controles ── */}
         <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
-          <div className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 lg:gap-6 w-full">
             {/* Modo */}
-            <div>
-              <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+            <div className="flex flex-col gap-1.5 w-full md:w-auto">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Tipo de Reporte
               </label>
-              <div className="mt-1.5 flex rounded-lg overflow-hidden ring-1 ring-institucional-whiteSmokeBlack/30">
+              <div className="flex rounded-lg overflow-hidden ring-1 ring-institucional-whiteSmokeBlack/30 w-full md:w-auto">
                 <button
                   type="button"
                   onClick={() => setModo("nave")}
-                  className={`px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
                     modo === "nave"
                       ? "bg-institucional-green text-base-white"
                       : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
@@ -397,7 +404,7 @@ export default function ReportesPage() {
                 <button
                   type="button"
                   onClick={() => setModo("individual")}
-                  className={`px-4 py-2 text-xs font-semibold transition-colors ${
+                  className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
                     modo === "individual"
                       ? "bg-institucional-green text-base-white"
                       : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
@@ -410,14 +417,14 @@ export default function ReportesPage() {
 
             {/* Selector de nave o comerciante */}
             {modo === "nave" ? (
-              <div>
-                <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+              <div className="flex flex-col gap-1.5 w-full md:w-auto">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Nave
                 </label>
                 <select
                   value={selectedNaveId}
                   onChange={(e) => setSelectedNaveId(e.target.value)}
-                  className="mt-1.5 h-9 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+                  className="h-9 w-full md:w-auto rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
                 >
                   {naves.map((n) => (
                     <option key={n.id} value={n.id}>
@@ -427,11 +434,11 @@ export default function ReportesPage() {
                 </select>
               </div>
             ) : (
-              <div className="relative">
-                <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+              <div className="flex flex-col gap-1.5 w-full md:w-auto relative">
+                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Comerciante
                 </label>
-                <div className="relative mt-1.5">
+                <div className="relative w-full md:w-64">
                   <Search
                     size={14}
                     className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
@@ -444,12 +451,12 @@ export default function ReportesPage() {
                       setSearchComerciante(e.target.value);
                       setSelectedComercianteId(null);
                     }}
-                    className="h-9 w-64 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+                    className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
                   />
                 </div>
                 {/* Dropdown de resultados */}
                 {comerciantesFiltrados.length > 0 && !selectedComercianteId && (
-                  <div className="absolute top-full left-0 mt-1 w-72 rounded-lg bg-base-white shadow-xl ring-1 ring-institucional-whiteSmokeBlack/20 z-10 max-h-48 overflow-y-auto">
+                  <div className="absolute top-full left-0 mt-1 w-full md:w-72 rounded-lg bg-base-white shadow-xl ring-1 ring-institucional-whiteSmokeBlack/20 z-10 max-h-48 overflow-y-auto">
                     {comerciantesFiltrados.map((c) => (
                       <button
                         key={c.idInterno}
@@ -477,30 +484,30 @@ export default function ReportesPage() {
             )}
 
             {/* DateRangePicker */}
-            <div>
-              <label className="text-xs font-semibold text-institucional-whiteSmokeBlack uppercase tracking-wider">
+            <div className="flex flex-col gap-1.5 w-full md:w-auto">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Rango de Fechas
               </label>
               <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
                 <PopoverTrigger
-                    className="mt-1.5 h-9 inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[240px] hover:bg-muted transition-all outline-none"
-                  >
-                    <CalendarIcon size={14} className="mr-2 text-institucional-whiteSmokeBlack" />
-                    {dateRange?.from ? (
-                      dateRange.to ? (
-                        <>
-                          {format(dateRange.from, "dd/MM/yyyy")} –{" "}
-                          {format(dateRange.to, "dd/MM/yyyy")}
-                        </>
-                      ) : (
-                        format(dateRange.from, "dd/MM/yyyy")
-                      )
-                    ) : (
-                      <span className="text-institucional-whiteSmokeBlack">
-                        Seleccionar rango
+                  className="h-9 w-full md:w-auto inline-flex items-center justify-start gap-1.5 rounded-lg border border-border bg-background px-2.5 text-left text-sm font-normal min-w-[240px] hover:bg-muted transition-all outline-none"
+                >
+                  <CalendarIcon size={14} className="mr-2 text-institucional-whiteSmokeBlack shrink-0" />
+                  {dateRange?.from ? (
+                    dateRange.to ? (
+                      <span className="truncate">
+                        {format(dateRange.from, "dd/MM/yyyy")} –{" "}
+                        {format(dateRange.to, "dd/MM/yyyy")}
                       </span>
-                    )}
-                  </PopoverTrigger>
+                    ) : (
+                      format(dateRange.from, "dd/MM/yyyy")
+                    )
+                  ) : (
+                    <span className="text-institucional-whiteSmokeBlack">
+                      Seleccionar rango
+                    </span>
+                  )}
+                </PopoverTrigger>
                 <PopoverContent className="w-auto p-0" align="start">
                   <Calendar
                     mode="range"
@@ -521,17 +528,22 @@ export default function ReportesPage() {
             </div>
 
             {/* Toggle de observaciones */}
-            <div className="flex items-center gap-2 h-9 mb-1">
-              <input
-                type="checkbox"
-                id="toggle-obs"
-                checked={incluirObservaciones}
-                onChange={(e) => setIncluirObservaciones(e.target.checked)}
-                className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4"
-              />
-              <label htmlFor="toggle-obs" className="text-xs font-semibold text-institucional-whiteSmokeBlack cursor-pointer">
-                Incluir Observaciones
-              </label>
+            <div className="flex flex-col justify-end w-full md:w-auto">
+              <div className="flex items-center gap-2 h-9">
+                <input
+                  type="checkbox"
+                  id="toggle-obs"
+                  checked={incluirObservaciones}
+                  onChange={(e) => setIncluirObservaciones(e.target.checked)}
+                  className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4 cursor-pointer"
+                />
+                <label
+                  htmlFor="toggle-obs"
+                  className="text-xs font-semibold text-gray-500 uppercase tracking-wider cursor-pointer select-none"
+                >
+                  Incluir Observaciones
+                </label>
+              </div>
             </div>
 
             {/* Botón PDF */}
@@ -540,7 +552,7 @@ export default function ReportesPage() {
               onClick={handleExportPDF}
               disabled={!hayDatos}
               className={[
-                "flex items-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors",
+                "flex items-center justify-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors w-full md:w-auto mt-2 md:mt-0",
                 hayDatos
                   ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2"
                   : "bg-institucional-whiteSmokeBlack/30 text-institucional-whiteSmokeBlack cursor-not-allowed",
@@ -635,7 +647,7 @@ export default function ReportesPage() {
                       return (
                         <td key={j} className="px-0.5 py-1 text-center">
                           {row.todoPresente ? (
-                            <div className="h-5 bg-acento-verdeOliva1 mx-auto" style={{ width: "100%" }} />
+                            <div className="h-5 bg-green-700 mx-auto" style={{ width: "100%" }} />
                           ) : (
                             <span
                               className={`inline-flex h-5 w-7 items-center justify-center rounded text-[9px] font-bold ${config.bg} ${config.text}`}
@@ -649,8 +661,8 @@ export default function ReportesPage() {
                     {incluirObservaciones && (
                       <td className="px-3 py-2 text-institucional-whiteSmokeBlack max-w-[200px]">
                         {row.todoPresente ? (
-                          <span className="inline-flex items-center gap-1 text-acento-verdeOliva1 font-semibold">
-                            <span className="inline-block h-2 w-2 rounded-full bg-acento-verdeOliva1" />
+                          <span className="inline-flex items-center gap-1 text-green-700 font-semibold">
+                            <span className="inline-block h-2 w-2 rounded-full bg-green-700" />
                             100% Asistencia
                           </span>
                         ) : (
@@ -709,7 +721,7 @@ export default function ReportesPage() {
                     return (
                       <td key={j} className="px-0.5 py-2 text-center">
                         {reporteIndividual.todoPresente ? (
-                          <div className="h-5 bg-acento-verdeOliva1 mx-auto" style={{ width: "100%" }} />
+                          <div className="h-5 bg-green-700 mx-auto" style={{ width: "100%" }} />
                         ) : (
                           <span
                             className={`inline-flex h-6 w-8 items-center justify-center rounded text-[10px] font-bold ${config.bg} ${config.text}`}
@@ -723,7 +735,7 @@ export default function ReportesPage() {
                   {incluirObservaciones && (
                     <td className="px-3 py-2">
                       {reporteIndividual.todoPresente ? (
-                        <span className="text-acento-verdeOliva1 font-semibold text-xs">
+                        <span className="text-green-700 font-semibold text-xs">
                           ✓ 100% Asistencia
                         </span>
                       ) : (

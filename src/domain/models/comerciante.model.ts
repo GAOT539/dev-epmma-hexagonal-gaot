@@ -60,12 +60,7 @@ export interface Puesto {
   comercianteId: string | null;
 }
 
-export interface Nave {
-  id: string;
-  nombre: string;
-  limitePuestos: number;
-  puestos: Puesto[];
-}
+export type { Nave, EstadoRegistroNave } from "./nave.model";
 
 // ── Asistencia ───────────────────────────────────────────────────────────────
 

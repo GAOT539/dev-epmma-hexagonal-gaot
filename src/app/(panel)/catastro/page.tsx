@@ -19,7 +19,6 @@ import {
 import {
   getComerciantes,
   getNaves,
-  getPuestosPorNave,
   agregarComerciante,
   editarComerciante,
   eliminarComerciante,
@@ -34,6 +33,13 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -55,20 +61,32 @@ function ComercianteFormDialog({
   const naves = getNaves();
   const isEdit = !!comerciante;
 
+  // Buscar nave y puesto asignados si se está editando
+  let initialNaveId = naves[0]?.id ?? "";
+  let initialPuesto = comerciante?.puestoId ?? "";
+  if (comerciante) {
+    for (const n of naves) {
+      const p = n.puestos.find(
+        (p) =>
+          p.comercianteId === comerciante.idInterno ||
+          p.id === comerciante.puestoId ||
+          p.codigo === comerciante.puestoId
+      );
+      if (p) {
+        initialNaveId = n.id;
+        initialPuesto = p.codigo || p.id;
+        break;
+      }
+    }
+  }
+
   const [ciu, setCiu] = useState(comerciante?.ciu ?? "");
+  const [cedula, setCedula] = useState(comerciante?.cedula ?? "");
   const [contribuyente, setContribuyente] = useState(comerciante?.contribuyente ?? "");
   const [actividad, setActividad] = useState(comerciante?.actividad ?? "");
-  const [naveId, setNaveId] = useState(naves[0]?.id ?? "");
-  const [puestoId, setPuestoId] = useState("");
+  const [naveId, setNaveId] = useState(initialNaveId);
+  const [puesto, setPuesto] = useState(initialPuesto);
   const [error, setError] = useState("");
-
-  const puestosNave = getPuestosPorNave(naveId);
-  const puestosVacantes = puestosNave.filter(p => p.estado === "Vacante");
-
-  function handleNaveChange(id: string) {
-    setNaveId(id);
-    setPuestoId("");
-  }
 
   function handleSubmit() {
     setError("");
@@ -83,23 +101,29 @@ function ComercianteFormDialog({
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),
-        ...(puestoId && { puestoId, naveId }),
+        ...(puesto.trim() && { puestoId: puesto.trim(), naveId }),
       });
+      if (cedula.trim()) {
+        comerciante.cedula = cedula.trim();
+      }
       toast.success("Comerciante actualizado", {
         description: `${contribuyente} editado correctamente.`,
       });
     } else {
-      if (!naveId || !puestoId) {
-        setError("Debe seleccionar Nave y Puesto para un nuevo comerciante.");
+      if (!naveId || !puesto.trim()) {
+        setError("Debe seleccionar Nave e ingresar un Puesto.");
         return;
       }
-      agregarComerciante({
+      const nuevo = agregarComerciante({
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),
         naveId,
-        puestoId,
+        puestoId: puesto.trim(),
       });
+      if (cedula.trim()) {
+        nuevo.cedula = cedula.trim();
+      }
       toast.success("Comerciante creado", {
         description: `${contribuyente} agregado correctamente.`,
       });
@@ -110,7 +134,11 @@ function ComercianteFormDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open={open}
+      disablePointerDismissal={true}
+      onOpenChange={(o) => !o && onClose()}
+    >
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -133,8 +161,8 @@ function ComercianteFormDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="grid gap-4 py-2">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="py-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <Label htmlFor="ciu">CIU</Label>
               <Input
@@ -144,18 +172,17 @@ function ComercianteFormDialog({
                 placeholder="CIU-00001"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label htmlFor="actividad">Actividad</Label>
+              <Label htmlFor="cedula">Cédula</Label>
               <Input
-                id="actividad"
-                value={actividad}
-                onChange={(e) => setActividad(e.target.value)}
-                placeholder="Frutas, Carnes..."
+                id="cedula"
+                value={cedula}
+                onChange={(e) => setCedula(e.target.value)}
+                placeholder="1801234567"
               />
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="contribuyente">Contribuyente</Label>
               <Input
@@ -165,32 +192,48 @@ function ComercianteFormDialog({
                 placeholder="Nombres y Apellidos"
               />
             </div>
-          </div>
 
-          {/* Nave / Puesto */}
-          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="actividad">Actividad</Label>
+              <Input
+                id="actividad"
+                value={actividad}
+                onChange={(e) => setActividad(e.target.value)}
+                placeholder="Frutas, Carnes..."
+              />
+            </div>
+
+            {/* Nave / Puesto */}
+            <div className="space-y-1.5">
+              <Label htmlFor="nave">Nave</Label>
+              <Select value={naveId} onValueChange={(val) => setNaveId(val as string)}>
+                <SelectTrigger id="nave" className="w-full h-9">
+                  <SelectValue placeholder="Seleccionar nave..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {naves.map((n) => (
+                    <SelectItem key={n.id} value={n.id}>
+                      {n.nombre}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="puesto">Puesto</Label>
-              <select
+              <Input
                 id="puesto"
-                value={puestoId}
-                onChange={(e) => setPuestoId(e.target.value)}
-                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-              >
-                <option value="">
-                  {isEdit ? "Mantener actual" : "Seleccionar..."}
-                </option>
-                {puestosVacantes.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.codigo}
-                  </option>
-                ))}
-              </select>
+                type="text"
+                value={puesto}
+                onChange={(e) => setPuesto(e.target.value)}
+                placeholder="Ej. P-A002, P1, 1P"
+              />
             </div>
           </div>
 
           {error && (
-            <p className="text-xs text-base-red font-medium flex items-center gap-1">
+            <p className="mt-3 text-xs text-base-red font-medium flex items-center gap-1">
               <AlertCircle size={12} />
               {error}
             </p>
@@ -227,7 +270,11 @@ function DeleteConfirmDialog({
   onConfirm: () => void;
 }) {
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+    <Dialog
+      open={open}
+      disablePointerDismissal={true}
+      onOpenChange={(o) => !o && onClose()}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base-red">
@@ -327,8 +374,8 @@ export default function TicPage() {
   }
 
   return (
-    <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
-      <header className="mb-6 w-full max-w-none px-4">
+    <div className="flex flex-col h-[calc(100vh-80px)] md:h-screen bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
+      <header className="mb-4 shrink-0 w-full max-w-none px-4">
         <div className="flex items-center gap-2">
           <Monitor size={22} className="text-institucional-green" aria-hidden="true" />
           <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
@@ -337,73 +384,68 @@ export default function TicPage() {
         </div>
       </header>
 
-      <div className="w-full max-w-none px-4 space-y-4">
+      <div className="flex-1 flex flex-col min-h-0 w-full max-w-none px-4 space-y-4">
         {/* Barra de herramientas */}
-            <div className="flex flex-col sm:flex-row items-center gap-3">
-              <select
-                value={selectedNaveId}
-                onChange={(e) => setSelectedNaveId(e.target.value)}
-                className="h-9 w-full sm:w-auto min-w-[200px] rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-              >
-                <option value="">Todas las naves</option>
-                {naves.map((n) => (
-                  <option key={n.id} value={n.id}>
-                    {n.nombre}
-                  </option>
-                ))}
-              </select>
-              <div className="relative flex-1 w-full">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
-                />
-                <input
-                  type="text"
-                  placeholder="Buscar por nombre, CIU o cédula..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-                />
-              </div>
-              <Button
-                onClick={handleNuevo}
-                className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
-              >
-                <Plus size={14} className="mr-2" />
-                Nuevo Comerciante
-              </Button>
-            </div>
+        <div className="shrink-0 flex flex-col sm:flex-row items-center gap-3">
+          <select
+            value={selectedNaveId}
+            onChange={(e) => setSelectedNaveId(e.target.value)}
+            className="h-9 w-full sm:w-auto min-w-[200px] rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+          >
+            <option value="">Todas las naves</option>
+            {naves.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.nombre}
+              </option>
+            ))}
+          </select>
+          <div className="relative flex-1 w-full">
+            <Search
+              size={14}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-institucional-whiteSmokeBlack"
+            />
+            <input
+              type="text"
+              placeholder="Buscar por nombre, CIU o cédula..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-institucional-whiteSmokeBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+            />
+          </div>
+          <Button
+            onClick={handleNuevo}
+            className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
+          >
+            <Plus size={14} className="mr-2" />
+            Nuevo Comerciante
+          </Button>
+        </div>
 
-            {/* Tabla de comerciantes */}
-            <div className="rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
-              <div className="px-5 py-3 border-b border-institucional-whiteSmokeBlack/15">
-                <p className="text-xs font-medium text-institucional-whiteSmokeBlack">
-                  {comerciantesFiltrados.length} de {comerciantes.length} comerciantes
-                </p>
-              </div>
-              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-                <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-institucional-green/10">
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+        {/* Tabla de comerciantes */}
+        <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
+          <div className="flex-1 overflow-x-auto overflow-y-auto lg:h-[calc(100vh-240px)]">
+            <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10 bg-[#e6efe9]">
+                    <tr className="bg-[#e6efe9]">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         CIU
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         CÉDULA
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         CONTRIBUYENTE
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         ACTIVIDAD
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         NAVE
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         PUESTO
                       </th>
-                      <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
                         ACCIONES
                       </th>
                     </tr>

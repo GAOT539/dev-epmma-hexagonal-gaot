@@ -9,6 +9,7 @@ import {
   Settings,
   BarChart3,
   Monitor,
+  Building2,
   ScrollText,
   LogOut,
   User,
@@ -24,6 +25,7 @@ const allLinks = [
   { href: "/listas",        label: "Listas",     Icon: ClipboardList },
   { href: "/reportes",      label: "Reportes",   Icon: BarChart3     },
   { href: "/catastro",      label: "Catastro",   Icon: Monitor       },
+  { href: "/naves",         label: "Naves",      Icon: Building2     },
   { href: "/auditoria",     label: "Auditoría",  Icon: ScrollText    },
   { href: "/configuracion", label: "Config",     Icon: Settings      },
 ] as const;
