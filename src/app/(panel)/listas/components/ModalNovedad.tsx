@@ -88,7 +88,7 @@ function formatDate(date: Date) {
 export function InfoItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-institucional-whiteSmoke p-2.5">
-      <p className="text-[10px] font-medium text-gray-700 uppercase tracking-wider">
+      <p className="text-xs font-medium text-gray-700 uppercase tracking-wider">
         {label}
       </p>
       <p className="text-sm font-semibold text-base-eerieBlack mt-0.5 truncate">
@@ -388,7 +388,7 @@ export function ComercianteModal({
               {estadoConfig.label}
             </span>
             {estadoActual === "Permiso" && (
-              <span className="text-[10px] text-acento-morado font-medium">
+              <span className="text-xs text-acento-morado font-medium">
                 (Permiso activo)
               </span>
             )}
@@ -483,7 +483,7 @@ export function ComercianteModal({
 
               {observacionAnterior && (
                 <div className="mt-2 rounded-lg bg-blue-100/60 p-3 ring-1 ring-blue-200">
-                  <p className="text-[11px] font-semibold text-blue-700 mb-1">
+                  <p className="text-xs font-semibold text-blue-700 mb-1">
                     📋 Observación anterior:
                   </p>
                   <p className="text-xs text-blue-900 leading-relaxed">
@@ -503,7 +503,7 @@ export function ComercianteModal({
                   {tienePermisoPrevio ? "Editar Permiso" : "Asignar Permiso"}
                 </h3>
                 {tienePermisoPrevio && (
-                  <span className="text-[10px] font-semibold text-acento-morado bg-purple-100 rounded-full px-2.5 py-0.5">
+                  <span className="text-xs font-semibold text-acento-morado bg-purple-100 rounded-full px-2.5 py-0.5">
                     Permiso Activo
                   </span>
                 )}

@@ -96,56 +96,55 @@ export default function ListasPage() {
   const fechaStr = formatDate(selectedDate);
 
   // ── Puestos y Comerciantes de la Nave con estado ───────────────────────────
-  const puestosConEstado = useMemo(() => {
-    if (!nave) return [];
-    const asistenciaDelDia = getAsistenciaPorFecha(fechaStr);
+  const puestosConEstado = !nave
+    ? []
+    : (() => {
+        const asistenciaDelDia = getAsistenciaPorFecha(fechaStr);
 
-    return nave.puestos.map((puesto) => {
-      const comerciante = puesto.comercianteId
-        ? getComerciantePorId(puesto.comercianteId)
-        : null;
+        return nave.puestos.map((puesto) => {
+          const comerciante = puesto.comercianteId
+            ? getComerciantePorId(puesto.comercianteId)
+            : null;
 
-      let estado: EstadoAsistencia | "Vacante" = "Vacante";
-      if (puesto.estado === "Ocupado" && comerciante) {
-        const overrideKey = `${comerciante.idInterno}:${fechaStr}`;
-        if (overrides[overrideKey]) {
-          estado = overrides[overrideKey];
-        } else {
-          const registro = asistenciaDelDia.find(
-            (r) => r.comercianteId === comerciante.idInterno
-          );
-          estado = registro?.estado ?? "Pendiente";
-        }
-      }
-      return { puesto, comerciante, estado };
-    });
-  }, [nave, fechaStr, overrides]);
+          let estado: EstadoAsistencia | "Vacante" = "Vacante";
+          if (puesto.estado === "Ocupado" && comerciante) {
+            const overrideKey = `${comerciante.idInterno}:${fechaStr}`;
+            if (overrides[overrideKey]) {
+              estado = overrides[overrideKey];
+            } else {
+              const registro = asistenciaDelDia.find(
+                (r) => r.comercianteId === comerciante.idInterno
+              );
+              estado = registro?.estado ?? "Pendiente";
+            }
+          }
+          return { puesto, comerciante, estado };
+        });
+      })();
 
   // ── Filtro Global y Ordenamiento Alfanumérico por Código de Puesto ────────
-  const comerciantesFiltrados = useMemo(() => {
-    const q = normalizeText(searchQuery.trim());
-    const filtrados = q
-      ? puestosConEstado.filter((item) => {
-          if (item.puesto.estado === "Vacante") {
-            return normalizeText(item.puesto.codigo).includes(q);
-          }
-          const c = item.comerciante;
-          if (!c) return normalizeText(item.puesto.codigo).includes(q);
-          return (
-            normalizeText(c.contribuyente).includes(q) ||
-            normalizeText(c.ciu).includes(q) ||
-            normalizeText(item.puesto.codigo).includes(q)
-          );
-        })
-      : puestosConEstado;
-
-    return [...filtrados].sort((a, b) =>
-      a.puesto.codigo.localeCompare(b.puesto.codigo, undefined, {
-        numeric: true,
-        sensitivity: "base",
+  const q = normalizeText(searchQuery.trim());
+  const filtrados = q
+    ? puestosConEstado.filter((item) => {
+        if (item.puesto.estado === "Vacante") {
+          return normalizeText(item.puesto.codigo).includes(q);
+        }
+        const c = item.comerciante;
+        if (!c) return normalizeText(item.puesto.codigo).includes(q);
+        return (
+          normalizeText(c.contribuyente).includes(q) ||
+          normalizeText(c.ciu).includes(q) ||
+          normalizeText(item.puesto.codigo).includes(q)
+        );
       })
-    );
-  }, [puestosConEstado, searchQuery]);
+    : puestosConEstado;
+
+  const comerciantesFiltrados = [...filtrados].sort((a, b) =>
+    a.puesto.codigo.localeCompare(b.puesto.codigo, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    })
+  );
 
   // Días anteriores (excluyendo hoy, para el contenedor con scroll independiente)
   const DIAS_MOSTRADOS = 14;

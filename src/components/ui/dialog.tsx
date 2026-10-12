@@ -47,7 +47,7 @@ function DialogContent({
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
-  onInteractOutside?: (event: any) => void
+  onInteractOutside?: (event: React.MouseEvent | MouseEvent | TouchEvent) => void
 }) {
   return (
     <DialogPortal>

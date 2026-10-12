@@ -178,8 +178,6 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
   const hoy = new Date();
 
   for (const comerciante of allComerciantes) {
-    let estadoAnterior: EstadoAsistencia = "Pendiente";
-
     for (let d = 30; d >= 0; d--) {
       const fecha = format(subDays(hoy, d), "yyyy-MM-dd");
       const key = fecha;
@@ -220,8 +218,6 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
       const existing = map.get(key) ?? [];
       existing.push(registro);
       map.set(key, existing);
-
-      estadoAnterior = estado;
     }
   }
 

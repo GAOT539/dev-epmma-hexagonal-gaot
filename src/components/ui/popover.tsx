@@ -18,16 +18,14 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
-  avoidCollisions = true,
   collisionBoundary,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset" | "collisionBoundary"
   > & {
     avoidCollisions?: boolean
-    collisionBoundary?: any
   }) {
   return (
     <PopoverPrimitive.Portal>

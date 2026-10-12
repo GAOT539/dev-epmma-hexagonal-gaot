@@ -1,19 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Monitor,
-  Upload,
-  FileSpreadsheet,
   AlertCircle,
   CheckCircle2,
-  X,
-  FileText,
   Plus,
   Pencil,
   Trash2,
   Search,
-  Users,
 } from "lucide-react";
 // Removido importador
 import {
@@ -98,11 +93,9 @@ function ComercianteFormDialog({
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),
+        ...(cedula.trim() && { cedula: cedula.trim() }),
         ...(puesto.trim() && { puestoId: puesto.trim(), naveId }),
       });
-      if (cedula.trim()) {
-        comerciante.cedula = cedula.trim();
-      }
       toast.success("Comerciante actualizado", {
         description: `${contribuyente} editado correctamente.`,
       });
@@ -111,7 +104,7 @@ function ComercianteFormDialog({
         setError("Debe seleccionar Nave e ingresar un Puesto.");
         return;
       }
-      const nuevo = await comercianteService.crearComerciante({
+      await comercianteService.crearComerciante({
         ciu: ciu.trim(),
         contribuyente: contribuyente.trim(),
         actividad: actividad.trim(),

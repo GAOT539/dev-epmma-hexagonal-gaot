@@ -16,7 +16,7 @@ export function obtenerSupervisoresDisponibles(): string[] {
 
 // ── Datos iniciales simulados (compatibilidad con mercado.mock.ts) ───────────
 
-let navesData: Nave[] = [
+const navesData: Nave[] = [
   {
     id: "nave-a",
     nombre: "NAVE A",

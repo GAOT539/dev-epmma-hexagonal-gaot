@@ -97,7 +97,7 @@ export function PuestoCard({
           <p className="text-sm font-medium text-gray-700">
             {puesto.codigo}
           </p>
-          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-[10px] font-semibold text-gray-700 mt-0.5">
+          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-xs font-semibold text-gray-700 mt-0.5">
             Vacante
           </span>
         </div>
@@ -150,16 +150,16 @@ export function PuestoCard({
                 : "Sin asignar"}
             </p>
             <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] text-gray-700 font-medium">
+              <span className="text-xs text-gray-700 font-semibold">
                 {puesto.codigo}
               </span>
               {comerciante && (
-                <span className="text-[10px] text-gray-700 font-medium">
+                <span className="text-xs text-gray-700 font-medium">
                   CIU: {comerciante.ciu}
                 </span>
               )}
               <span
-                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${config.bg} ${config.text}`}
+                className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${config.bg} ${config.text}`}
               >
                 {config.label}
               </span>
@@ -291,7 +291,7 @@ export function PuestoCard({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[11px] font-medium text-gray-700">
+              <label className="text-xs font-medium text-gray-700">
                 Fecha de Inicio
               </label>
               <input
@@ -302,7 +302,7 @@ export function PuestoCard({
               />
             </div>
             <div>
-              <label className="text-[11px] font-medium text-gray-700">
+              <label className="text-xs font-medium text-gray-700">
                 Fecha de Fin
               </label>
               <input
@@ -315,7 +315,7 @@ export function PuestoCard({
           </div>
 
           {permisoError && (
-            <p className="text-[11px] text-base-red font-medium">{permisoError}</p>
+            <p className="text-xs text-base-red font-medium">{permisoError}</p>
           )}
 
           <div className="flex justify-end gap-2">
@@ -453,7 +453,7 @@ export function TreemapView({
                 }
               >
                 {/* Código de puesto */}
-                <span className="text-[9px] font-bold text-white/80 uppercase tracking-wider">
+                <span className="text-xs font-bold text-white/90 uppercase tracking-wider">
                   {puesto.codigo}
                 </span>
 
@@ -462,18 +462,18 @@ export function TreemapView({
                     <p className="text-xs font-bold text-white leading-tight truncate">
                       {comerciante.contribuyente}
                     </p>
-                    <p className="text-[9px] text-white/75 font-mono mt-1">
+                    <p className="text-xs text-white/80 font-mono mt-1">
                       {comerciante.ciu}
                     </p>
                   </div>
                 ) : (
-                  <p className="mt-auto text-[10px] text-white/70 font-medium">
+                  <p className="mt-auto text-xs text-white/80 font-medium">
                     Vacante
                   </p>
                 )}
 
                 {/* Badge de estado */}
-                <span className="absolute top-2 right-2 text-[8px] font-bold text-white bg-black/30 rounded px-1.5 py-0.5">
+                <span className="absolute top-2 right-2 text-xs font-bold text-white bg-black/35 rounded px-2 py-0.5">
                   {config.label}
                 </span>
               </div>

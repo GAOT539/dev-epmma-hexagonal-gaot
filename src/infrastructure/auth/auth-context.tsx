@@ -42,21 +42,20 @@ const STORAGE_KEY = "epmma_auth_user";
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<Usuario | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Restaurar sesión al montar
-  useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setUser(JSON.parse(stored));
+  const [user, setUser] = useState<Usuario | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const stored = sessionStorage.getItem(STORAGE_KEY);
+        if (stored) {
+          return JSON.parse(stored);
+        }
+      } catch {
+        // sessionStorage no disponible o datos corruptos
       }
-    } catch {
-      // sessionStorage no disponible o datos corruptos
     }
-    setIsLoading(false);
-  }, []);
+    return null;
+  });
+  const [isLoading] = useState(false);
 
   // Persistir usuario en sessionStorage
   useEffect(() => {

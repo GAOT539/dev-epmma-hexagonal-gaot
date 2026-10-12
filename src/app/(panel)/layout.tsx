@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Home,
   ClipboardList,
   Settings,
   BarChart3,
@@ -142,7 +141,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             <p className="truncate text-sm font-bold leading-tight text-base-eerieBlack">
               EPMMA
             </p>
-            <p className="truncate text-[10px] leading-tight text-gray-700 font-medium">
+            <p className="truncate text-xs leading-tight text-gray-700 font-medium">
               Sistema de Gestión
             </p>
           </div>
@@ -176,7 +175,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
               <p className="truncate text-xs font-semibold text-base-eerieBlack">
                 {user.nombres} {user.apellidos}
               </p>
-              <p className="truncate text-[10px] text-gray-700 font-medium">
+              <p className="truncate text-xs text-gray-700 font-medium">
                 {user.rol.replace("_", " ")}
               </p>
             </div>
@@ -192,7 +191,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
             Cerrar sesión
           </button>
 
-          <p className="text-[10px] text-gray-700 font-medium">
+          <p className="text-xs text-gray-700 font-medium">
             © {new Date().getFullYear()} EPMMA
           </p>
         </div>

@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import {
   BarChart3,
-  Calendar as CalendarIcon,
   Download,
   Search,
   User,
@@ -19,7 +18,6 @@ import {
 } from "@/infrastructure/mocks/mercado.mock";
 import type {
   Comerciante,
-  EstadoAsistencia,
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
 import { useAuth } from "@/infrastructure/auth/auth-context";
@@ -617,7 +615,7 @@ export default function ReportesPage() {
                             <div className="h-5 bg-green-700 mx-auto" style={{ width: "100%" }} />
                           ) : (
                             <span
-                              className={`inline-flex h-5 w-7 items-center justify-center rounded text-[9px] font-bold ${config.bg} ${config.text}`}
+                              className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
                             >
                               {ESTADO_LABELS[estado]}
                             </span>
@@ -633,7 +631,7 @@ export default function ReportesPage() {
                             100% Asistencia
                           </span>
                         ) : (
-                          <span className="line-clamp-2 text-[10px] font-semibold text-gray-900">
+                          <span className="line-clamp-2 text-xs font-semibold text-gray-900">
                             {row.observaciones || "—"}
                           </span>
                         )}
@@ -691,7 +689,7 @@ export default function ReportesPage() {
                           <div className="h-5 bg-green-700 mx-auto" style={{ width: "100%" }} />
                         ) : (
                           <span
-                            className={`inline-flex h-6 w-8 items-center justify-center rounded text-[10px] font-bold ${config.bg} ${config.text}`}
+                            className={`inline-flex min-h-6 min-w-8 px-1.5 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
                           >
                             {ESTADO_LABELS[estado]}
                           </span>
@@ -706,7 +704,7 @@ export default function ReportesPage() {
                           ✓ 100% Asistencia
                         </span>
                       ) : (
-                        <span className="text-[10px] font-semibold text-gray-900">
+                        <span className="text-xs font-semibold text-gray-900">
                           {reporteIndividual.observaciones || "—"}
                         </span>
                       )}
@@ -739,7 +737,7 @@ export default function ReportesPage() {
             return (
               <div key={estado} className="flex items-center gap-1.5">
                 <span
-                  className={`inline-flex h-4 w-5 items-center justify-center rounded text-[8px] font-bold ${config.bg} ${config.text}`}
+                  className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
                 >
                   {label}
                 </span>

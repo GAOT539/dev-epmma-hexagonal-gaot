@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   ScrollText,
   Search,
-  Calendar as CalendarIcon,
   User,
   ChevronLeft,
   ChevronRight,
@@ -13,7 +12,6 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
-import { es } from "date-fns/locale";
 import { getLogsFiltrados } from "@/infrastructure/mocks/auditoria.mock";
 import { getUsuarios } from "@/infrastructure/mocks/auth.mock";
 import { DateRangePicker } from "@/components/ui/date-range-picker";

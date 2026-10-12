@@ -4,7 +4,6 @@ import type { Rol, Usuario } from "@/domain/models/comerciante.model";
 
 // ── Datos de usuarios simulados ──────────────────────────────────────────────
 
-const SUPERADMIN_USER = "admin";
 const SUPERADMIN_PASS = "1500888985*admin";
 
 interface MockUsuario extends Usuario {

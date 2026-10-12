@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -33,20 +33,19 @@ export default function ConfiguracionPermisosPage() {
     for (const sup of supervisores) {
       initial[sup.id] = { persistencia: false, vistaDefault: "lista" };
     }
+    if (typeof window !== "undefined") {
+      try {
+        const guardado = localStorage.getItem("epmma_supervisor_configs");
+        if (guardado) {
+          const parsed = JSON.parse(guardado);
+          return { ...initial, ...parsed };
+        }
+      } catch (e) {
+        console.error("Error al leer configuraciones de localStorage", e);
+      }
+    }
     return initial;
   });
-
-  useEffect(() => {
-    try {
-      const guardado = localStorage.getItem("epmma_supervisor_configs");
-      if (guardado) {
-        const parsed = JSON.parse(guardado);
-        setConfigs((prev) => ({ ...prev, ...parsed }));
-      }
-    } catch (e) {
-      console.error("Error al leer configuraciones de localStorage", e);
-    }
-  }, []);
 
   function togglePersistencia(supId: string) {
     setConfigs((prev) => {
