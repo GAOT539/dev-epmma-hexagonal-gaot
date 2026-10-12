@@ -374,7 +374,7 @@ export default function TicPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] md:h-screen bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
+    <div className="flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
       <header className="mb-4 shrink-0 w-full max-w-none px-4">
         <div className="flex items-center gap-2">
           <Monitor size={22} className="text-institucional-green" aria-hidden="true" />
@@ -423,9 +423,9 @@ export default function TicPage() {
 
         {/* Tabla de comerciantes */}
         <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
-          <div className="flex-1 overflow-x-auto overflow-y-auto lg:h-[calc(100vh-240px)]">
-            <table className="w-full text-xs">
-                  <thead className="sticky top-0 z-10 bg-[#e6efe9]">
+          <div className="flex-1 overflow-y-auto lg:h-[calc(100dvh-240px)] p-3 md:p-0">
+            <table className="w-full text-sm block md:table">
+                  <thead className="hidden md:table-header-group sticky top-0 z-10 bg-[#e6efe9]">
                     <tr className="bg-[#e6efe9]">
                       <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                         CIU
@@ -450,7 +450,7 @@ export default function TicPage() {
                       </th>
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="block md:table-row-group space-y-3 md:space-y-0">
                     {comerciantesFiltrados.map((com) => {
                       const isDisabled = !!com.deshabilitadoPor;
                       // Buscar nave y puesto (solo visual)
@@ -468,35 +468,44 @@ export default function TicPage() {
                       return (
                       <tr
                         key={com.idInterno}
-                        className={`border-t border-institucional-whiteSmokeBlack/10 transition-colors ${
-                          isDisabled ? "opacity-50 bg-institucional-whiteSmoke/30" : "hover:bg-institucional-whiteSmoke/50"
+                        className={`flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors ${
+                          isDisabled ? "opacity-60 bg-institucional-whiteSmoke/30" : "hover:bg-institucional-whiteSmoke/50"
                         }`}
                       >
-                        <td className="px-4 py-2.5 font-mono text-acento-azul1 font-medium">
-                          {com.ciu}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-mono text-acento-azul1 font-medium text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">CIU:</span>
+                          <span>{com.ciu}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-900">
-                          {com.cedula}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Cédula:</span>
+                          <span>{com.cedula}</span>
                         </td>
-                        <td className="px-4 py-2.5 font-semibold text-base-eerieBlack flex flex-col gap-1">
-                          <span>{com.contribuyente}</span>
-                          {isDisabled && (
-                            <span className="inline-flex max-w-fit rounded-full bg-base-red/10 px-2 py-0.5 text-[10px] font-medium text-base-red" title={`Deshabilitado por: ${com.deshabilitadoPor}`}>
-                              Deshabilitado
-                            </span>
-                          )}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Contribuyente:</span>
+                          <div className="flex flex-col items-end md:items-start gap-1">
+                            <span>{com.contribuyente}</span>
+                            {isDisabled && (
+                              <span className="inline-flex max-w-fit rounded-full bg-base-red/10 px-2 py-0.5 text-xs font-medium text-base-red" title={`Deshabilitado por: ${com.deshabilitadoPor}`}>
+                                Deshabilitado
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-900">
-                          {com.actividad}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Actividad:</span>
+                          <span>{com.actividad}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-900">
-                          {naveNombre}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
+                          <span>{naveNombre}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-gray-900 font-mono">
-                          {puestoCodigo}
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 font-mono text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Puesto:</span>
+                          <span>{puestoCodigo}</span>
                         </td>
-                        <td className="px-4 py-2.5 text-center">
-                          <div className="flex items-center justify-center gap-1">
+                        <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
+                          <div className="flex items-center justify-end md:justify-center gap-1">
                             {!isDisabled && (
                               <button
                                 type="button"
@@ -530,10 +539,10 @@ export default function TicPage() {
                       </tr>
                     )})}
                     {comerciantesFiltrados.length === 0 && (
-                      <tr>
+                      <tr className="block md:table-row">
                         <td
-                          colSpan={5}
-                          className="px-4 py-10 text-center text-gray-700"
+                          colSpan={7}
+                          className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                         >
                           No se encontraron comerciantes.
                         </td>

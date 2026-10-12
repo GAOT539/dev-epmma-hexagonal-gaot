@@ -35,7 +35,7 @@ const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: string }> 
   Observacion: { bg: "bg-blue-600", text: "text-white", hex: "#2563EB" },
   Permiso: { bg: "bg-purple-700", text: "text-white", hex: "#7E22CE" },
   Vacante: { bg: "bg-gray-700", text: "text-white", hex: "#374151" },
-  Pendiente: { bg: "bg-institucional-whiteSmokeBlack/40", text: "text-base-white", hex: "#C4C4C4" },
+  Pendiente: { bg: "bg-slate-600", text: "text-white", hex: "#475569" },
 };
 
 const ESTADO_LABELS: Record<string, string> = {
@@ -370,7 +370,7 @@ export default function ReportesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
+    <div className="min-h-[100dvh] bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
       <header className="mb-6 max-w-full mx-auto">
         <div className="flex items-center gap-2">
           <BarChart3 size={22} className="text-institucional-green" aria-hidden="true" />
@@ -621,24 +621,24 @@ export default function ReportesPage() {
                     <td className="sticky left-0 bg-base-white px-3 py-2 text-gray-700 font-medium z-10">
                       {i + 1}
                     </td>
-                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                    <td className="px-3 py-2 text-sm font-mono font-medium text-acento-azul1">
                       {row.comerciante.ciu}
                     </td>
-                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                    <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
                       {row.comerciante.cedula}
                     </td>
-                    <td className="sticky left-8 bg-base-white px-3 py-2 font-semibold text-base-eerieBlack z-10">
+                    <td className="sticky left-8 bg-base-white px-3 py-2 text-sm font-semibold text-base-eerieBlack z-10">
                       <div className="truncate max-w-[200px]">
                         {row.comerciante.contribuyente}
                       </div>
                     </td>
-                    <td className="px-3 py-2 font-semibold text-gray-900">
+                    <td className="px-3 py-2 text-sm font-semibold text-gray-900">
                       {row.comerciante.actividad}
                     </td>
-                    <td className="px-3 py-2 font-medium text-base-eerieBlack">
+                    <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
                       {naves.find((n) => n.id === selectedNaveId)?.nombre}
                     </td>
-                    <td className="px-2 py-2 text-center font-medium text-base-eerieBlack">
+                    <td className="px-2 py-2 text-center text-sm font-mono font-medium text-base-eerieBlack">
                       {row.puestoCode}
                     </td>
                     {row.estados.map((estado, j) => {
@@ -691,7 +691,7 @@ export default function ReportesPage() {
                   <p className="font-bold text-base-eerieBlack">
                     {reporteIndividual.comerciante.contribuyente}
                   </p>
-                  <p className="text-xs text-gray-700 font-medium">
+                  <p className="text-sm text-gray-700 font-medium">
                     CIU: {reporteIndividual.comerciante.ciu} · Cédula:{" "}
                     {reporteIndividual.comerciante.cedula}
                   </p>

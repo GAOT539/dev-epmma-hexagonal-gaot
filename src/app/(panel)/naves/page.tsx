@@ -168,7 +168,7 @@ export default function NavesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
+    <div className="min-h-[100dvh] bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
       {/* ── Encabezado Limpio ── */}
       <header className="mb-6 w-full max-w-none px-4">
         <div className="flex items-center gap-2">
@@ -213,9 +213,9 @@ export default function NavesPage() {
               {navesFiltradas.length} de {naves.length} naves
             </p>
           </div>
-          <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10">
+          <div className="max-h-[500px] overflow-y-auto p-3 md:p-0">
+            <table className="w-full text-sm block md:table">
+              <thead className="hidden md:table-header-group sticky top-0 z-10">
                 <tr className="bg-institucional-green/10">
                   <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                     ID
@@ -234,35 +234,39 @@ export default function NavesPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="block md:table-row-group space-y-3 md:space-y-0">
                 {navesFiltradas.map((nave) => (
                   <tr
                     key={nave.id}
-                    className="border-t border-institucional-whiteSmokeBlack/10 transition-colors hover:bg-institucional-whiteSmoke/50"
+                    className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors hover:bg-institucional-whiteSmoke/50"
                   >
                     {/* ID */}
-                    <td className="px-4 py-2.5 font-mono text-acento-azul1 font-medium">
-                      {nave.id}
+                    <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-mono text-acento-azul1 font-medium text-sm md:table-cell">
+                      <span className="font-semibold text-gray-700 md:hidden">ID:</span>
+                      <span>{nave.id}</span>
                     </td>
 
                     {/* NAVE */}
-                    <td className="px-4 py-2.5 font-semibold text-base-eerieBlack">
-                      {nave.nombre}
+                    <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
+                      <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
+                      <span>{nave.nombre}</span>
                     </td>
 
                     {/* CANTIDAD DE PUESTOS */}
-                    <td className="px-4 py-2.5 text-center text-gray-900 font-mono">
-                      {nave.cantidadPuestos}
+                    <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 font-mono text-sm md:text-center md:table-cell">
+                      <span className="font-semibold text-gray-700 md:hidden">Cantidad de Puestos:</span>
+                      <span>{nave.cantidadPuestos}</span>
                     </td>
 
                     {/* SUPERVISOR(ES) */}
-                    <td className="px-4 py-2.5 text-gray-700">
-                      <div className="flex flex-wrap gap-1">
+                    <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-700 text-sm md:table-cell">
+                      <span className="font-semibold text-gray-700 md:hidden">Supervisor(es):</span>
+                      <div className="flex flex-wrap justify-end md:justify-start gap-1">
                         {nave.supervisores && nave.supervisores.length > 0 ? (
                           nave.supervisores.map((sup, idx) => (
                             <span
                               key={idx}
-                              className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
+                              className="inline-flex items-center rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10"
                             >
                               {sup}
                             </span>
@@ -276,8 +280,9 @@ export default function NavesPage() {
                     </td>
 
                     {/* ACCIONES */}
-                    <td className="px-4 py-2.5 text-center">
-                      <div className="flex items-center justify-center gap-1">
+                    <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
+                      <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
+                      <div className="flex items-center justify-end md:justify-center gap-1">
                         <button
                           type="button"
                           onClick={() => handleOpenEditar(nave)}
@@ -303,10 +308,10 @@ export default function NavesPage() {
                 ))}
 
                 {navesFiltradas.length === 0 && (
-                  <tr>
+                  <tr className="block md:table-row">
                     <td
                       colSpan={5}
-                      className="px-4 py-10 text-center text-gray-700"
+                      className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                     >
                       No se encontraron naves que coincidan con la búsqueda.
                     </td>

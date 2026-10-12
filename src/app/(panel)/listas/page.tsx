@@ -58,39 +58,39 @@ const ESTADO_CONFIG: Record<
   { bg: string; text: string; ring: string; label: string }
 > = {
   Presente: {
-    bg: "bg-acento-verdeOliva1/15",
-    text: "text-acento-verdeOliva1",
-    ring: "ring-acento-verdeOliva1/30",
+    bg: "bg-green-700",
+    text: "text-white",
+    ring: "ring-green-700/30",
     label: "Presente",
   },
   Ausente: {
-    bg: "bg-base-red/10",
-    text: "text-base-red",
-    ring: "ring-base-red/30",
+    bg: "bg-red-700",
+    text: "text-white",
+    ring: "ring-red-700/30",
     label: "Ausente",
   },
   Observacion: {
-    bg: "bg-acento-azul1/15",
-    text: "text-acento-azul1",
-    ring: "ring-acento-azul1/30",
+    bg: "bg-blue-600",
+    text: "text-white",
+    ring: "ring-blue-600/30",
     label: "Observación",
   },
   Permiso: {
-    bg: "bg-acento-morado/15",
-    text: "text-acento-morado",
-    ring: "ring-acento-morado/30",
+    bg: "bg-purple-700",
+    text: "text-white",
+    ring: "ring-purple-700/30",
     label: "Permiso",
   },
   Pendiente: {
-    bg: "bg-institucional-whiteSmokeBlack/15",
-    text: "text-gray-700",
-    ring: "ring-institucional-whiteSmokeBlack/30",
+    bg: "bg-slate-600",
+    text: "text-white",
+    ring: "ring-slate-600/30",
     label: "Pendiente",
   },
   Vacante: {
-    bg: "bg-institucional-whiteSmokeBlack/10",
-    text: "text-gray-700",
-    ring: "ring-institucional-whiteSmokeBlack/20",
+    bg: "bg-gray-700",
+    text: "text-white",
+    ring: "ring-gray-700/30",
     label: "Vacante",
   },
 };
@@ -1104,11 +1104,11 @@ function TreemapView({
           {items.map(({ puesto, comerciante, estado }) => {
             const config = ESTADO_CONFIG[estado];
             const bgColorMap: Record<string, string> = {
-              Presente: "bg-acento-verdeOliva1 text-white",
+              Presente: "bg-green-700 text-white",
               Ausente: "bg-red-700 text-white",
-              Observacion: "bg-acento-azul1 text-white",
-              Permiso: "bg-acento-morado text-white",
-              Pendiente: "bg-amber-600 text-white",
+              Observacion: "bg-blue-600 text-white",
+              Permiso: "bg-purple-700 text-white",
+              Pendiente: "bg-slate-600 text-white",
               Vacante: "bg-gray-700 text-white",
             };
 
@@ -1172,17 +1172,17 @@ function TreemapView({
         ).map((key) => {
           const config = ESTADO_CONFIG[key];
           const bgMap: Record<string, string> = {
-            Presente: "bg-acento-verdeOliva1",
+            Presente: "bg-green-700",
             Ausente: "bg-red-700",
-            Observacion: "bg-acento-azul1",
-            Permiso: "bg-acento-morado",
-            Pendiente: "bg-amber-600",
+            Observacion: "bg-blue-600",
+            Permiso: "bg-purple-700",
+            Pendiente: "bg-slate-600",
             Vacante: "bg-gray-700",
           };
           return (
             <div key={key} className="flex items-center gap-1.5">
               <div className={`h-3 w-3 rounded-sm ${bgMap[key]}`} />
-              <span className="text-[10px] text-institucional-whiteSmokeBlack font-medium">
+              <span className="text-xs text-gray-700 font-medium">
                 {config.label}
               </span>
             </div>

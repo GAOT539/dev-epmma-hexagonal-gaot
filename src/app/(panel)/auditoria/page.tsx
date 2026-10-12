@@ -126,7 +126,7 @@ export default function AuditoriaPage() {
   }
 
   return (
-    <div className="min-h-screen bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
+    <div className="min-h-[100dvh] bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
       <header className="mb-6 w-full max-w-none px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
@@ -161,7 +161,7 @@ export default function AuditoriaPage() {
           <div className="flex flex-wrap items-end gap-3">
             {/* Búsqueda */}
             <div className="flex-1 min-w-[200px]">
-              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Buscar
               </label>
               <div className="relative mt-1">
@@ -181,7 +181,7 @@ export default function AuditoriaPage() {
 
             {/* Filtro por usuario */}
             <div>
-              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Usuario
               </label>
               <select
@@ -203,7 +203,7 @@ export default function AuditoriaPage() {
 
             {/* DateRangePicker */}
             <div>
-              <label className="text-[10px] font-semibold text-gray-700 uppercase tracking-wider">
+              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                 Rango de Fechas
               </label>
               <Popover open={datePickerOpen} onOpenChange={setDatePickerOpen}>
@@ -257,9 +257,9 @@ export default function AuditoriaPage() {
             </p>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
+          <div className="p-3 md:p-0">
+            <table className="w-full text-sm block md:table">
+              <thead className="hidden md:table-header-group">
                 <tr className="bg-institucional-green/5">
                   <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[140px]">
                     Fecha / Hora
@@ -275,7 +275,7 @@ export default function AuditoriaPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="block md:table-row-group space-y-3 md:space-y-0">
                 {logsPaginados.map((log) => {
                   const accionColor =
                     ACCION_COLORES[log.accion] ?? {
@@ -285,45 +285,51 @@ export default function AuditoriaPage() {
                   return (
                     <tr
                       key={log.id}
-                      className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
+                      className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none hover:bg-institucional-whiteSmoke/50 transition-colors"
                     >
-                      <td className="px-4 py-3 text-base-eerieBlack">
-                        <p className="font-medium">
-                          {format(new Date(log.timestamp), "dd/MM/yyyy")}
-                        </p>
-                        <p className="text-[10px] text-gray-700 font-medium">
-                          {format(new Date(log.timestamp), "HH:mm:ss")}
-                        </p>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-base-eerieBlack text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Fecha / Hora:</span>
+                        <div className="text-right md:text-left">
+                          <p className="font-medium text-sm">
+                            {format(new Date(log.timestamp), "dd/MM/yyyy")}
+                          </p>
+                          <p className="text-xs text-gray-700 font-medium">
+                            {format(new Date(log.timestamp), "HH:mm:ss")}
+                          </p>
+                        </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Usuario:</span>
                         <div className="flex items-center gap-2">
                           <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-institucional-green/10 text-institucional-green">
                             <User size={12} />
                           </div>
-                          <span className="font-medium text-base-eerieBlack truncate max-w-[120px]">
+                          <span className="font-medium text-base-eerieBlack truncate max-w-[160px] md:max-w-[120px]">
                             {log.usuarioNombre}
                           </span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Acción:</span>
                         <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-[10px] font-semibold ${accionColor.bg} ${accionColor.text}`}
+                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${accionColor.bg} ${accionColor.text}`}
                         >
                           {log.accion.replace(/_/g, " ")}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-gray-700 max-w-[300px]">
-                        <span className="line-clamp-2">{log.detalle}</span>
+                      <td className="flex justify-between items-start py-1.5 md:px-4 md:py-3 text-gray-700 text-sm md:table-cell md:max-w-[300px]">
+                        <span className="font-semibold text-gray-700 md:hidden shrink-0 mr-2">Detalle:</span>
+                        <span className="line-clamp-2 text-right md:text-left">{log.detalle}</span>
                       </td>
                     </tr>
                   );
                 })}
 
                 {logsPaginados.length === 0 && (
-                  <tr>
+                  <tr className="block md:table-row">
                     <td
                       colSpan={4}
-                      className="px-4 py-10 text-center text-gray-700"
+                      className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                     >
                       No se encontraron registros con los filtros aplicados.
                     </td>

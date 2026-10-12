@@ -101,7 +101,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   // Mientras carga o no autenticado, mostrar skeleton
   if (isLoading || !isAuthenticated || !user) {
     return (
-      <div className="min-h-screen bg-institucional-whiteSmoke flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-institucional-whiteSmoke flex items-center justify-center">
         <div className="flex flex-col items-center gap-3">
           <div className="h-10 w-10 rounded-full border-4 border-institucional-green/30 border-t-institucional-green animate-spin" />
           <p className="text-sm text-gray-700 font-medium">Cargando...</p>
@@ -122,10 +122,10 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
   }
 
   return (
-    <div className="min-h-screen bg-institucional-whiteSmoke">
+    <div className="min-h-[100dvh] bg-institucional-whiteSmoke">
       {/* ── SIDEBAR DESKTOP (md+) ─────────────────────────────────────── */}
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-institucional-whiteSmokeBlack/30 bg-base-white shadow-sm md:flex"
+        className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r border-institucional-whiteSmokeBlack/30 bg-gray-50 shadow-sm md:flex"
         aria-label="Menú de navegación principal"
       >
         {/* Logo corporativo */}
@@ -212,7 +212,7 @@ export default function PanelLayout({ children }: { children: React.ReactNode })
 
       {/* ── BOTTOM NAVIGATION MOBILE (hasta md) ──────────────────────── */}
       <nav
-        className="fixed bottom-0 left-0 z-30 flex w-full items-stretch overflow-x-auto flex-nowrap border-t border-institucional-whiteSmokeBlack/30 bg-base-white shadow-[0_-1px_6px_rgba(0,0,0,0.07)] scrollbar-hide md:hidden"
+        className="fixed bottom-0 left-0 z-30 flex w-full items-stretch overflow-x-auto flex-nowrap gap-4 border-t border-institucional-whiteSmokeBlack/30 bg-gray-50 shadow-[0_-1px_6px_rgba(0,0,0,0.07)] scrollbar-hide px-3 md:hidden"
         aria-label="Navegación inferior"
       >
         {filteredLinks.map(({ href, label, Icon }) => (
