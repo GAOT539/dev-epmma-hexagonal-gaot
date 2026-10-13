@@ -1,0 +1,31 @@
+
+# REGLAS MAESTRAS DEL ASISTENTE IA PARA EPMMA
+
+## 1. REGLA DE INTERACCIÓN ESTRICTA (CERO CÓDIGO EN EL CHAT)
+
+- TIENES PROHIBIDO imprimir bloques de código fuente en tus respuestas del chat.
+- Debes aplicar todos los cambios silenciosamente de forma directa en los archivos del entorno de trabajo (workspace).
+- En el chat, ÚNICAMENTE debes devolver un REPORTE DETALLADO en formato Markdown indicando claramente:
+  a) Qué archivos exactos modificaste.
+  b) Qué lógica específica cambiaste en cada uno.
+
+## 2. REGLA DE ORO: MODIFICACIONES QUIRÚRGICAS
+
+- NO modifiques cosas que no son estrictamente necesarias modificar.
+- Limítate exclusivamente a resolver el problema o requerimiento solicitado sin alterar el código colindante, estilos no relacionados o configuraciones ajenas a la tarea.
+
+## 3. CERO PÉRDIDA DE FUNCIONALIDADES
+
+- Ninguna refactorización, limpieza o nueva implementación debe eliminar, romper o degradar las funcionalidades de negocio o de interfaz de usuario ya existentes.
+
+## 4. ARQUITECTURA HEXAGONAL OBLIGATORIA
+
+- El proyecto aplica estrictamente la Arquitectura Hexagonal.
+- La interfaz de usuario (Presentación / `src/app` / `src/components`) TIENE PROHIBIDO importar o consumir funciones directamente de la infraestructura (mocks, APIs, repositorios).
+- Todo el flujo de datos debe pasar obligatoriamente a través de los Casos de Uso / Servicios (`src/application/services`), respetando los puertos e interfaces del Dominio (`src/domain`).
+
+## 5. ENFOQUE MOBILE-FIRST OBLIGATORIO
+
+- El sistema debe ser 100% adaptable en todo momento.
+- El diseño debe construirse para que se vea y funcione perfecto primero en dispositivos móviles.
+- Las interfaces deben escalar a ancho completo (`w-full`) y reorganizarse de forma fluida en monitores de escritorio aprovechando los breakpoints de Tailwind (`md:`, `lg:`, `xl:`).

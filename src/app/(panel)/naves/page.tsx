@@ -225,7 +225,7 @@ export default function NavesPage() {
             />
             <Input
               type="text"
-              placeholder="Buscar nave por nombre o código..."
+              placeholder="Buscar nave por nombre o supervisor..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="h-9 w-full flex-1 rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
@@ -254,9 +254,6 @@ export default function NavesPage() {
               <thead className="hidden md:table-header-group sticky top-0 z-10">
                 <tr className="bg-institucional-green/10">
                   <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                    ID
-                  </th>
-                  <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                     NAVE
                   </th>
                   <th className="sticky top-0 bg-institucional-green/10 px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
@@ -274,7 +271,7 @@ export default function NavesPage() {
                 {cargando ? (
                   <tr className="block md:table-row">
                     <td
-                      colSpan={5}
+                      colSpan={4}
                       className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                     >
                       <div className="flex flex-col items-center justify-center gap-2">
@@ -289,12 +286,6 @@ export default function NavesPage() {
                     key={nave.id}
                     className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors hover:bg-institucional-whiteSmoke/50"
                   >
-                    {/* ID */}
-                    <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-mono text-acento-azul1 font-medium text-sm md:table-cell">
-                      <span className="font-semibold text-gray-700 md:hidden">ID:</span>
-                      <span>{nave.id}</span>
-                    </td>
-
                     {/* NAVE */}
                     <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
                       <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
@@ -360,7 +351,7 @@ export default function NavesPage() {
                 {!cargando && navesFiltradas.length === 0 && (
                   <tr className="block md:table-row">
                     <td
-                      colSpan={5}
+                      colSpan={4}
                       className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                     >
                       No se encontraron naves que coincidan con la búsqueda.

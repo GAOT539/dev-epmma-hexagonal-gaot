@@ -7,35 +7,34 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
-1. Límite de Alcance (Restricción de Backend)
 
-Trabaja únicamente en el Frontend.
+# REGLAS MAESTRAS DEL ASISTENTE IA PARA EPMMA
 
-Prohibido crear conexiones a bases de datos reales, endpoints de API reales o código de servidor backend.
+## 1. REGLA DE INTERACCIÓN ESTRICTA (CERO CÓDIGO EN EL CHAT)
 
-Toda la persistencia de datos y lógica de negocio debe funcionar 100% en memoria utilizando datos simulados (Mocks).
+- TIENES PROHIBIDO imprimir bloques de código fuente en tus respuestas del chat.
+- Debes aplicar todos los cambios silenciosamente de forma directa en los archivos del entorno de trabajo (workspace).
+- En el chat, ÚNICAMENTE debes devolver un REPORTE DETALLADO en formato Markdown indicando claramente:
+  a) Qué archivos exactos modificaste.
+  b) Qué lógica específica cambiaste en cada uno.
 
-2. Respeto Estricto a la Arquitectura Hexagonal
-El código debe dividirse rigurosamente en tres capas. Está prohibido mezclar responsabilidades:
+## 2. REGLA DE ORO: MODIFICACIONES QUIRÚRGICAS
 
-Capa de Dominio (src/domain/): Aquí solo viven las interfaces puras, tipos y modelos de datos (ej. Comerciante, Usuario, EstadoAsistencia). Cero dependencias de React o de bases de datos.
+- NO modifiques cosas que no son estrictamente necesarias modificar.
+- Limítate exclusivamente a resolver el problema o requerimiento solicitado sin alterar el código colindante, estilos no relacionados o configuraciones ajenas a la tarea.
 
-Capa de Infraestructura / Adaptadores (src/infrastructure/): Aquí viven los Mocks (mercado.mock.ts, auth.mock.ts). Toda la lógica de CRUD (crear, leer, actualizar, eliminar datos en memoria) y la autenticación se manejan aquí. La UI solo debe llamar a estas funciones exportadas.
+## 3. CERO PÉRDIDA DE FUNCIONALIDADES
 
-Capa de Presentación (src/app/ y src/components/): Exclusiva para la Interfaz de Usuario. Los componentes de React no deben contener lógica de negocio ni mutar datos directamente; solo deben consumir los modelos del Dominio y ejecutar las funciones de la Infraestructura.
+- Ninguna refactorización, limpieza o nueva implementación debe eliminar, romper o degradar las funcionalidades de negocio o de interfaz de usuario ya existentes.
 
-3. Reglas de Diseño y UI/UX
+## 4. ARQUITECTURA HEXAGONAL OBLIGATORIA
 
-Mobile-First: El diseño debe verse perfecto primero en dispositivos móviles y escalar a ancho completo (w-full) de forma fluida en monitores de escritorio.
+- El proyecto aplica estrictamente la Arquitectura Hexagonal.
+- La interfaz de usuario (Presentación / `src/app` / `src/components`) TIENE PROHIBIDO importar o consumir funciones directamente de la infraestructura (mocks, APIs, repositorios).
+- Todo el flujo de datos debe pasar obligatoriamente a través de los Casos de Uso / Servicios (`src/application/services`), respetando los puertos e interfaces del Dominio (`src/domain`).
 
-Usa los colores institucionales definidos en la configuración de Tailwind (institucional-green, etc.).
+## 5. ENFOQUE MOBILE-FIRST OBLIGATORIO
 
-Utiliza patrones modernos: Modales (Dialog) que no se cierren por accidente, tablas responsivas y DateRangePicker para calendarios.
-
-4. Formato de Entrega de Código
-
-No recortes el código: Cuando generes un bloque modificado, entrégalo completo. No uses comentarios flojos como // ...resto del código.
-
-Devuelve únicamente los bloques de código que necesitan ser modificados o creados.
-
-Finaliza siempre tu respuesta con un breve análisis de 3 viñetas explicando el impacto de los cambios.
+- El sistema debe ser 100% adaptable en todo momento.
+- El diseño debe construirse para que se vea y funcione perfecto primero en dispositivos móviles.
+- Las interfaces deben escalar a ancho completo (`w-full`) y reorganizarse de forma fluida en monitores de escritorio aprovechando los breakpoints de Tailwind (`md:`, `lg:`, `xl:`).

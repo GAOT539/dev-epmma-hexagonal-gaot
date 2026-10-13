@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Lock,
   Users,
-  Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/application/services/auth.service";
@@ -222,26 +221,6 @@ export default function ConfiguracionPage() {
                   <div className="flex-1 min-w-0 text-left">
                     <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Gestión de Usuarios</p>
                     <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Administración de accesos y roles del sistema.</p>
-                  </div>
-                  <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
-                </Link>
-              </li>
-            )}
-
-            {/* 3.5. Ingreso Masivo (solo TIC / SUPERADMIN, Sub-ruta nativa) */}
-            {isAdmin && (
-              <li>
-                <Link
-                  href="/configuracion/importacion"
-                  id="ingreso-masivo"
-                  className="group flex w-full items-center gap-4 rounded-xl bg-base-white px-5 py-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 transition-all duration-150 hover:ring-institucional-green/30 hover:bg-institucional-green/5"
-                >
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-institucional-green/10">
-                    <Upload size={20} strokeWidth={1.75} className="text-institucional-green" aria-hidden="true" />
-                  </div>
-                  <div className="flex-1 min-w-0 text-left">
-                    <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Ingreso Masivo de Catastro</p>
-                    <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">Importa comerciantes desde XML o CSV.</p>
                   </div>
                   <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
                 </Link>

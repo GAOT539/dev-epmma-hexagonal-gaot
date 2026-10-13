@@ -285,9 +285,9 @@ function toUsuario(m: MockUsuario): Usuario {
 
 /** Mapa de ítems de menú permitidos por rol */
 export const MENU_POR_ROL: Record<Rol, string[]> = {
-  SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/configuracion"],
-  TIC: ["/catastro", "/naves", "/auditoria", "/configuracion"],
-  DIRECTOR: ["/reportes", "/naves", "/configuracion"],
+  SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
+  TIC: ["/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
+  DIRECTOR: ["/reportes", "/naves", "/ingreso-catastro", "/configuracion"],
   JEFE_OPERATIVO: ["/reportes", "/configuracion"],
   SUPERVISOR: ["/listas", "/configuracion"],
 };

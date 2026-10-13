@@ -348,12 +348,6 @@ export default function ConfiguracionUsuariosPage() {
             >
               Permisos
             </Link>
-            <Link
-              href="/configuracion/importacion"
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-institucional-green hover:bg-institucional-green/10 transition-colors"
-            >
-              Importación
-            </Link>
             <Button
               size="sm"
               onClick={() => {
