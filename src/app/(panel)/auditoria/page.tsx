@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ScrollText,
   Search,
@@ -8,12 +8,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  Loader2,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
-import { getLogsFiltrados } from "@/infrastructure/mocks/auditoria.mock";
-import { getUsuarios } from "@/infrastructure/mocks/auth.mock";
+import { auditoriaService } from "@/application/services/auditoria.service";
+import { usuarioService } from "@/application/services/usuario.service";
+import type { AuditoriaLog } from "@/domain/models/auditoria.model";
+import type { Usuario } from "@/domain/models/usuario.model";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 
@@ -37,7 +40,9 @@ const ITEMS_POR_PAGINA = 12;
 // ── Página de Auditoría ──────────────────────────────────────────────────────
 
 export default function AuditoriaPage() {
-  const usuarios = getUsuarios();
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [logs, setLogs] = useState<AuditoriaLog[]>([]);
+  const [cargando, setCargando] = useState(true);
 
   const [busqueda, setBusqueda] = useState("");
   const [filtroUsuario, setFiltroUsuario] = useState("");
@@ -49,14 +54,32 @@ export default function AuditoriaPage() {
   const fechaDesde = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
   const fechaHasta = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
 
-  // Obtener logs filtrados
-  const logs = useMemo(() => {
-    return getLogsFiltrados({
-      busqueda: busqueda || undefined,
-      usuarioId: filtroUsuario || undefined,
-      fechaDesde: fechaDesde || undefined,
-      fechaHasta: fechaHasta || undefined,
-    });
+  useEffect(() => {
+    usuarioService.obtenerUsuarios().then((data) => setUsuarios(data));
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    async function cargarLogs() {
+      setCargando(true);
+      try {
+        const datos = await auditoriaService.obtenerLogsFiltrados({
+          busqueda: busqueda || undefined,
+          usuarioId: filtroUsuario || undefined,
+          fechaDesde: fechaDesde || undefined,
+          fechaHasta: fechaHasta || undefined,
+        });
+        if (!cancel) setLogs(datos);
+      } catch (e) {
+        console.error("Error al cargar logs de auditoría", e);
+      } finally {
+        if (!cancel) setCargando(false);
+      }
+    }
+    cargarLogs();
+    return () => {
+      cancel = true;
+    };
   }, [busqueda, filtroUsuario, fechaDesde, fechaHasta]);
 
   // Paginación
@@ -225,85 +248,92 @@ export default function AuditoriaPage() {
           </div>
 
           <div className="p-3 md:p-0">
-            <table className="w-full text-sm block md:table">
-              <thead className="hidden md:table-header-group">
-                <tr className="bg-institucional-green/5">
-                  <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[140px]">
-                    Fecha / Hora
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[130px]">
-                    Usuario
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[140px]">
-                    Acción
-                  </th>
-                  <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">
-                    Detalle
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="block md:table-row-group space-y-3 md:space-y-0">
-                {logsPaginados.map((log) => {
-                  const accionColor =
-                    ACCION_COLORES[log.accion] ?? {
-                      bg: "bg-institucional-whiteSmokeBlack/10",
-                      text: "text-gray-700",
-                    };
-                  return (
-                    <tr
-                      key={log.id}
-                      className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none hover:bg-institucional-whiteSmoke/50 transition-colors"
-                    >
-                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-base-eerieBlack text-sm md:table-cell">
-                        <span className="font-semibold text-gray-700 md:hidden">Fecha / Hora:</span>
-                        <div className="text-right md:text-left">
-                          <p className="font-medium text-sm">
-                            {format(new Date(log.timestamp), "dd/MM/yyyy")}
-                          </p>
-                          <p className="text-xs text-gray-700 font-medium">
-                            {format(new Date(log.timestamp), "HH:mm:ss")}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
-                        <span className="font-semibold text-gray-700 md:hidden">Usuario:</span>
-                        <div className="flex items-center gap-2">
-                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-institucional-green/10 text-institucional-green">
-                            <User size={12} />
+            {cargando ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm font-medium text-gray-600">Cargando registros de auditoría...</span>
+              </div>
+            ) : (
+              <table className="w-full text-sm block md:table">
+                <thead className="hidden md:table-header-group">
+                  <tr className="bg-institucional-green/5">
+                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[140px]">
+                      Fecha / Hora
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[130px]">
+                      Usuario
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack min-w-[140px]">
+                      Acción
+                    </th>
+                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">
+                      Detalle
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="block md:table-row-group space-y-3 md:space-y-0">
+                  {logsPaginados.map((log) => {
+                    const accionColor =
+                      ACCION_COLORES[log.accion] ?? {
+                        bg: "bg-institucional-whiteSmokeBlack/10",
+                        text: "text-gray-700",
+                      };
+                    return (
+                      <tr
+                        key={log.id}
+                        className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none hover:bg-institucional-whiteSmoke/50 transition-colors"
+                      >
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-base-eerieBlack text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Fecha / Hora:</span>
+                          <div className="text-right md:text-left">
+                            <p className="font-medium text-sm">
+                              {format(new Date(log.timestamp), "dd/MM/yyyy")}
+                            </p>
+                            <p className="text-xs text-gray-700 font-medium">
+                              {format(new Date(log.timestamp), "HH:mm:ss")}
+                            </p>
                           </div>
-                          <span className="font-medium text-base-eerieBlack truncate max-w-[160px] md:max-w-[120px]">
-                            {log.usuarioNombre}
+                        </td>
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Usuario:</span>
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-institucional-green/10 text-institucional-green">
+                              <User size={12} />
+                            </div>
+                            <span className="font-medium text-base-eerieBlack truncate max-w-[160px] md:max-w-[120px]">
+                              {log.usuarioNombre}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Acción:</span>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${accionColor.bg} ${accionColor.text}`}
+                          >
+                            {log.accion.replace(/_/g, " ")}
                           </span>
-                        </div>
-                      </td>
-                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-3 text-sm md:table-cell">
-                        <span className="font-semibold text-gray-700 md:hidden">Acción:</span>
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${accionColor.bg} ${accionColor.text}`}
-                        >
-                          {log.accion.replace(/_/g, " ")}
-                        </span>
-                      </td>
-                      <td className="flex justify-between items-start py-1.5 md:px-4 md:py-3 text-gray-700 text-sm md:table-cell md:max-w-[300px]">
-                        <span className="font-semibold text-gray-700 md:hidden shrink-0 mr-2">Detalle:</span>
-                        <span className="line-clamp-2 text-right md:text-left">{log.detalle}</span>
+                        </td>
+                        <td className="flex justify-between items-start py-1.5 md:px-4 md:py-3 text-gray-700 text-sm md:table-cell md:max-w-[300px]">
+                          <span className="font-semibold text-gray-700 md:hidden shrink-0 mr-2">Detalle:</span>
+                          <span className="line-clamp-2 text-right md:text-left">{log.detalle}</span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+                  {logsPaginados.length === 0 && (
+                    <tr className="block md:table-row">
+                      <td
+                        colSpan={4}
+                        className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
+                      >
+                        No se encontraron registros con los filtros aplicados.
                       </td>
                     </tr>
-                  );
-                })}
-
-                {logsPaginados.length === 0 && (
-                  <tr className="block md:table-row">
-                    <td
-                      colSpan={4}
-                      className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
-                    >
-                      No se encontraron registros con los filtros aplicados.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
 
           {/* Paginación */}

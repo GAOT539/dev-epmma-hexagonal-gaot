@@ -5,8 +5,7 @@ import Image from "next/image";
 import { Eye, EyeOff, Lock, Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useAuth } from "@/infrastructure/auth/auth-context";
-import { validatePassword } from "@/infrastructure/mocks/auth.mock";
+import { useAuth, validatePassword } from "@/application/services/auth.service";
 
 import {
   Dialog,

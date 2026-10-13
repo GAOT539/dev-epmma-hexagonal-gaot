@@ -33,6 +33,18 @@ export class AsistenciaService {
     );
   }
 
+  async obtenerAsistenciaNaveRango(
+    naveId: string,
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]> {
+    return this.repository.obtenerAsistenciaNaveRango(
+      naveId,
+      fechaInicio,
+      fechaFin
+    );
+  }
+
   async registrarAsistencia(
     comercianteId: string,
     fecha: string,

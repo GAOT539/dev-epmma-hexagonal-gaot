@@ -9,12 +9,9 @@ import {
   Upload,
   AlertCircle,
   X,
+  Loader2,
 } from "lucide-react";
-import {
-  simularImportacion,
-  parsearXML,
-  parsearCSV,
-} from "@/infrastructure/mocks/importador.mock";
+import { importadorService } from "@/application/services/importador.service";
 import type { ImportacionRegistro, ImportacionResultado } from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
 import {
@@ -34,25 +31,30 @@ export default function ConfiguracionImportacionPage() {
   const [, setArchivoNombre] = useState("");
   const [paso, setPaso] = useState<"cargar" | "preview" | "resultado">("cargar");
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [procesando, setProcesando] = useState(false);
 
-  function handleFileInput(contenido: string, nombre: string) {
+  async function handleFileInput(contenido: string, nombre: string) {
     setArchivoNombre(nombre);
     let parsed: ImportacionRegistro[];
-    if (nombre.endsWith(".xml")) {
-      parsed = parsearXML(contenido);
-    } else if (nombre.endsWith(".csv")) {
-      parsed = parsearCSV(contenido);
-    } else {
-      toast.error("Formato no soportado");
-      return;
+    try {
+      if (nombre.endsWith(".xml")) {
+        parsed = await importadorService.parsearXML(contenido);
+      } else if (nombre.endsWith(".csv")) {
+        parsed = await importadorService.parsearCSV(contenido);
+      } else {
+        toast.error("Formato no soportado");
+        return;
+      }
+      if (parsed.length === 0) {
+        toast.error("Archivo vacío");
+        return;
+      }
+      setRegistros(parsed);
+      setPaso("preview");
+      toast.success(`${parsed.length} registros cargados`);
+    } catch {
+      toast.error("Error al procesar el archivo");
     }
-    if (parsed.length === 0) {
-      toast.error("Archivo vacío");
-      return;
-    }
-    setRegistros(parsed);
-    setPaso("preview");
-    toast.success(`${parsed.length} registros cargados`);
   }
 
   function handleDrop(e: React.DragEvent) {
@@ -61,16 +63,25 @@ export default function ConfiguracionImportacionPage() {
     const file = e.dataTransfer.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => handleFileInput(ev.target?.result as string, file.name);
+    reader.onload = async (ev) => {
+      await handleFileInput(ev.target?.result as string, file.name);
+    };
     reader.readAsText(file);
   }
 
-  function handleProcesar() {
-    const res = simularImportacion(registros);
-    setResultado(res);
-    setPaso("resultado");
-    if (res.errores.length === 0) toast.success("Importación completada");
-    else toast.warning("Importación con errores");
+  async function handleProcesar() {
+    setProcesando(true);
+    try {
+      const res = await importadorService.simularImportacion(registros);
+      setResultado(res);
+      setPaso("resultado");
+      if (res.errores.length === 0) toast.success("Importación completada");
+      else toast.warning("Importación con errores");
+    } catch {
+      toast.error("Error al importar registros");
+    } finally {
+      setProcesando(false);
+    }
   }
 
   function handleReiniciar() {
@@ -169,7 +180,9 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
                   const file = e.target.files?.[0];
                   if (!file) return;
                   const reader = new FileReader();
-                  reader.onload = (ev) => handleFileInput(ev.target?.result as string, file.name);
+                  reader.onload = async (ev) => {
+                    await handleFileInput(ev.target?.result as string, file.name);
+                  };
                   reader.readAsText(file);
                 }}
               />
@@ -210,12 +223,20 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
               </table>
             </div>
             <div className="p-4 flex justify-end gap-3 border-t border-institucional-whiteSmokeBlack/15 bg-base-white">
-              <Button variant="outline" onClick={handleReiniciar}>Cancelar</Button>
+              <Button variant="outline" onClick={handleReiniciar} disabled={procesando}>Cancelar</Button>
               <Button
                 onClick={() => setConfirmModalOpen(true)}
+                disabled={procesando}
                 className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
               >
-                Subir Archivo
+                {procesando ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Procesando...
+                  </>
+                ) : (
+                  "Subir Archivo"
+                )}
               </Button>
             </div>
           </div>
@@ -255,14 +276,15 @@ CIU-00002,1802345678,María Gómez Mora,Cárnicos y Embutidos,NAVE B,P-B015`}
               </DialogDescription>
             </DialogHeader>
             <DialogFooter className="gap-2 sm:justify-end pt-3">
-              <Button variant="outline" onClick={() => setConfirmModalOpen(false)}>
+              <Button variant="outline" onClick={() => setConfirmModalOpen(false)} disabled={procesando}>
                 Cancelar
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setConfirmModalOpen(false);
-                  handleProcesar();
+                  await handleProcesar();
                 }}
+                disabled={procesando}
                 className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
               >
                 Aceptar

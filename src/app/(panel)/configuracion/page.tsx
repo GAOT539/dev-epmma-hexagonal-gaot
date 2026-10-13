@@ -12,7 +12,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "@/infrastructure/auth/auth-context";
+import { useAuth } from "@/application/services/auth.service";
 import { toast } from "sonner";
 import {
   Dialog,

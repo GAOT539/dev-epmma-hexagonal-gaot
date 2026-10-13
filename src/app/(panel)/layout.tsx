@@ -14,8 +14,7 @@ import {
   User,
 } from "lucide-react";
 import { clsx } from "clsx";
-import { useAuth } from "@/infrastructure/auth/auth-context";
-import { MENU_POR_ROL } from "@/infrastructure/mocks/auth.mock";
+import { useAuth, MENU_POR_ROL } from "@/application/services/auth.service";
 import { useEffect } from "react";
 
 // ── Definición completa de todos los enlaces ─────────────────────────────────

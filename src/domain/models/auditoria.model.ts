@@ -8,3 +8,5 @@ export interface LogAuditoria {
   accion: string;
   detalle: string;
 }
+
+export type AuditoriaLog = LogAuditoria;

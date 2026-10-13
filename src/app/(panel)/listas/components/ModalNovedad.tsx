@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
 import { es } from "date-fns/locale";
@@ -31,10 +31,8 @@ import type {
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
-import {
-  getAsistenciaComerciantePorFecha,
-  setEstadoAsistencia,
-} from "@/infrastructure/mocks/mercado.mock";
+import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
+import { asistenciaService } from "@/application/services/asistencia.service";
 
 export const ESTADO_CONFIG: Record<
   EstadoAsistencia | "Vacante",
@@ -183,25 +181,44 @@ export function ComercianteModal({
   onNovedadGuardada: (comercianteId: string, texto: string) => void;
   onEstadoChange: (estado: EstadoAsistencia) => void;
 }) {
-  const registroActual = getAsistenciaComerciantePorFecha(
-    comerciante.idInterno,
-    fecha
-  );
-
-  const observacionExistente = registroActual?.observacionTexto || registroActual?.observacion || "";
-  const tieneObservacionPrevia = Boolean(observacionExistente.trim());
-
-  const tienePermisoPrevio = estadoInicial === "Permiso" || Boolean(registroActual?.permisoInicio);
-  const permisoInicioExistente = registroActual?.permisoInicio || fecha;
-  const permisoFinExistente = registroActual?.permisoFin || fecha;
-
+  const [registroActual, setRegistroActual] = useState<RegistroAsistencia | null>(null);
+  const [registroAyer, setRegistroAyer] = useState<RegistroAsistencia | null>(null);
   const [estadoActual, setEstadoActual] = useState<EstadoAsistencia>(estadoInicial);
-  const [novedadTexto, setNovedadTexto] = useState(observacionExistente);
-  const [permisoInicio, setPermisoInicio] = useState(permisoInicioExistente);
-  const [permisoFin, setPermisoFin] = useState(permisoFinExistente);
+  const [novedadTexto, setNovedadTexto] = useState("");
+  const [permisoInicio, setPermisoInicio] = useState(fecha);
+  const [permisoFin, setPermisoFin] = useState(fecha);
   const [openInicio, setOpenInicio] = useState(false);
   const [openFin, setOpenFin] = useState(false);
   const [permisoError, setPermisoError] = useState("");
+
+  useEffect(() => {
+    let cancel = false;
+    async function cargarHistorial() {
+      const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
+      const [actual, ayer] = await Promise.all([
+        asistenciaService.obtenerAsistenciaComerciantePorFecha(comerciante.idInterno, fecha),
+        asistenciaService.obtenerAsistenciaComerciantePorFecha(comerciante.idInterno, fechaAyer),
+      ]);
+      if (!cancel) {
+        setRegistroActual(actual);
+        setRegistroAyer(ayer);
+        if (actual) {
+          const obs = actual.observacionTexto || actual.observacion || "";
+          setNovedadTexto(obs);
+          if (actual.permisoInicio) setPermisoInicio(actual.permisoInicio);
+          if (actual.permisoFin) setPermisoFin(actual.permisoFin);
+        }
+      }
+    }
+    cargarHistorial();
+    return () => {
+      cancel = true;
+    };
+  }, [comerciante.idInterno, fecha]);
+
+  const observacionExistente = registroActual?.observacionTexto || registroActual?.observacion || "";
+  const tieneObservacionPrevia = Boolean(observacionExistente.trim());
+  const tienePermisoPrevio = estadoInicial === "Permiso" || Boolean(registroActual?.permisoInicio);
 
   const fechaInicioObj = useMemo(() => {
     if (!permisoInicio) return undefined;
@@ -230,15 +247,10 @@ export function ComercianteModal({
 
   const estadoConfig = ESTADO_CONFIG[estadoActual] ?? ESTADO_CONFIG["Pendiente"];
 
-  const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
-  const registroAyer = getAsistenciaComerciantePorFecha(
-    comerciante.idInterno,
-    fechaAyer
-  );
   const observacionAnterior =
     registroAyer?.estado === "Observacion" ? (registroAyer.observacionTexto || registroAyer.observacion) : null;
 
-  function handleSeleccionarEstado(nuevoEstado: "Presente" | "Ausente") {
+  async function handleSeleccionarEstado(nuevoEstado: "Presente" | "Ausente") {
     if (estadoActual === nuevoEstado && panelActivo === null) return;
 
     if (estadoActual === "Observacion" || Boolean(novedadTexto.trim())) {
@@ -265,12 +277,12 @@ export function ComercianteModal({
 
     setPanelActivo(null);
     setEstadoActual(nuevoEstado);
-    setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado);
+    await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado);
     onEstadoChange(nuevoEstado);
     toast.success(`Asistencia registrada como ${nuevoEstado}`);
   }
 
-  function handleConfirmarCambio() {
+  async function handleConfirmarCambio() {
     if (!confirmAlert) return;
     const { nuevoEstado, tipo } = confirmAlert;
 
@@ -278,7 +290,7 @@ export function ComercianteModal({
       setNovedadTexto("");
       setPanelActivo(null);
       setEstadoActual(nuevoEstado);
-      setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
+      await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
       onEstadoChange(nuevoEstado);
       toast.success(`Asistencia registrada como ${nuevoEstado}`, {
         description: "Se eliminó la observación registrada para este día.",
@@ -288,7 +300,7 @@ export function ComercianteModal({
       setPermisoFin("");
       setPanelActivo(null);
       setEstadoActual(nuevoEstado);
-      setEstadoAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
+      await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
       onEstadoChange(nuevoEstado);
       toast.success(`Asistencia registrada como ${nuevoEstado}`, {
         description: "Se eliminó el permiso asignado.",

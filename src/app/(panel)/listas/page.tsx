@@ -1,19 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  getNaves,
-  getComerciantePorId,
-  getAsistenciaPorFecha,
-  setEstadoAsistencia,
-  setPermisoComercianteRango,
-} from "@/infrastructure/mocks/mercado.mock";
+import { naveService } from "@/application/services/nave.service";
+import { comercianteService } from "@/application/services/comerciante.service";
+import { asistenciaService } from "@/application/services/asistencia.service";
+import type { Nave } from "@/domain/models/nave.model";
 import type {
   EstadoAsistencia,
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
+import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -24,6 +22,7 @@ import {
   Search,
   ToggleLeft,
   ToggleRight,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -66,13 +65,56 @@ const normalizeText = (text: string) => {
 // ── Página principal de Listas (Orquestador) ──────────────────────────────────
 
 export default function ListasPage() {
-  const naves = getNaves();
+  const [naves, setNaves] = useState<Nave[]>([]);
   const [selectedNaveId, setSelectedNaveId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"lista" | "treemap">("lista");
   const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
+
+  const [asistenciaDelDia, setAsistenciaDelDia] = useState<RegistroAsistencia[]>([]);
+  const [comerciantesMap, setComerciantesMap] = useState<Map<string, Comerciante>>(new Map());
+  const [cargando, setCargando] = useState(true);
+
+  // Carga inicial de Naves y Comerciantes
+  useEffect(() => {
+    let activo = true;
+    Promise.all([
+      naveService.obtenerNaves(),
+      comercianteService.obtenerComerciantes(),
+    ]).then(([navesData, comData]) => {
+      if (activo) {
+        setNaves(navesData);
+        if (navesData.length > 0 && !selectedNaveId) {
+          setSelectedNaveId(navesData[0].id);
+        }
+        const map = new Map<string, Comerciante>();
+        comData.forEach((c) => map.set(c.idInterno, c));
+        setComerciantesMap(map);
+        setCargando(false);
+      }
+    });
+    return () => {
+      activo = false;
+    };
+  }, [selectedNaveId]);
+
+  const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
+  const fechaStr = formatDate(selectedDate);
+
+  // Carga asíncrona de asistencias por fecha
+  useEffect(() => {
+    let activo = true;
+    asistenciaService.obtenerAsistenciaPorFecha(fechaStr).then((datos) => {
+      if (activo) {
+        setAsistenciaDelDia(datos);
+      }
+    });
+    return () => {
+      activo = false;
+    };
+  }, [fechaStr]);
 
   // Modal state
   const [modalData, setModalData] = useState<{
@@ -92,18 +134,13 @@ export default function ListasPage() {
     tipoAdvertencia: "Permiso" | "Observacion";
   } | null>(null);
 
-  const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
-  const fechaStr = formatDate(selectedDate);
-
   // ── Puestos y Comerciantes de la Nave con estado ───────────────────────────
   const puestosConEstado = !nave
     ? []
     : (() => {
-        const asistenciaDelDia = getAsistenciaPorFecha(fechaStr);
-
-        return nave.puestos.map((puesto) => {
+        return (nave.puestos ?? []).map((puesto) => {
           const comerciante = puesto.comercianteId
-            ? getComerciantePorId(puesto.comercianteId)
+            ? comerciantesMap.get(puesto.comercianteId) ?? null
             : null;
 
           let estado: EstadoAsistencia | "Vacante" = "Vacante";
@@ -170,13 +207,13 @@ export default function ListasPage() {
     setSearchQuery("");
   }
 
-  function aplicarCambioEstado(comercianteId: string, estado: EstadoAsistencia) {
+  async function aplicarCambioEstado(comercianteId: string, estado: EstadoAsistencia) {
     const key = `${comercianteId}:${fechaStr}`;
     setOverrides((prev) => ({ ...prev, [key]: estado }));
-    setEstadoAsistencia(comercianteId, fechaStr, estado);
+    await asistenciaService.registrarAsistencia(comercianteId, fechaStr, estado);
   }
 
-  function handleEstadoChange(comercianteId: string, estado: EstadoAsistencia) {
+  async function handleEstadoChange(comercianteId: string, estado: EstadoAsistencia) {
     const puestoActual = puestosConEstado.find(
       (p) => p.comerciante?.idInterno === comercianteId
     );
@@ -206,12 +243,12 @@ export default function ListasPage() {
       return;
     }
 
-    aplicarCambioEstado(comercianteId, estado);
+    await aplicarCambioEstado(comercianteId, estado);
   }
 
-  function handleConfirmarSobrescritura() {
+  async function handleConfirmarSobrescritura() {
     if (!confirmacionEstado) return;
-    aplicarCambioEstado(confirmacionEstado.id, confirmacionEstado.nuevoEstado);
+    await aplicarCambioEstado(confirmacionEstado.id, confirmacionEstado.nuevoEstado);
     toast.success(`Asistencia registrada como ${confirmacionEstado.nuevoEstado}`);
     setConfirmacionEstado(null);
   }
@@ -220,8 +257,8 @@ export default function ListasPage() {
     setModalData({ puesto, comerciante, estado });
   }
 
-  function handleAsignarPermisoDirecto(comercianteId: string, inicio: string, fin: string) {
-    setPermisoComercianteRango(comercianteId, inicio, fin);
+  async function handleAsignarPermisoDirecto(comercianteId: string, inicio: string, fin: string) {
+    await asistenciaService.asignarPermisoRango(comercianteId, inicio, fin);
 
     const startDate = new Date(inicio + "T00:00:00");
     const endDate = new Date(fin + "T00:00:00");
@@ -240,10 +277,10 @@ export default function ListasPage() {
     });
   }
 
-  function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
+  async function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
     const key = `${comercianteId}:${fechaStr}`;
     setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
-    setEstadoAsistencia(
+    await asistenciaService.registrarAsistencia(
       comercianteId,
       fechaStr,
       "Observacion",
@@ -399,7 +436,12 @@ export default function ListasPage() {
       </header>
 
       <div className="w-full flex flex-col gap-4">
-        {!nave ? (
+        {cargando ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <span className="text-sm font-medium text-gray-600">Cargando listas de asistencia...</span>
+          </div>
+        ) : !nave ? (
           /* ── Selección de nave ── */
           naves.map((item) => (
             <button

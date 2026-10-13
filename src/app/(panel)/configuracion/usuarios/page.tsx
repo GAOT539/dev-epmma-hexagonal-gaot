@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -8,16 +8,12 @@ import {
   Pencil,
   Trash2,
   Key,
+  Loader2,
 } from "lucide-react";
-import {
-  getUsuarios,
-  crearUsuario,
-  editarUsuario,
-  eliminarUsuario,
-  restablecerPasswordUsuario,
-} from "@/infrastructure/mocks/auth.mock";
-import { getNaves } from "@/infrastructure/mocks/mercado.mock";
-import type { Rol, Usuario } from "@/domain/models/comerciante.model";
+import { usuarioService } from "@/application/services/usuario.service";
+import { naveService } from "@/application/services/nave.service";
+import type { Rol, Usuario } from "@/domain/models/usuario.model";
+import type { Nave } from "@/domain/models/nave.model";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -36,15 +32,16 @@ import { Button } from "@/components/ui/button";
 function UserFormDialog({
   open,
   user,
+  naves,
   onClose,
   onSave,
 }: {
   open: boolean;
   user: { id: string; nombres: string; apellidos: string; cedula: string; rol: Rol; navesAsignadas?: string[] } | null;
+  naves: Nave[];
   onClose: () => void;
   onSave: () => void;
 }) {
-  const naves = getNaves();
   const isEdit = !!user;
 
   const [nombres, setNombres] = useState(user?.nombres ?? "");
@@ -55,6 +52,7 @@ function UserFormDialog({
     user?.navesAsignadas ?? []
   );
   const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
   function toggleNave(naveId: string) {
     setNavesAsignadas((prev) =>
@@ -64,7 +62,7 @@ function UserFormDialog({
     );
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setError("");
 
     if (!nombres.trim() || !cedula.trim()) {
@@ -77,32 +75,39 @@ function UserFormDialog({
       return;
     }
 
-    if (isEdit && user) {
-      editarUsuario(user.id, {
-        nombres: nombres.trim(),
-        apellidos: apellidos.trim(),
-        cedula: cedula.trim(),
-        rol,
-        navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
-      });
-      toast.success("Usuario actualizado", {
-        description: `${nombres} ${apellidos} editado correctamente.`,
-      });
-    } else {
-      crearUsuario({
-        nombres: nombres.trim(),
-        apellidos: apellidos.trim(),
-        cedula: cedula.trim(),
-        rol,
-        navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
-      });
-      toast.success("Usuario creado", {
-        description: `${nombres} ${apellidos} creado con contraseña por defecto.`,
-      });
-    }
+    setGuardando(true);
+    try {
+      if (isEdit && user) {
+        await usuarioService.actualizarUsuario(user.id, {
+          nombres: nombres.trim(),
+          apellidos: apellidos.trim(),
+          cedula: cedula.trim(),
+          rol,
+          navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
+        });
+        toast.success("Usuario actualizado", {
+          description: `${nombres} ${apellidos} editado correctamente.`,
+        });
+      } else {
+        await usuarioService.crearUsuario({
+          nombres: nombres.trim(),
+          apellidos: apellidos.trim(),
+          cedula: cedula.trim(),
+          rol,
+          navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
+        });
+        toast.success("Usuario creado", {
+          description: `${nombres} ${apellidos} creado con contraseña por defecto.`,
+        });
+      }
 
-    onSave();
-    onClose();
+      onSave();
+      onClose();
+    } catch {
+      setError("Ocurrió un error al procesar la solicitud.");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   return (
@@ -158,6 +163,7 @@ function UserFormDialog({
               placeholder="1801234567"
             />
           </div>
+
           <div className="space-y-1.5">
             <Label htmlFor="user-rol">Rol</Label>
             <select
@@ -206,14 +212,24 @@ function UserFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={guardando}>
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
+            disabled={guardando}
             className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
           >
-            {isEdit ? "Guardar Cambios" : "Crear Usuario"}
+            {guardando ? (
+              <>
+                <Loader2 size={15} className="mr-2 animate-spin" />
+                Guardando...
+              </>
+            ) : isEdit ? (
+              "Guardar Cambios"
+            ) : (
+              "Crear Usuario"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -222,8 +238,9 @@ function UserFormDialog({
 }
 
 export default function ConfiguracionUsuariosPage() {
-  const allUsuarios = getUsuarios();
-  const naves = getNaves();
+  const [allUsuarios, setAllUsuarios] = useState<Usuario[]>([]);
+  const [naves, setNaves] = useState<Nave[]>([]);
+  const [cargando, setCargando] = useState(true);
 
   const [userFormOpen, setUserFormOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<{
@@ -236,22 +253,61 @@ export default function ConfiguracionUsuariosPage() {
   } | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
   const [resetPasswordUser, setResetPasswordUser] = useState<Usuario | null>(null);
-  const [, setRefreshKey] = useState(0);
 
-  function handleDeleteUser() {
+  const cargarDatos = useCallback(async () => {
+    try {
+      const [users, listaNaves] = await Promise.all([
+        usuarioService.obtenerUsuarios(),
+        naveService.obtenerNaves(),
+      ]);
+      setAllUsuarios(users);
+      setNaves(listaNaves);
+    } catch (e) {
+      console.error(e);
+      toast.error("Error al cargar los usuarios");
+    } finally {
+      setCargando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    async function init() {
+      try {
+        const [users, listaNaves] = await Promise.all([
+          usuarioService.obtenerUsuarios(),
+          naveService.obtenerNaves(),
+        ]);
+        if (!cancel) {
+          setAllUsuarios(users);
+          setNaves(listaNaves);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (!cancel) setCargando(false);
+      }
+    }
+    init();
+    return () => {
+      cancel = true;
+    };
+  }, []);
+
+  async function handleDeleteUser() {
     if (!deleteUserId) return;
     const u = allUsuarios.find((u) => u.id === deleteUserId);
-    eliminarUsuario(deleteUserId);
+    await usuarioService.eliminarUsuario(deleteUserId);
     toast.success("Usuario deshabilitado", {
       description: `${u?.nombres ?? ""} ${u?.apellidos ?? ""} ha sido deshabilitado correctamente.`,
     });
     setDeleteUserId(null);
-    setRefreshKey((k) => k + 1);
+    cargarDatos();
   }
 
-  function handleResetPassword() {
+  async function handleResetPassword() {
     if (!resetPasswordUser) return;
-    const ok = restablecerPasswordUsuario(resetPasswordUser.id);
+    const ok = await usuarioService.restablecerPasswordUsuario(resetPasswordUser.id);
     if (ok) {
       toast.success("Contraseña restablecida", {
         description: `La contraseña de ${resetPasswordUser.nombres} ${resetPasswordUser.apellidos} ha sido restablecida exitosamente.`,
@@ -262,7 +318,7 @@ export default function ConfiguracionUsuariosPage() {
       });
     }
     setResetPasswordUser(null);
-    setRefreshKey((k) => k + 1);
+    cargarDatos();
   }
 
   const usuariosGestionables = allUsuarios
@@ -314,92 +370,107 @@ export default function ConfiguracionUsuariosPage() {
 
         <div className="flex-1 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden flex flex-col">
           <div className="flex-1 overflow-x-auto overflow-y-auto">
-            <table className="w-full text-base lg:text-lg">
-              <thead>
-                <tr className="bg-institucional-green/10">
-                  <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
-                    Nombre
-                  </th>
-                  <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
-                    Cédula
-                  </th>
-                  <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
-                    Rol
-                  </th>
-                  <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
-                    Naves
-                  </th>
-                  <th className="p-3 lg:p-4 text-center font-semibold text-base-eerieBlack">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuariosGestionables.map((u) => (
-                  <tr
-                    key={u.id}
-                    className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
-                  >
-                    <td className="p-3 lg:p-4 font-normal text-gray-900">
-                      {u.nombres} {u.apellidos}
-                    </td>
-                    <td className="p-3 lg:p-4 font-normal text-gray-900 font-mono">
-                      {u.cedula}
-                    </td>
-                    <td className="p-3 lg:p-4">
-                      <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-institucional-green/10 text-institucional-green">
-                        {u.rol.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="p-3 lg:p-4 font-normal text-gray-900 text-xs lg:text-sm">
-                      {u.navesAsignadas && u.navesAsignadas.length > 0
-                        ? u.navesAsignadas
-                            .map((id) => naves.find((n) => n.id === id)?.nombre ?? id)
-                            .join(", ")
-                        : "—"}
-                    </td>
-                    <td className="p-3 lg:p-4 text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setResetPasswordUser(u)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1/10 transition-colors"
-                          title="Restablecer contraseña"
-                        >
-                          <Key size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingUser({
-                              id: u.id,
-                              nombres: u.nombres,
-                              apellidos: u.apellidos,
-                              cedula: u.cedula,
-                              rol: u.rol,
-                              navesAsignadas: u.navesAsignadas,
-                            });
-                            setUserFormOpen(true);
-                          }}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
-                          title="Editar"
-                        >
-                          <Pencil size={15} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteUserId(u.id)}
-                          className="flex h-8 w-8 items-center justify-center rounded-md text-base-red hover:bg-base-red/10 transition-colors"
-                          title="Deshabilitar"
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </td>
+            {cargando ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm font-medium text-gray-600">Cargando usuarios...</span>
+              </div>
+            ) : (
+              <table className="w-full text-base lg:text-lg">
+                <thead>
+                  <tr className="bg-institucional-green/10">
+                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                      Nombre
+                    </th>
+                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                      Cédula
+                    </th>
+                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                      Rol
+                    </th>
+                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                      Naves
+                    </th>
+                    <th className="p-3 lg:p-4 text-center font-semibold text-base-eerieBlack">
+                      Acciones
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {usuariosGestionables.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="p-8 text-center text-gray-500">
+                        No se encontraron usuarios activos para gestionar.
+                      </td>
+                    </tr>
+                  ) : (
+                    usuariosGestionables.map((u) => (
+                      <tr
+                        key={u.id}
+                        className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
+                      >
+                        <td className="p-3 lg:p-4 font-normal text-gray-900">
+                          {u.nombres} {u.apellidos}
+                        </td>
+                        <td className="p-3 lg:p-4 font-normal text-gray-900 font-mono">
+                          {u.cedula}
+                        </td>
+                        <td className="p-3 lg:p-4">
+                          <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-institucional-green/10 text-institucional-green">
+                            {u.rol.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="p-3 lg:p-4 font-normal text-gray-900 text-xs lg:text-sm">
+                          {u.navesAsignadas && u.navesAsignadas.length > 0
+                            ? u.navesAsignadas
+                                .map((id) => naves.find((n) => n.id === id)?.nombre ?? id)
+                                .join(", ")
+                            : "—"}
+                        </td>
+                        <td className="p-3 lg:p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setResetPasswordUser(u)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-acento-naranjaSalmon1 hover:bg-acento-naranjaSalmon1/10 transition-colors"
+                              title="Restablecer contraseña"
+                            >
+                              <Key size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingUser({
+                                  id: u.id,
+                                  nombres: u.nombres,
+                                  apellidos: u.apellidos,
+                                  cedula: u.cedula,
+                                  rol: u.rol,
+                                  navesAsignadas: u.navesAsignadas,
+                                });
+                                setUserFormOpen(true);
+                              }}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
+                              title="Editar"
+                            >
+                              <Pencil size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteUserId(u.id)}
+                              className="flex h-8 w-8 items-center justify-center rounded-md text-base-red hover:bg-base-red/10 transition-colors"
+                              title="Deshabilitar"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       </div>
@@ -409,11 +480,12 @@ export default function ConfiguracionUsuariosPage() {
         key={editingUser?.id ?? "new-user"}
         open={userFormOpen}
         user={editingUser}
+        naves={naves}
         onClose={() => {
           setUserFormOpen(false);
           setEditingUser(null);
         }}
-        onSave={() => setRefreshKey((k) => k + 1)}
+        onSave={cargarDatos}
       />
 
       <Dialog open={!!deleteUserId} disablePointerDismissal={true} onOpenChange={(o) => !o && setDeleteUserId(null)}>

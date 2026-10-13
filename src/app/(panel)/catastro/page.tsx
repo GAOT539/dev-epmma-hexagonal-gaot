@@ -9,13 +9,13 @@ import {
   Pencil,
   Trash2,
   Search,
+  Loader2,
 } from "lucide-react";
-// Removido importador
-import {
-  getNaves,
-} from "@/infrastructure/mocks/mercado.mock";
+import { naveService } from "@/application/services/nave.service";
 import { comercianteService } from "@/application/services/comerciante.service";
+import { useAuth } from "@/application/services/auth.service";
 import type { Comerciante } from "@/domain/models/comerciante.model";
+import type { Nave } from "@/domain/models/nave.model";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -35,22 +35,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/infrastructure/auth/auth-context";
 
 // ── Modal CRUD Comerciante ───────────────────────────────────────────────────
 
 function ComercianteFormDialog({
   open,
   comerciante,
+  naves,
   onClose,
   onSave,
 }: {
   open: boolean;
   comerciante: Comerciante | null; // null = nuevo
+  naves: Nave[];
   onClose: () => void;
   onSave: () => void;
 }) {
-  const naves = getNaves();
   const isEdit = !!comerciante;
 
   // Buscar nave y puesto asignados si se está editando
@@ -58,7 +58,7 @@ function ComercianteFormDialog({
   let initialPuesto = comerciante?.puestoId ?? "";
   if (comerciante) {
     for (const n of naves) {
-      const p = n.puestos.find(
+      const p = n.puestos?.find(
         (p) =>
           p.comercianteId === comerciante.idInterno ||
           p.id === comerciante.puestoId ||
@@ -79,6 +79,7 @@ function ComercianteFormDialog({
   const [naveId, setNaveId] = useState(initialNaveId);
   const [puesto, setPuesto] = useState(initialPuesto);
   const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
 
   async function handleSubmit() {
     setError("");
@@ -88,37 +89,45 @@ function ComercianteFormDialog({
       return;
     }
 
-    if (isEdit && comerciante) {
-      await comercianteService.actualizarComerciante(comerciante.idInterno, {
-        ciu: ciu.trim(),
-        contribuyente: contribuyente.trim(),
-        actividad: actividad.trim(),
-        ...(cedula.trim() && { cedula: cedula.trim() }),
-        ...(puesto.trim() && { puestoId: puesto.trim(), naveId }),
-      });
-      toast.success("Comerciante actualizado", {
-        description: `${contribuyente} editado correctamente.`,
-      });
-    } else {
-      if (!naveId || !puesto.trim()) {
-        setError("Debe seleccionar Nave e ingresar un Puesto.");
-        return;
+    setGuardando(true);
+    try {
+      if (isEdit && comerciante) {
+        await comercianteService.actualizarComerciante(comerciante.idInterno, {
+          ciu: ciu.trim(),
+          contribuyente: contribuyente.trim(),
+          actividad: actividad.trim(),
+          ...(cedula.trim() && { cedula: cedula.trim() }),
+          ...(puesto.trim() && { puestoId: puesto.trim(), naveId }),
+        });
+        toast.success("Comerciante actualizado", {
+          description: `${contribuyente} editado correctamente.`,
+        });
+      } else {
+        if (!naveId || !puesto.trim()) {
+          setError("Debe seleccionar Nave e ingresar un Puesto.");
+          setGuardando(false);
+          return;
+        }
+        await comercianteService.crearComerciante({
+          ciu: ciu.trim(),
+          contribuyente: contribuyente.trim(),
+          actividad: actividad.trim(),
+          puestoId: puesto.trim(),
+          cedula: cedula.trim() || "1800000000",
+          estadoRegistro: "Habilitado",
+        });
+        toast.success("Comerciante creado", {
+          description: `${contribuyente} agregado correctamente.`,
+        });
       }
-      await comercianteService.crearComerciante({
-        ciu: ciu.trim(),
-        contribuyente: contribuyente.trim(),
-        actividad: actividad.trim(),
-        puestoId: puesto.trim(),
-        cedula: cedula.trim() || "1800000000",
-        estadoRegistro: "Habilitado",
-      });
-      toast.success("Comerciante creado", {
-        description: `${contribuyente} agregado correctamente.`,
-      });
-    }
 
-    onSave();
-    onClose();
+      onSave();
+      onClose();
+    } catch {
+      setError("Ocurrió un error al guardar los datos.");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   return (
@@ -229,14 +238,24 @@ function ComercianteFormDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} disabled={guardando}>
             Cancelar
           </Button>
           <Button
             onClick={handleSubmit}
+            disabled={guardando}
             className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
           >
-            {isEdit ? "Guardar Cambios" : "Crear Comerciante"}
+            {guardando ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Guardando...
+              </>
+            ) : isEdit ? (
+              "Guardar Cambios"
+            ) : (
+              "Crear Comerciante"
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -299,7 +318,6 @@ function DeleteConfirmDialog({
 export default function TicPage() {
   const { user } = useAuth();
 
-
   // CRUD state
   const [searchQuery, setSearchQuery] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -308,13 +326,31 @@ export default function TicPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [selectedNaveId, setSelectedNaveId] = useState("");
   const [comerciantes, setComerciantes] = useState<Comerciante[]>([]);
-
-  const naves = getNaves();
+  const [naves, setNaves] = useState<Nave[]>([]);
+  const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    comercianteService.obtenerComerciantes().then((datos) => {
-      setComerciantes(datos);
-    });
+    let cancel = false;
+    async function cargarDatos() {
+      try {
+        const [datosComerciantes, datosNaves] = await Promise.all([
+          comercianteService.obtenerComerciantes(),
+          naveService.obtenerNaves(),
+        ]);
+        if (!cancel) {
+          setComerciantes(datosComerciantes);
+          setNaves(datosNaves);
+        }
+      } catch (e) {
+        console.error("Error al cargar datos en catastro", e);
+      } finally {
+        if (!cancel) setCargando(false);
+      }
+    }
+    cargarDatos();
+    return () => {
+      cancel = true;
+    };
   }, [refreshKey]);
 
   // Filtrar comerciantes
@@ -323,7 +359,7 @@ export default function TicPage() {
     if (selectedNaveId) {
       const nave = naves.find(n => n.id === selectedNaveId);
       if (!nave) return false;
-      const perteneceANave = nave.puestos.some(p => p.comercianteId === c.idInterno);
+      const perteneceANave = nave.puestos?.some(p => p.comercianteId === c.idInterno);
       if (!perteneceANave) return false;
     }
 
@@ -418,135 +454,141 @@ export default function TicPage() {
         {/* Tabla de comerciantes */}
         <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
           <div className="flex-1 overflow-y-auto lg:h-[calc(100dvh-240px)] p-3 md:p-0">
-            <table className="w-full text-sm block md:table">
-                  <thead className="hidden md:table-header-group sticky top-0 z-10 bg-[#e6efe9]">
-                    <tr className="bg-[#e6efe9]">
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        CIU
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        CÉDULA
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        CONTRIBUYENTE
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        ACTIVIDAD
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        NAVE
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
-                        PUESTO
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
-                        ACCIONES
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="block md:table-row-group space-y-3 md:space-y-0">
-                    {comerciantesFiltrados.map((com) => {
-                      const isDisabled = !!com.deshabilitadoPor;
-                      // Buscar nave y puesto (solo visual)
-                      let naveNombre = "—";
-                      let puestoCodigo = "—";
-                      for (const n of naves) {
-                        const p = n.puestos.find(p => p.comercianteId === com.idInterno);
-                        if (p) {
-                          naveNombre = n.nombre;
-                          puestoCodigo = p.codigo;
-                          break;
-                        }
+            {cargando ? (
+              <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
+                <Loader2 className="h-8 w-8 animate-spin" />
+                <span className="text-sm font-medium text-gray-600">Cargando catastro...</span>
+              </div>
+            ) : (
+              <table className="w-full text-sm block md:table">
+                <thead className="hidden md:table-header-group sticky top-0 z-10 bg-[#e6efe9]">
+                  <tr className="bg-[#e6efe9]">
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      CIU
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      CÉDULA
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      CONTRIBUYENTE
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      ACTIVIDAD
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      NAVE
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
+                      PUESTO
+                    </th>
+                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
+                      ACCIONES
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="block md:table-row-group space-y-3 md:space-y-0">
+                  {comerciantesFiltrados.map((com) => {
+                    const isDisabled = !!com.deshabilitadoPor;
+                    // Buscar nave y puesto (solo visual)
+                    let naveNombre = "—";
+                    let puestoCodigo = "—";
+                    for (const n of naves) {
+                      const p = n.puestos?.find(p => p.comercianteId === com.idInterno);
+                      if (p) {
+                        naveNombre = n.nombre;
+                        puestoCodigo = p.codigo;
+                        break;
                       }
-                      
-                      return (
-                      <tr
-                        key={com.idInterno}
-                        className={`flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors ${
-                          isDisabled ? "opacity-60 bg-institucional-whiteSmoke/30" : "hover:bg-institucional-whiteSmoke/50"
-                        }`}
-                      >
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-mono text-acento-azul1 font-medium text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">CIU:</span>
-                          <span>{com.ciu}</span>
-                        </td>
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Cédula:</span>
-                          <span>{com.cedula}</span>
-                        </td>
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Contribuyente:</span>
-                          <div className="flex flex-col items-end md:items-start gap-1">
-                            <span>{com.contribuyente}</span>
-                            {isDisabled && (
-                              <span className="inline-flex max-w-fit rounded-full bg-base-red/10 px-2 py-0.5 text-xs font-medium text-base-red" title={`Deshabilitado por: ${com.deshabilitadoPor}`}>
-                                Deshabilitado
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Actividad:</span>
-                          <span>{com.actividad}</span>
-                        </td>
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
-                          <span>{naveNombre}</span>
-                        </td>
-                        <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 font-mono text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Puesto:</span>
-                          <span>{puestoCodigo}</span>
-                        </td>
-                        <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
-                          <div className="flex items-center justify-end md:justify-center gap-1">
-                            {!isDisabled && (
-                              <button
-                                type="button"
-                                onClick={() => handleEditar(com)}
-                                className="flex h-7 w-7 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
-                                title="Editar"
-                              >
-                                <Pencil size={13} />
-                              </button>
-                            )}
+                    }
+                    
+                    return (
+                    <tr
+                      key={com.idInterno}
+                      className={`flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors ${
+                        isDisabled ? "opacity-60 bg-institucional-whiteSmoke/30" : "hover:bg-institucional-whiteSmoke/50"
+                      }`}
+                    >
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-mono text-acento-azul1 font-medium text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">CIU:</span>
+                        <span>{com.ciu}</span>
+                      </td>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Cédula:</span>
+                        <span>{com.cedula}</span>
+                      </td>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Contribuyente:</span>
+                        <div className="flex flex-col items-end md:items-start gap-1">
+                          <span>{com.contribuyente}</span>
+                          {isDisabled && (
+                            <span className="inline-flex max-w-fit rounded-full bg-base-red/10 px-2 py-0.5 text-xs font-medium text-base-red" title={`Deshabilitado por: ${com.deshabilitadoPor}`}>
+                              Deshabilitado
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Actividad:</span>
+                        <span>{com.actividad}</span>
+                      </td>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
+                        <span>{naveNombre}</span>
+                      </td>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 font-mono text-sm md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Puesto:</span>
+                        <span>{puestoCodigo}</span>
+                      </td>
+                      <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
+                        <div className="flex items-center justify-end md:justify-center gap-1">
+                          {!isDisabled && (
                             <button
                               type="button"
-                              onClick={() => {
-                                if (isDisabled) {
-                                  comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined }).then(() => {
-                                    toast.success("Habilitado");
-                                    setRefreshKey(k => k + 1);
-                                  });
-                                } else {
-                                  handleEliminar(com);
-                                }
-                              }}
-                              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                                isDisabled ? "text-acento-verdeOliva1 hover:bg-acento-verdeOliva1/10" : "text-base-red hover:bg-base-red/10"
-                              }`}
-                              title={isDisabled ? "Habilitar" : "Deshabilitar"}
+                              onClick={() => handleEditar(com)}
+                              className="flex h-7 w-7 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
+                              title="Editar"
                             >
-                              {isDisabled ? <CheckCircle2 size={13} /> : <Trash2 size={13} />}
+                              <Pencil size={13} />
                             </button>
-                          </div>
-                        </td>
-                      </tr>
-                    )})}
-                    {comerciantesFiltrados.length === 0 && (
-                      <tr className="block md:table-row">
-                        <td
-                          colSpan={7}
-                          className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
-                        >
-                          No se encontraron comerciantes.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                          )}
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (isDisabled) {
+                                await comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined });
+                                toast.success("Habilitado");
+                                setRefreshKey(k => k + 1);
+                              } else {
+                                handleEliminar(com);
+                              }
+                            }}
+                            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                              isDisabled ? "text-acento-verdeOliva1 hover:bg-acento-verdeOliva1/10" : "text-base-red hover:bg-base-red/10"
+                            }`}
+                            title={isDisabled ? "Habilitar" : "Deshabilitar"}
+                          >
+                            {isDisabled ? <CheckCircle2 size={13} /> : <Trash2 size={13} />}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )})}
+                  {comerciantesFiltrados.length === 0 && (
+                    <tr className="block md:table-row">
+                      <td
+                        colSpan={7}
+                        className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
+                      >
+                        No se encontraron comerciantes.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Modales */}
@@ -554,6 +596,7 @@ export default function TicPage() {
         key={editingComerciante?.idInterno ?? "new"}
         open={formOpen}
         comerciante={editingComerciante}
+        naves={naves}
         onClose={() => {
           setFormOpen(false);
           setEditingComerciante(null);

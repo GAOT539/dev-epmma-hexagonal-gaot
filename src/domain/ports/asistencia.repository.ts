@@ -16,6 +16,11 @@ export interface IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<RegistroAsistencia[]>;
+  obtenerAsistenciaNaveRango(
+    naveId: string,
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]>;
   registrarAsistencia(
     comercianteId: string,
     fecha: string,

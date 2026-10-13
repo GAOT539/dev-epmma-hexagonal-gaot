@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Building2,
   Plus,
@@ -10,14 +10,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Nave } from "@/domain/models/nave.model";
-import {
-  obtenerNaves,
-  crearNave,
-  actualizarNave,
-  eliminarNave,
-  obtenerSupervisoresDisponibles,
-} from "@/infrastructure/mocks/naves.mock";
-import { obtenerComerciantes } from "@/infrastructure/mocks/mercado.mock";
+import { naveService } from "@/application/services/nave.service";
+import { comercianteService } from "@/application/services/comerciante.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,9 +24,27 @@ import {
 } from "@/components/ui/dialog";
 
 export default function NavesPage() {
-  const [naves, setNaves] = useState<Nave[]>(() => obtenerNaves());
+  const [naves, setNaves] = useState<Nave[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const supervisoresDisponibles = obtenerSupervisoresDisponibles();
+  const [supervisoresDisponibles, setSupervisoresDisponibles] = useState<string[]>([]);
+
+  useEffect(() => {
+    let activo = true;
+    Promise.all([
+      naveService.obtenerNaves(),
+      naveService.obtenerSupervisoresDisponibles(),
+    ]).then(([navesData, supData]) => {
+      if (activo) {
+        setNaves(navesData);
+        setSupervisoresDisponibles(supData);
+        setCargando(false);
+      }
+    });
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // Estado del modal de Crear Nave
   const [isCrearOpen, setIsCrearOpen] = useState(false);
@@ -79,7 +91,7 @@ export default function NavesPage() {
     );
   }
 
-  function handleCrearNave(e: React.FormEvent) {
+  async function handleCrearNave(e: React.FormEvent) {
     e.preventDefault();
     setCrearError("");
 
@@ -95,8 +107,9 @@ export default function NavesPage() {
       return;
     }
 
-    const naveCreada = crearNave(nombre, cantidad, nuevoSupervisores);
-    setNaves(obtenerNaves());
+    const naveCreada = await naveService.crearNave(nombre, cantidad, nuevoSupervisores);
+    const navesActualizadas = await naveService.obtenerNaves();
+    setNaves(navesActualizadas);
     setIsCrearOpen(false);
 
     toast.success(`Nave ${naveCreada.nombre} creada exitosamente`, {
@@ -106,7 +119,7 @@ export default function NavesPage() {
 
   // ── Manejadores de Edición ────────────────────────────────────────────────
 
-  function handleOpenEditar(nave: Nave) {
+  async function handleOpenEditar(nave: Nave) {
     setEditingNave(nave);
     setEditNombre(nave.nombre);
     setEditCantidad(String(nave.cantidadPuestos));
@@ -114,7 +127,7 @@ export default function NavesPage() {
     setEditarError("");
 
     // Cálculo de puestos actualmente ocupados por comerciantes en esta nave
-    const comerciantes = obtenerComerciantes();
+    const comerciantes = await comercianteService.obtenerComerciantes();
     const ocupados = comerciantes.filter(
       (c) =>
         c.nave?.toLowerCase() === nave.nombre.toLowerCase() ||
@@ -129,7 +142,7 @@ export default function NavesPage() {
     );
   }
 
-  function handleGuardarEditar(e: React.FormEvent) {
+  async function handleGuardarEditar(e: React.FormEvent) {
     e.preventDefault();
     if (!editingNave) return;
     setEditarError("");
@@ -156,14 +169,15 @@ export default function NavesPage() {
       return;
     }
 
-    const actualizada = actualizarNave(editingNave.id, {
+    const actualizada = await naveService.actualizarNave(editingNave.id, {
       nombre,
       cantidadPuestos: cantidad,
       supervisores: editSupervisores,
     });
 
     if (actualizada) {
-      setNaves(obtenerNaves());
+      const navesActualizadas = await naveService.obtenerNaves();
+      setNaves(navesActualizadas);
       setEditingNave(null);
       toast.success(`Nave ${actualizada.nombre} actualizada correctamente`);
     } else {
@@ -173,8 +187,8 @@ export default function NavesPage() {
 
   // ── Manejador de Eliminación (Validación de Regla de Negocio) ──────────────
 
-  function handleEliminar(nave: Nave) {
-    const resultado = eliminarNave(nave.id);
+  async function handleEliminar(nave: Nave) {
+    const resultado = await naveService.eliminarNave(nave.id);
 
     if (!resultado.exito) {
       toast.error(
@@ -184,7 +198,8 @@ export default function NavesPage() {
       return;
     }
 
-    setNaves(obtenerNaves());
+    const navesActualizadas = await naveService.obtenerNaves();
+    setNaves(navesActualizadas);
     toast.success(resultado.mensaje);
   }
 
@@ -256,7 +271,20 @@ export default function NavesPage() {
                 </tr>
               </thead>
               <tbody className="block md:table-row-group space-y-3 md:space-y-0">
-                {navesFiltradas.map((nave) => (
+                {cargando ? (
+                  <tr className="block md:table-row">
+                    <td
+                      colSpan={5}
+                      className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
+                    >
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="h-6 w-6 rounded-full border-2 border-institucional-green/30 border-t-institucional-green animate-spin" />
+                        <span>Cargando naves del mercado...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  navesFiltradas.map((nave) => (
                   <tr
                     key={nave.id}
                     className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors hover:bg-institucional-whiteSmoke/50"
@@ -326,9 +354,10 @@ export default function NavesPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                ))
+              )}
 
-                {navesFiltradas.length === 0 && (
+                {!cargando && navesFiltradas.length === 0 && (
                   <tr className="block md:table-row">
                     <td
                       colSpan={5}

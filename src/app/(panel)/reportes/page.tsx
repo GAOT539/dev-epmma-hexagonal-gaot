@@ -1,26 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Download,
   Search,
   User,
+  Loader2,
 } from "lucide-react";
 import { format, subDays, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
-import {
-  getNaves,
-  getComerciantes,
-  getAsistenciaNaveRango,
-  getAsistenciaComercianteRango,
-  getPuestosPorNave,
-} from "@/infrastructure/mocks/mercado.mock";
+import { naveService } from "@/application/services/nave.service";
+import { comercianteService } from "@/application/services/comerciante.service";
+import { asistenciaService } from "@/application/services/asistencia.service";
+import { useAuth } from "@/application/services/auth.service";
+import type { Nave } from "@/domain/models/nave.model";
+import type { EstadoAsistencia } from "@/domain/models/asistencia.model";
 import type {
   Comerciante,
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
-import { useAuth } from "@/infrastructure/auth/auth-context";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import type { DateRange } from "react-day-picker";
 
@@ -51,12 +50,58 @@ const normalizeText = (text: string) => {
   return text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 };
 
+interface ReporteNaveItem {
+  comerciante: Comerciante & { puestoCode: string };
+  puestoCode: string;
+  estados: (EstadoAsistencia | "Pendiente")[];
+  todoPresente: boolean;
+  observaciones: string;
+}
+
+interface ReporteIndividualData {
+  comerciante: Comerciante;
+  estados: (EstadoAsistencia | "Pendiente")[];
+  todoPresente: boolean;
+  observaciones: string;
+  puestoCode: string;
+  naveNombre: string;
+}
+
 // ── Página de Reportes ───────────────────────────────────────────────────────
 
 export default function ReportesPage() {
   const { user } = useAuth();
-  const allNaves = getNaves();
-  const todosLosComerciantes = getComerciantes();
+  const [allNaves, setAllNaves] = useState<Nave[]>([]);
+  const [todosLosComerciantes, setTodosLosComerciantes] = useState<Comerciante[]>([]);
+  const [cargandoInicial, setCargandoInicial] = useState(true);
+  const [cargandoReporte, setCargandoReporte] = useState(false);
+
+  const [modo, setModo] = useState<"nave" | "individual">("nave");
+  const [selectedNaveId, setSelectedNaveId] = useState("");
+  const [searchComerciante, setSearchComerciante] = useState("");
+  const [selectedComercianteId, setSelectedComercianteId] = useState<string | null>(null);
+  const [incluirObservaciones, setIncluirObservaciones] = useState(true);
+
+  const [reporteNave, setReporteNave] = useState<ReporteNaveItem[]>([]);
+  const [reporteIndividual, setReporteIndividual] = useState<ReporteIndividualData | null>(null);
+
+  // Cargar naves y comerciantes desde la capa de aplicación
+  useEffect(() => {
+    let activo = true;
+    Promise.all([
+      naveService.obtenerNaves(),
+      comercianteService.obtenerComerciantes(),
+    ]).then(([navesData, comData]) => {
+      if (activo) {
+        setAllNaves(navesData);
+        setTodosLosComerciantes(comData);
+        setCargandoInicial(false);
+      }
+    });
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // RBAC: Supervisores solo ven sus naves asignadas
   const naves = useMemo(() => {
@@ -67,11 +112,7 @@ export default function ReportesPage() {
     return allNaves;
   }, [allNaves, user]);
 
-  const [modo, setModo] = useState<"nave" | "individual">("nave");
-  const [selectedNaveId, setSelectedNaveId] = useState(naves[0]?.id ?? "");
-  const [searchComerciante, setSearchComerciante] = useState("");
-  const [selectedComercianteId, setSelectedComercianteId] = useState<string | null>(null);
-  const [incluirObservaciones, setIncluirObservaciones] = useState(true);
+  const activeNaveId = selectedNaveId || (naves.length > 0 ? naves[0].id : "");
 
   // DateRangePicker state
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
@@ -95,92 +136,122 @@ export default function ReportesPage() {
     }
   }, [fechaInicio, fechaFin]);
 
-  // Datos para el reporte por nave
-  const reporteNave = useMemo(() => {
-    if (modo !== "nave" || !selectedNaveId || !fechaInicio || !fechaFin) return [];
-
-    const puestos = getPuestosPorNave(selectedNaveId);
-    const comerciantesNave = puestos
-      .filter((p) => p.comercianteId)
-      .map((p) => {
-        const c = todosLosComerciantes.find(
-          (c) => c.idInterno === p.comercianteId
-        );
-        return c ? { ...c, puestoCode: p.codigo } : null;
-      })
-      .filter(Boolean) as (Comerciante & { puestoCode: string })[];
-
-    const asistencia = getAsistenciaNaveRango(
-      selectedNaveId,
-      fechaInicio,
-      fechaFin
-    );
-
-    return comerciantesNave.map((com) => {
-      const registros = asistencia.filter(
-        (r) => r.comercianteId === com.idInterno
-      );
-      const registroMap = new Map<string, RegistroAsistencia>();
-      registros.forEach((r) => registroMap.set(r.fecha, r));
-
-      const estados = fechas.map(
-        (f) => registroMap.get(f)?.estado ?? "Pendiente"
-      );
-      const todoPresente = estados.every((e) => e === "Presente");
-      const observaciones = registros
-        .filter((r) => r.observacion)
-        .map((r) => `${r.fecha}: ${r.observacion}`)
-        .join(" | ");
-
-      return {
-        comerciante: com,
-        puestoCode: com.puestoCode,
-        estados,
-        todoPresente,
-        observaciones,
-      };
-    });
-  }, [modo, selectedNaveId, fechaInicio, fechaFin, fechas, todosLosComerciantes]);
-
-  // Datos para reporte individual
-  const reporteIndividual = useMemo(() => {
-    if (modo !== "individual" || !selectedComercianteId || !fechaInicio || !fechaFin) return null;
-
-    const com = todosLosComerciantes.find(
-      (c) => c.idInterno === selectedComercianteId
-    );
-    if (!com) return null;
-
-    const registros = getAsistenciaComercianteRango(
-      selectedComercianteId,
-      fechaInicio,
-      fechaFin
-    );
-    const registroMap = new Map<string, RegistroAsistencia>();
-    registros.forEach((r) => registroMap.set(r.fecha, r));
-
-    const estados = fechas.map(
-      (f) => registroMap.get(f)?.estado ?? "Pendiente"
-    );
-    const todoPresente = estados.every((e) => e === "Presente");
-    const observaciones = registros
-      .filter((r) => r.observacion)
-      .map((r) => `${r.fecha}: ${r.observacion}`)
-      .join(" | ");
-
-    let puestoCode = "—";
-    let naveNombre = "—";
-
-    for (const n of allNaves) {
-      const p = n.puestos.find((p) => p.comercianteId === com.idInterno);
-      if (p) {
-        puestoCode = p.codigo;
-        naveNombre = n.nombre;
-        break;
-      }
+  // Carga asíncrona del reporte por nave
+  useEffect(() => {
+    let activo = true;
+    if (modo !== "nave" || !activeNaveId || !fechaInicio || !fechaFin || fechas.length === 0) {
+      return;
     }
 
-    return { comerciante: com, estados, todoPresente, observaciones, puestoCode, naveNombre };
+    queueMicrotask(() => {
+      if (activo) setCargandoReporte(true);
+    });
+
+    Promise.all([
+      comercianteService.obtenerPuestosPorNave(activeNaveId),
+      asistenciaService.obtenerAsistenciaNaveRango(activeNaveId, fechaInicio, fechaFin),
+    ]).then(([puestos, asistencia]) => {
+      if (!activo) return;
+
+      const comerciantesNave = puestos
+        .filter((p) => p.comercianteId)
+        .map((p) => {
+          const c = todosLosComerciantes.find((c) => c.idInterno === p.comercianteId);
+          return c ? { ...c, puestoCode: p.codigo } : null;
+        })
+        .filter(Boolean) as (Comerciante & { puestoCode: string })[];
+
+      const data: ReporteNaveItem[] = comerciantesNave.map((com) => {
+        const registros = asistencia.filter((r) => r.comercianteId === com.idInterno);
+        const registroMap = new Map<string, RegistroAsistencia>();
+        registros.forEach((r) => registroMap.set(r.fecha, r));
+
+        const estados = fechas.map(
+          (f) => registroMap.get(f)?.estado ?? "Pendiente"
+        );
+        const todoPresente = estados.every((e) => e === "Presente");
+        const observaciones = registros
+          .filter((r) => r.observacion)
+          .map((r) => `${r.fecha}: ${r.observacion}`)
+          .join(" | ");
+
+        return {
+          comerciante: com,
+          puestoCode: com.puestoCode,
+          estados,
+          todoPresente,
+          observaciones,
+        };
+      });
+
+      setReporteNave(data);
+      setCargandoReporte(false);
+    });
+
+    return () => {
+      activo = false;
+    };
+  }, [modo, activeNaveId, fechaInicio, fechaFin, fechas, todosLosComerciantes]);
+
+  // Carga asíncrona del reporte individual
+  useEffect(() => {
+    let activo = true;
+    if (modo !== "individual" || !selectedComercianteId || !fechaInicio || !fechaFin || fechas.length === 0) {
+      return;
+    }
+
+    const com = todosLosComerciantes.find((c) => c.idInterno === selectedComercianteId);
+    if (!com) {
+      return;
+    }
+
+    queueMicrotask(() => {
+      if (activo) setCargandoReporte(true);
+    });
+
+    asistenciaService
+      .obtenerAsistenciaComercianteRango(selectedComercianteId, fechaInicio, fechaFin)
+      .then((registros) => {
+        if (!activo) return;
+
+        const registroMap = new Map<string, RegistroAsistencia>();
+        registros.forEach((r) => registroMap.set(r.fecha, r));
+
+        const estados = fechas.map(
+          (f) => registroMap.get(f)?.estado ?? "Pendiente"
+        );
+        const todoPresente = estados.every((e) => e === "Presente");
+        const observaciones = registros
+          .filter((r) => r.observacion)
+          .map((r) => `${r.fecha}: ${r.observacion}`)
+          .join(" | ");
+
+        let puestoCode = "—";
+        let naveNombre = "—";
+
+        for (const n of allNaves) {
+          const p = n.puestos?.find((p) => p.comercianteId === com.idInterno);
+          if (p) {
+            puestoCode = p.codigo;
+            naveNombre = n.nombre;
+            break;
+          }
+        }
+
+        setReporteIndividual({
+          comerciante: com,
+          estados,
+          todoPresente,
+          observaciones,
+          puestoCode,
+          naveNombre,
+        });
+        setCargandoReporte(false);
+      });
+
+    return () => {
+      activo = false;
+    };
   }, [modo, selectedComercianteId, fechaInicio, fechaFin, fechas, todosLosComerciantes, allNaves]);
 
   // Búsqueda de comerciantes (normalizada e insensible a tildes y mayúsculas)
@@ -377,51 +448,64 @@ export default function ReportesPage() {
       </header>
 
       <div className="mx-auto max-w-full space-y-6">
-        {/* ── Controles ── */}
-        <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
-          <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 lg:gap-6 w-full">
-            {/* Modo */}
-            <div className="flex flex-col gap-1.5 w-full md:w-auto">
-              <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                Tipo de Reporte
-              </label>
-              <div className="flex rounded-lg overflow-hidden ring-1 ring-institucional-whiteSmokeBlack/30 w-full md:w-auto">
-                <button
-                  type="button"
-                  onClick={() => setModo("nave")}
-                  className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
-                    modo === "nave"
-                      ? "bg-institucional-green text-base-white"
-                      : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
-                  }`}
-                >
-                  Por Nave
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setModo("individual")}
-                  className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
-                    modo === "individual"
-                      ? "bg-institucional-green text-base-white"
-                      : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
-                  }`}
-                >
-                  Individual
-                </button>
-              </div>
-            </div>
+        {cargandoInicial ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
+            <Loader2 className="h-8 w-8 animate-spin" />
+            <span className="text-sm font-medium text-gray-600">Cargando datos del módulo de reportes...</span>
+          </div>
+        ) : (
+          <>
+            {/* ── Controles ── */}
+            <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
+              <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 lg:gap-6 w-full">
+                {/* Modo */}
+                <div className="flex flex-col gap-1.5 w-full md:w-auto">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Tipo de Reporte
+                  </label>
+                  <div className="flex rounded-lg overflow-hidden ring-1 ring-institucional-whiteSmokeBlack/30 w-full md:w-auto">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModo("nave");
+                        setReporteIndividual(null);
+                      }}
+                      className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
+                        modo === "nave"
+                          ? "bg-institucional-green text-base-white"
+                          : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
+                      }`}
+                    >
+                      Por Nave
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModo("individual");
+                        setReporteNave([]);
+                      }}
+                      className={`flex-1 md:flex-initial px-4 py-2 text-xs font-semibold transition-colors ${
+                        modo === "individual"
+                          ? "bg-institucional-green text-base-white"
+                          : "bg-base-white text-base-eerieBlack hover:bg-institucional-green/5"
+                      }`}
+                    >
+                      Individual
+                    </button>
+                  </div>
+                </div>
 
-            {/* Selector de nave o comerciante */}
-            {modo === "nave" ? (
-              <div className="flex flex-col gap-1.5 w-full md:w-auto">
-                <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                  Nave
-                </label>
-                <select
-                  value={selectedNaveId}
-                  onChange={(e) => setSelectedNaveId(e.target.value)}
-                  className="h-9 w-full md:w-auto rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
-                >
+                {/* Selector de nave o comerciante */}
+                {modo === "nave" ? (
+                  <div className="flex flex-col gap-1.5 w-full md:w-auto">
+                    <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                      Nave
+                    </label>
+                    <select
+                      value={activeNaveId}
+                      onChange={(e) => setSelectedNaveId(e.target.value)}
+                      className="h-9 w-full md:w-auto rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
+                    >
                   {naves.map((n) => (
                     <option key={n.id} value={n.id}>
                       {n.nombre}
@@ -578,7 +662,20 @@ export default function ReportesPage() {
                 </tr>
               </thead>
               <tbody>
-                {reporteNave.map((row, i) => (
+                {cargandoReporte ? (
+                  <tr>
+                    <td
+                      colSpan={7 + fechas.length + (incluirObservaciones ? 1 : 0)}
+                      className="px-4 py-12 text-center text-sm text-gray-700"
+                    >
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <div className="h-6 w-6 rounded-full border-2 border-institucional-green/30 border-t-institucional-green animate-spin" />
+                        <span>Generando reporte de asistencia...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  reporteNave.map((row, i) => (
                   <tr
                     key={row.comerciante.idInterno}
                     className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
@@ -638,7 +735,8 @@ export default function ReportesPage() {
                       </td>
                     )}
                   </tr>
-                ))}
+                ))
+              )}
               </tbody>
             </table>
           </div>
@@ -746,6 +844,8 @@ export default function ReportesPage() {
             );
           })}
         </div>
+          </>
+        )}
       </div>
     </div>
   );

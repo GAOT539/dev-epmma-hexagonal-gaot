@@ -9,6 +9,7 @@ import {
   getAsistenciaPorFecha,
   getAsistenciaComerciantePorFecha,
   getAsistenciaComercianteRango,
+  getAsistenciaNaveRango,
   setEstadoAsistencia,
   setPermisoComercianteRango,
 } from "@/infrastructure/mocks/mercado.mock";
@@ -33,6 +34,16 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
   ): Promise<RegistroAsistencia[]> {
     return Promise.resolve([
       ...getAsistenciaComercianteRango(comercianteId, fechaInicio, fechaFin),
+    ]);
+  }
+
+  async obtenerAsistenciaNaveRango(
+    naveId: string,
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]> {
+    return Promise.resolve([
+      ...getAsistenciaNaveRango(naveId, fechaInicio, fechaFin),
     ]);
   }
 
