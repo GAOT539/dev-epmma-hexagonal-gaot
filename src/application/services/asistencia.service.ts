@@ -4,6 +4,8 @@ import type { IAsistenciaRepository } from "@/domain/ports/asistencia.repository
 import type {
   EstadoAsistencia,
   RegistroAsistencia,
+  ObservacionDetalle,
+  PermisoDetalle,
 } from "@/domain/models/asistencia.model";
 import { asistenciaRepository } from "@/infrastructure/repositories/asistencia.repository.impl";
 
@@ -67,6 +69,60 @@ export class AsistenciaService {
     fechaFin: string
   ): Promise<void> {
     return this.repository.asignarPermisoRango(comercianteId, fechaInicio, fechaFin);
+  }
+
+  async agregarObservacion(
+    comercianteId: string,
+    fecha: string,
+    texto: string,
+    fechaHora?: string
+  ): Promise<ObservacionDetalle> {
+    return this.repository.agregarObservacion(
+      comercianteId,
+      fecha,
+      texto,
+      fechaHora
+    );
+  }
+
+  async eliminarObservacion(
+    comercianteId: string,
+    fecha: string,
+    observacionId: string
+  ): Promise<void> {
+    return this.repository.eliminarObservacion(
+      comercianteId,
+      fecha,
+      observacionId
+    );
+  }
+
+  async agregarPermiso(
+    comercianteId: string,
+    fecha: string,
+    motivo: string,
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<PermisoDetalle> {
+    return this.repository.agregarPermiso(
+      comercianteId,
+      fecha,
+      motivo,
+      fechaInicio,
+      fechaFin
+    );
+  }
+
+  async eliminarPermiso(
+    comercianteId: string,
+    fecha: string,
+    permisoId: string
+  ): Promise<void> {
+    return this.repository.eliminarPermiso(
+      comercianteId,
+      fecha,
+      permisoId
+    );
   }
 }
 

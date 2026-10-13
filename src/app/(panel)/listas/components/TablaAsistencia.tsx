@@ -7,14 +7,27 @@ import {
   Eye as EyeIcon,
   ShieldAlert,
   X,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import type {
   EstadoAsistencia,
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
+import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
+import { asistenciaService } from "@/application/services/asistencia.service";
 import { ESTADO_CONFIG } from "./ModalNovedad";
 
 // ── Botón de acción de estado ────────────────────────────────────────────────
@@ -62,19 +75,28 @@ export function PuestoCard({
   comerciante,
   estado,
   fecha,
+  registro,
   onEstadoChange,
   onDoubleClick,
   onObservacionGuardada,
   onPermisoAsignado,
+  onActualizarAsistencia,
 }: {
   puesto: Puesto;
   comerciante: Comerciante | null;
   estado: EstadoAsistencia | "Vacante";
   fecha: string;
+  registro?: RegistroAsistencia | null;
   onEstadoChange: (estado: EstadoAsistencia) => void;
   onDoubleClick: () => void;
-  onObservacionGuardada: (comercianteId: string, texto: string) => void;
-  onPermisoAsignado: (comercianteId: string, inicio: string, fin: string) => void;
+  onObservacionGuardada: (comercianteId: string, texto: string) => Promise<void> | void;
+  onPermisoAsignado: (
+    comercianteId: string,
+    inicio: string,
+    fin: string,
+    motivo?: string
+  ) => Promise<void> | void;
+  onActualizarAsistencia?: () => Promise<void> | void;
 }) {
   const config = ESTADO_CONFIG[estado];
   const isVacante = puesto.estado === "Vacante";
@@ -83,7 +105,15 @@ export function PuestoCard({
   const [obsTexto, setObsTexto] = useState("");
   const [permisoInicio, setPermisoInicio] = useState(fecha);
   const [permisoFin, setPermisoFin] = useState(fecha);
+  const [permisoMotivo, setPermisoMotivo] = useState("Permiso concedido");
   const [permisoError, setPermisoError] = useState("");
+
+  // Estado para eliminación segura con confirmación (Fase 4)
+  const [itemAEliminar, setItemAEliminar] = useState<{
+    id: string;
+    tipo: "observacion" | "permiso";
+  } | null>(null);
+  const [eliminando, setEliminando] = useState(false);
 
   if (isVacante) {
     return (
@@ -105,15 +135,22 @@ export function PuestoCard({
     );
   }
 
-  function handleGuardarObservacion(e: React.MouseEvent) {
+  // Validación proactiva de fecha para permisos (Fase 3)
+  const yaExistePermisoFecha = Boolean(
+    registro?.permisos?.some((p) => p.fecha === permisoInicio)
+  );
+
+  async function handleGuardarObservacion(e: React.MouseEvent) {
     e.stopPropagation();
     if (!comerciante || !obsTexto.trim()) return;
-    onObservacionGuardada(comerciante.idInterno, obsTexto.trim());
+    await onObservacionGuardada(comerciante.idInterno, obsTexto.trim());
     setObsTexto("");
-    setPanelActivo(null);
+    if (onActualizarAsistencia) {
+      await onActualizarAsistencia();
+    }
   }
 
-  function handleGuardarPermiso(e: React.MouseEvent) {
+  async function handleGuardarPermiso(e: React.MouseEvent) {
     e.stopPropagation();
     setPermisoError("");
     if (!comerciante) return;
@@ -125,8 +162,50 @@ export function PuestoCard({
       setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
       return;
     }
-    onPermisoAsignado(comerciante.idInterno, permisoInicio, permisoFin);
-    setPanelActivo(null);
+    if (yaExistePermisoFecha) {
+      setPermisoError("Ya existe un permiso registrado para esta fecha.");
+      return;
+    }
+    await onPermisoAsignado(
+      comerciante.idInterno,
+      permisoInicio,
+      permisoFin,
+      permisoMotivo.trim() || "Permiso concedido"
+    );
+    if (onActualizarAsistencia) {
+      await onActualizarAsistencia();
+    }
+  }
+
+  // Acción de confirmación de eliminación (Fase 4)
+  async function handleConfirmarEliminacion() {
+    if (!itemAEliminar || !comerciante) return;
+    try {
+      setEliminando(true);
+      if (itemAEliminar.tipo === "observacion") {
+        await asistenciaService.eliminarObservacion(
+          comerciante.idInterno,
+          fecha,
+          itemAEliminar.id
+        );
+        toast.success("Observación eliminada correctamente");
+      } else {
+        await asistenciaService.eliminarPermiso(
+          comerciante.idInterno,
+          fecha,
+          itemAEliminar.id
+        );
+        toast.success("Permiso eliminado correctamente");
+      }
+      if (onActualizarAsistencia) {
+        await onActualizarAsistencia();
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setEliminando(false);
+      setItemAEliminar(null);
+    }
   }
 
   return (
@@ -218,7 +297,7 @@ export function PuestoCard({
         </div>
       </div>
 
-      {/* ── Subpanel Desplegable: Observación ── */}
+      {/* ── Subpanel Desplegable: Observación (Fase 3 & Fase 4) ── */}
       {panelActivo === "observacion" && (
         <div
           onClick={(e) => e.stopPropagation()}
@@ -238,6 +317,43 @@ export function PuestoCard({
               <X size={14} />
             </button>
           </div>
+
+          {/* Listado Histórico de Observaciones con Botón de Eliminar */}
+          {registro?.observaciones && registro.observaciones.length > 0 && (
+            <div className="space-y-1.5 pb-1">
+              <span className="text-[11px] font-semibold text-blue-900 block">
+                Historial de observaciones registradas ({registro.observaciones.length}):
+              </span>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {registro.observaciones.map((obs) => (
+                  <div
+                    key={obs.id}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
+                  >
+                    <div className="min-w-0 flex-1 leading-snug">
+                      <span className="font-semibold text-blue-700 mr-1.5">
+                        {obs.fechaHora}
+                      </span>
+                      <span className="text-gray-800 break-words">- {obs.texto}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setItemAEliminar({ id: obs.id, tipo: "observacion" });
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                      title="Eliminar observación"
+                      aria-label="Eliminar observación"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <Textarea
             placeholder="Describa la observación o situación observada..."
             value={obsTexto}
@@ -253,7 +369,7 @@ export function PuestoCard({
               className="h-8 text-xs"
               onClick={() => setPanelActivo(null)}
             >
-              Cancelar
+              Cerrar
             </Button>
             <Button
               type="button"
@@ -268,7 +384,7 @@ export function PuestoCard({
         </div>
       )}
 
-      {/* ── Subpanel Desplegable: Permiso ── */}
+      {/* ── Subpanel Desplegable: Permiso (Fase 3 & Fase 4) ── */}
       {panelActivo === "permiso" && (
         <div
           onClick={(e) => e.stopPropagation()}
@@ -297,7 +413,10 @@ export function PuestoCard({
               <input
                 type="date"
                 value={permisoInicio}
-                onChange={(e) => setPermisoInicio(e.target.value)}
+                onChange={(e) => {
+                  setPermisoInicio(e.target.value);
+                  setPermisoError("");
+                }}
                 className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
               />
             </div>
@@ -308,17 +427,82 @@ export function PuestoCard({
               <input
                 type="date"
                 value={permisoFin}
-                onChange={(e) => setPermisoFin(e.target.value)}
+                onChange={(e) => {
+                  setPermisoFin(e.target.value);
+                  setPermisoError("");
+                }}
                 className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
               />
             </div>
           </div>
 
+          <div>
+            <label className="text-xs font-medium text-gray-700">
+              Motivo del Permiso
+            </label>
+            <input
+              type="text"
+              value={permisoMotivo}
+              onChange={(e) => setPermisoMotivo(e.target.value)}
+              placeholder="Ej. Cita médica, Trámite personal..."
+              className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+            />
+          </div>
+
+          {/* Alerta Proactiva de Restricción de Fecha en Permisos */}
+          {yaExistePermisoFecha && (
+            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
+              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+              <span>Ya existe un permiso registrado para la fecha seleccionada ({permisoInicio}).</span>
+            </div>
+          )}
+
           {permisoError && (
             <p className="text-xs text-base-red font-medium">{permisoError}</p>
           )}
 
-          <div className="flex justify-end gap-2">
+          {/* Listado Histórico de Permisos (Parte Inferior del Recuadro) */}
+          {registro?.permisos && registro.permisos.length > 0 && (
+            <div className="space-y-1.5 pt-2 border-t border-purple-200">
+              <span className="text-[11px] font-semibold text-purple-900 block">
+                Historial de permisos registrados ({registro.permisos.length}):
+              </span>
+              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                {registro.permisos.map((perm) => (
+                  <div
+                    key={perm.id}
+                    className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
+                  >
+                    <div className="min-w-0 flex-1 leading-snug">
+                      <span className="font-semibold text-acento-morado mr-1.5">
+                        {perm.fecha}:
+                      </span>
+                      <span className="text-gray-800 break-words">{perm.motivo}</span>
+                      {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
+                        <span className="block text-[11px] text-gray-500">
+                          (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setItemAEliminar({ id: perm.id, tipo: "permiso" });
+                      }}
+                      className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                      title="Eliminar permiso"
+                      aria-label="Eliminar permiso"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-1">
             <Button
               type="button"
               variant="outline"
@@ -326,12 +510,13 @@ export function PuestoCard({
               className="h-8 text-xs"
               onClick={() => setPanelActivo(null)}
             >
-              Cancelar
+              Cerrar
             </Button>
             <Button
               type="button"
               size="sm"
-              className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold"
+              disabled={yaExistePermisoFecha || !permisoInicio || !permisoFin}
+              className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
               onClick={handleGuardarPermiso}
             >
               Confirmar Permiso
@@ -339,6 +524,47 @@ export function PuestoCard({
           </div>
         </div>
       )}
+
+      {/* ── Modal de Confirmación Seguro para Eliminación (Fase 4) ── */}
+      <Dialog
+        open={Boolean(itemAEliminar)}
+        disablePointerDismissal={true}
+        onOpenChange={(open) => {
+          if (!open && !eliminando) setItemAEliminar(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md p-6" onClick={(e) => e.stopPropagation()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-semibold text-base-red">
+              <AlertTriangle className="h-5 w-5 text-red-600 shrink-0" />
+              Confirmar eliminación
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-700 font-medium pt-2 leading-relaxed">
+              {itemAEliminar?.tipo === "observacion"
+                ? "¿Está seguro de que desea eliminar esta observación? Esta acción no se puede deshacer."
+                : "¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer."}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={eliminando}
+              onClick={() => setItemAEliminar(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={eliminando}
+              className="bg-red-600 hover:bg-red-700 text-white font-medium"
+              onClick={handleConfirmarEliminacion}
+            >
+              {eliminando ? "Eliminando..." : "Eliminar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </article>
   );
 }
@@ -352,17 +578,25 @@ export function PuestosList({
   onOpenModal,
   onObservacionGuardada,
   onPermisoAsignado,
+  onActualizarAsistencia,
 }: {
   items: {
     puesto: Puesto;
     comerciante: Comerciante | null;
     estado: EstadoAsistencia | "Vacante";
+    registro?: RegistroAsistencia | null;
   }[];
   fecha: string;
   onEstadoChange: (comercianteId: string, estado: EstadoAsistencia) => void;
   onOpenModal: (puesto: Puesto, comerciante: Comerciante, estado: EstadoAsistencia) => void;
-  onObservacionGuardada: (comercianteId: string, texto: string) => void;
-  onPermisoAsignado: (comercianteId: string, inicio: string, fin: string) => void;
+  onObservacionGuardada: (comercianteId: string, texto: string) => Promise<void> | void;
+  onPermisoAsignado: (
+    comercianteId: string,
+    inicio: string,
+    fin: string,
+    motivo?: string
+  ) => Promise<void> | void;
+  onActualizarAsistencia?: () => Promise<void> | void;
 }) {
   return (
     <ul className="flex flex-col gap-2" role="list">
@@ -373,6 +607,7 @@ export function PuestosList({
             comerciante={item.comerciante}
             estado={item.estado}
             fecha={fecha}
+            registro={item.registro}
             onEstadoChange={(nuevoEstado) => {
               if (item.comerciante) {
                 onEstadoChange(item.comerciante.idInterno, nuevoEstado);
@@ -385,6 +620,7 @@ export function PuestosList({
             }}
             onObservacionGuardada={onObservacionGuardada}
             onPermisoAsignado={onPermisoAsignado}
+            onActualizarAsistencia={onActualizarAsistencia}
           />
         </li>
       ))}

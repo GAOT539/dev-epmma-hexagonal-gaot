@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   X,
   XCircle,
+  Trash2,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -190,6 +191,11 @@ export function ComercianteModal({
   const [openInicio, setOpenInicio] = useState(false);
   const [openFin, setOpenFin] = useState(false);
   const [permisoError, setPermisoError] = useState("");
+  const [itemAEliminar, setItemAEliminar] = useState<{
+    id: string;
+    tipo: "observacion" | "permiso";
+  } | null>(null);
+  const [eliminandoItem, setEliminandoItem] = useState(false);
 
   useEffect(() => {
     let cancel = false;
@@ -318,18 +324,24 @@ export function ComercianteModal({
     setPanelActivo((actual) => (actual === "permiso" ? null : "permiso"));
   }
 
-  function handleGuardarObservacion() {
+  const yaExistePermisoParaFecha = Boolean(
+    registroActual?.permisos?.some((p) => p.fecha === permisoInicio)
+  );
+
+  async function handleGuardarObservacion() {
     if (!novedadTexto.trim()) return;
-    onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
+    await onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
     setEstadoActual("Observacion");
     onEstadoChange("Observacion");
-    toast.success(
-      tieneObservacionPrevia ? "Observación editada exitosamente" : "Observación registrada exitosamente",
-      { description: "Se ha actualizado la novedad del comerciante." }
+    setNovedadTexto("");
+    const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
+      comerciante.idInterno,
+      fecha
     );
+    setRegistroActual(actualizado);
   }
 
-  function handleGuardarPermiso() {
+  async function handleGuardarPermiso() {
     setPermisoError("");
     if (!permisoInicio || !permisoFin) {
       setPermisoError("Debe seleccionar fecha de inicio y fin.");
@@ -339,13 +351,54 @@ export function ComercianteModal({
       setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
       return;
     }
-    onPermisoAsignado(permisoInicio, permisoFin);
+    if (yaExistePermisoParaFecha) {
+      setPermisoError("Ya existe un permiso registrado para esta fecha.");
+      return;
+    }
+    await onPermisoAsignado(permisoInicio, permisoFin);
     setEstadoActual("Permiso");
     onEstadoChange("Permiso");
-    toast.success(
-      tienePermisoPrevio ? "Permiso editado exitosamente" : "Permiso asignado exitosamente",
-      { description: `Rango: ${permisoInicio} al ${permisoFin}.` }
+    const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
+      comerciante.idInterno,
+      fecha
     );
+    setRegistroActual(actualizado);
+  }
+
+  async function handleConfirmarEliminacion() {
+    if (!itemAEliminar) return;
+    try {
+      setEliminandoItem(true);
+      if (itemAEliminar.tipo === "observacion") {
+        await asistenciaService.eliminarObservacion(
+          comerciante.idInterno,
+          fecha,
+          itemAEliminar.id
+        );
+        toast.success("Observación eliminada correctamente");
+      } else {
+        await asistenciaService.eliminarPermiso(
+          comerciante.idInterno,
+          fecha,
+          itemAEliminar.id
+        );
+        toast.success("Permiso eliminado correctamente");
+      }
+      const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
+        comerciante.idInterno,
+        fecha
+      );
+      setRegistroActual(actualizado);
+      if (actualizado) {
+        setEstadoActual(actualizado.estado);
+        onEstadoChange(actualizado.estado);
+      }
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al eliminar");
+    } finally {
+      setEliminandoItem(false);
+      setItemAEliminar(null);
+    }
   }
 
   return (
@@ -474,10 +527,44 @@ export function ComercianteModal({
             <div className="rounded-xl bg-blue-50/60 p-4 space-y-3 ring-1 ring-blue-200 animate-in fade-in-50 duration-150">
               <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
                 <AlertTriangle size={16} className="text-blue-600" />
-                {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
+                Registrar Observación
               </h3>
+
+              {/* Listado Histórico de Observaciones */}
+              {registroActual?.observaciones && registroActual.observaciones.length > 0 && (
+                <div className="space-y-1.5 pb-2">
+                  <span className="text-xs font-semibold text-blue-900 block">
+                    Observaciones registradas ({registroActual.observaciones.length}):
+                  </span>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                    {registroActual.observaciones.map((obs) => (
+                      <div
+                        key={obs.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
+                      >
+                        <div className="min-w-0 flex-1 leading-snug">
+                          <span className="font-semibold text-blue-700 mr-1.5">
+                            {obs.fechaHora}
+                          </span>
+                          <span className="text-gray-800 break-words">- {obs.texto}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setItemAEliminar({ id: obs.id, tipo: "observacion" })}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                          title="Eliminar observación"
+                          aria-label="Eliminar observación"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <Textarea
-                placeholder="Escriba la observación o situación a reportar..."
+                placeholder="Escriba la nueva observación o situación a reportar..."
                 value={novedadTexto}
                 onChange={(e) => setNovedadTexto(e.target.value)}
                 rows={3}
@@ -601,21 +688,109 @@ export function ComercianteModal({
                 </div>
               </div>
 
+              {/* Alerta proactiva si la fecha ya tiene un permiso */}
+              {yaExistePermisoParaFecha && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
+                  <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                  <span>Ya existe un permiso registrado para la fecha seleccionada ({permisoInicio}).</span>
+                </div>
+              )}
+
               {permisoError && (
                 <p className="text-xs text-base-red font-medium">{permisoError}</p>
+              )}
+
+              {/* Listado Histórico de Permisos (Parte Inferior) */}
+              {registroActual?.permisos && registroActual.permisos.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-purple-200">
+                  <span className="text-xs font-semibold text-purple-900 block">
+                    Permisos registrados ({registroActual.permisos.length}):
+                  </span>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                    {registroActual.permisos.map((perm) => (
+                      <div
+                        key={perm.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
+                      >
+                        <div className="min-w-0 flex-1 leading-snug">
+                          <span className="font-semibold text-acento-morado mr-1.5">
+                            {perm.fecha}:
+                          </span>
+                          <span className="text-gray-800 break-words">{perm.motivo}</span>
+                          {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
+                            <span className="block text-[11px] text-gray-500">
+                              (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setItemAEliminar({ id: perm.id, tipo: "permiso" })}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                          title="Eliminar permiso"
+                          aria-label="Eliminar permiso"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
 
               <Button
                 type="button"
                 onClick={handleGuardarPermiso}
+                disabled={yaExistePermisoParaFecha || !permisoInicio || !permisoFin}
                 size="sm"
-                className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold"
+                className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
               >
-                {tienePermisoPrevio ? "Editar Permiso" : "Asignar Permiso"}
+                Confirmar Permiso
               </Button>
             </div>
           )}
         </div>
+
+        {/* Modal de Confirmación de Eliminación Seguro (Fase 4) */}
+        <Dialog
+          open={Boolean(itemAEliminar)}
+          disablePointerDismissal={true}
+          onOpenChange={(open) => {
+            if (!open && !eliminandoItem) setItemAEliminar(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-md p-6">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-base font-semibold text-base-red">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+                Confirmar eliminación
+              </DialogTitle>
+              <DialogDescription className="text-sm text-gray-700 font-medium pt-2 leading-relaxed">
+                {itemAEliminar?.tipo === "observacion"
+                  ? "¿Está seguro de que desea eliminar esta observación? Esta acción no se puede deshacer."
+                  : "¿Está seguro de que desea eliminar este permiso? Esta acción no se puede deshacer."}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter className="mt-4 flex sm:justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={eliminandoItem}
+                onClick={() => setItemAEliminar(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                disabled={eliminandoItem}
+                className="bg-red-600 hover:bg-red-700 text-white font-medium"
+                onClick={handleConfirmarEliminacion}
+              >
+                {eliminandoItem ? "Eliminando..." : "Eliminar"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Advertencia de Pérdida de Datos */}
         <Dialog

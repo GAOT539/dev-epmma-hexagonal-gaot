@@ -3,6 +3,8 @@
 import type {
   EstadoAsistencia,
   RegistroAsistencia,
+  ObservacionDetalle,
+  PermisoDetalle,
 } from "@/domain/models/asistencia.model";
 
 export interface IAsistenciaRepository {
@@ -32,5 +34,28 @@ export interface IAsistenciaRepository {
     comercianteId: string,
     fechaInicio: string,
     fechaFin: string
+  ): Promise<void>;
+  agregarObservacion(
+    comercianteId: string,
+    fecha: string,
+    texto: string,
+    fechaHora?: string
+  ): Promise<ObservacionDetalle>;
+  eliminarObservacion(
+    comercianteId: string,
+    fecha: string,
+    observacionId: string
+  ): Promise<void>;
+  agregarPermiso(
+    comercianteId: string,
+    fecha: string,
+    motivo: string,
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<PermisoDetalle>;
+  eliminarPermiso(
+    comercianteId: string,
+    fecha: string,
+    permisoId: string
   ): Promise<void>;
 }

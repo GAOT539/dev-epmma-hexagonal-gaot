@@ -8,6 +8,20 @@ export type EstadoAsistencia =
   | "Pendiente"
   | "Vacante";
 
+export interface ObservacionDetalle {
+  id: string;
+  texto: string;
+  fechaHora: string;
+}
+
+export interface PermisoDetalle {
+  id: string;
+  motivo: string;
+  fecha: string; // YYYY-MM-DD
+  fechaInicio?: string;
+  fechaFin?: string;
+}
+
 export interface RegistroAsistencia {
   id: string;
   comercianteId: string;
@@ -19,6 +33,8 @@ export interface RegistroAsistencia {
   observacionTexto?: string;
   permisoInicio?: string; // YYYY-MM-DD
   permisoFin?: string;    // YYYY-MM-DD
+  observaciones?: ObservacionDetalle[];
+  permisos?: PermisoDetalle[];
 }
 
 export interface ConfiguracionSupervisor {

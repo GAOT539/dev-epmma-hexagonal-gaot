@@ -144,18 +144,20 @@ export default function ListasPage() {
             : null;
 
           let estado: EstadoAsistencia | "Vacante" = "Vacante";
+          let registro: RegistroAsistencia | null = null;
           if (puesto.estado === "Ocupado" && comerciante) {
+            registro =
+              asistenciaDelDia.find(
+                (r) => r.comercianteId === comerciante.idInterno
+              ) ?? null;
             const overrideKey = `${comerciante.idInterno}:${fechaStr}`;
             if (overrides[overrideKey]) {
               estado = overrides[overrideKey];
             } else {
-              const registro = asistenciaDelDia.find(
-                (r) => r.comercianteId === comerciante.idInterno
-              );
               estado = registro?.estado ?? "Pendiente";
             }
           }
-          return { puesto, comerciante, estado };
+          return { puesto, comerciante, estado, registro };
         });
       })();
 
@@ -257,39 +259,56 @@ export default function ListasPage() {
     setModalData({ puesto, comerciante, estado });
   }
 
-  async function handleAsignarPermisoDirecto(comercianteId: string, inicio: string, fin: string) {
-    await asistenciaService.asignarPermisoRango(comercianteId, inicio, fin);
+  const recargarAsistencias = async () => {
+    const datos = await asistenciaService.obtenerAsistenciaPorFecha(fechaStr);
+    setAsistenciaDelDia(datos);
+  };
 
-    const startDate = new Date(inicio + "T00:00:00");
-    const endDate = new Date(fin + "T00:00:00");
-    const current = new Date(startDate);
-    const newOverrides = { ...overrides };
+  async function handleAsignarPermisoDirecto(
+    comercianteId: string,
+    inicio: string,
+    fin: string,
+    motivo: string = "Permiso concedido"
+  ) {
+    try {
+      await asistenciaService.agregarPermiso(comercianteId, inicio, motivo, inicio, fin);
+      if (inicio !== fin) {
+        await asistenciaService.asignarPermisoRango(comercianteId, inicio, fin);
+      }
 
-    while (current <= endDate) {
-      const f = formatDate(current);
-      newOverrides[`${comercianteId}:${f}`] = "Permiso";
-      current.setDate(current.getDate() + 1);
+      const startDate = new Date(inicio + "T00:00:00");
+      const endDate = new Date(fin + "T00:00:00");
+      const current = new Date(startDate);
+      const newOverrides = { ...overrides };
+
+      while (current <= endDate) {
+        const f = formatDate(current);
+        newOverrides[`${comercianteId}:${f}`] = "Permiso";
+        current.setDate(current.getDate() + 1);
+      }
+
+      setOverrides(newOverrides);
+      await recargarAsistencias();
+      toast.success("Permiso asignado exitosamente", {
+        description: `Rango: ${inicio} al ${fin}.`,
+      });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al asignar permiso");
     }
-
-    setOverrides(newOverrides);
-    toast.success("Permiso asignado exitosamente", {
-      description: `Rango: ${inicio} al ${fin}.`,
-    });
   }
 
   async function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
-    const key = `${comercianteId}:${fechaStr}`;
-    setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
-    await asistenciaService.registrarAsistencia(
-      comercianteId,
-      fechaStr,
-      "Observacion",
-      "Novedad reportada por supervisor",
-      texto
-    );
-    toast.success("Observación registrada exitosamente", {
-      description: "Se ha actualizado la novedad del comerciante.",
-    });
+    try {
+      const key = `${comercianteId}:${fechaStr}`;
+      setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
+      await asistenciaService.agregarObservacion(comercianteId, fechaStr, texto);
+      await recargarAsistencias();
+      toast.success("Observación registrada exitosamente", {
+        description: "Se ha actualizado la novedad del comerciante.",
+      });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Error al registrar observación");
+    }
   }
 
   function handlePermisoAsignado(inicio: string, fin: string) {
@@ -497,6 +516,7 @@ export default function ListasPage() {
                   onOpenModal={handleOpenModal}
                   onObservacionGuardada={handleObservacionSaveDirecto}
                   onPermisoAsignado={handleAsignarPermisoDirecto}
+                  onActualizarAsistencia={recargarAsistencias}
                 />
               </div>
             ) : (

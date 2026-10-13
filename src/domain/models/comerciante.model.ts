@@ -46,5 +46,7 @@ export type {
   EstadoAsistencia,
   RegistroAsistencia,
   ConfiguracionSupervisor,
+  ObservacionDetalle,
+  PermisoDetalle,
 } from "./asistencia.model";
 export type { LogAuditoria } from "./auditoria.model";

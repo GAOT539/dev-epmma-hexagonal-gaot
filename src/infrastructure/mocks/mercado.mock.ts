@@ -6,6 +6,8 @@ import type {
   Comerciante,
   RegistroAsistencia,
   EstadoAsistencia,
+  ObservacionDetalle,
+  PermisoDetalle,
 } from "@/domain/models/comerciante.model";
 import { format, subDays } from "date-fns";
 import {
@@ -200,6 +202,26 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
         observacion = "Permiso concedido";
       }
 
+      const observaciones: ObservacionDetalle[] = [];
+      if (observacionTexto) {
+        observaciones.push({
+          id: `obs-hist-${comerciante.idInterno}-${fecha}-1`,
+          texto: observacionTexto,
+          fechaHora: "07:30 AM",
+        });
+      }
+
+      const permisos: PermisoDetalle[] = [];
+      if (estado === "Permiso") {
+        permisos.push({
+          id: `perm-hist-${comerciante.idInterno}-${fecha}-1`,
+          motivo: observacion || "Permiso concedido",
+          fecha,
+          fechaInicio: fecha,
+          fechaFin: format(subDays(hoy, Math.max(0, d - 2)), "yyyy-MM-dd"),
+        });
+      }
+
       const registro: RegistroAsistencia = {
         id: `asist-${comerciante.idInterno}-${fecha}`,
         comercianteId: comerciante.idInterno,
@@ -213,6 +235,8 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
           estado === "Permiso"
             ? format(subDays(hoy, Math.max(0, d - 2)), "yyyy-MM-dd")
             : undefined,
+        observaciones,
+        permisos,
       };
 
       const existing = map.get(key) ?? [];
@@ -335,9 +359,32 @@ export function setEstadoAsistencia(
   const registros = asistenciaHistorica.get(fecha) ?? [];
   const idx = registros.findIndex((r) => r.comercianteId === comercianteId);
   if (idx >= 0) {
-    registros[idx] = { ...registros[idx], estado, observacion, observacionTexto };
+    const regActual = registros[idx];
+    const observaciones = regActual.observaciones ? [...regActual.observaciones] : [];
+    if (observacionTexto) {
+      observaciones.push({
+        id: `obs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        texto: observacionTexto,
+        fechaHora: format(new Date(), "hh:mm a"),
+      });
+    }
+    registros[idx] = {
+      ...regActual,
+      estado,
+      observacion: observacion !== undefined ? observacion : regActual.observacion,
+      observacionTexto: observacionTexto !== undefined ? observacionTexto : regActual.observacionTexto,
+      observaciones,
+    };
   } else {
     const comerciante = getComerciantePorId(comercianteId);
+    const observaciones: ObservacionDetalle[] = [];
+    if (observacionTexto) {
+      observaciones.push({
+        id: `obs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        texto: observacionTexto,
+        fechaHora: format(new Date(), "hh:mm a"),
+      });
+    }
     registros.push({
       id: `asist-${comercianteId}-${fecha}`,
       comercianteId,
@@ -346,8 +393,147 @@ export function setEstadoAsistencia(
       estado,
       observacion,
       observacionTexto,
+      observaciones,
+      permisos: [],
     });
     asistenciaHistorica.set(fecha, registros);
+  }
+}
+
+export function agregarObservacionMock(
+  comercianteId: string,
+  fecha: string,
+  texto: string,
+  fechaHora?: string
+): ObservacionDetalle {
+  let registros = asistenciaHistorica.get(fecha);
+  if (!registros) {
+    registros = [];
+    asistenciaHistorica.set(fecha, registros);
+  }
+  let reg = registros.find((r) => r.comercianteId === comercianteId);
+  if (!reg) {
+    const comerciante = getComerciantePorId(comercianteId);
+    reg = {
+      id: `asist-${comercianteId}-${fecha}`,
+      comercianteId,
+      puestoId: comerciante?.puestoId ?? "",
+      fecha,
+      estado: "Observacion",
+      observacion: texto,
+      observacionTexto: texto,
+      observaciones: [],
+      permisos: [],
+    };
+    registros.push(reg);
+  }
+  if (!reg.observaciones) {
+    reg.observaciones = [];
+  }
+  const nuevaObs: ObservacionDetalle = {
+    id: `obs-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    texto,
+    fechaHora: fechaHora || format(new Date(), "hh:mm a"),
+  };
+  reg.observaciones.push(nuevaObs);
+  reg.estado = "Observacion";
+  reg.observacion = texto;
+  reg.observacionTexto = texto;
+  asistenciaOverrides.set(`${comercianteId}:${fecha}`, "Observacion");
+  return nuevaObs;
+}
+
+export function eliminarObservacionMock(
+  comercianteId: string,
+  fecha: string,
+  observacionId: string
+): void {
+  const registros = asistenciaHistorica.get(fecha);
+  if (!registros) return;
+  const reg = registros.find((r) => r.comercianteId === comercianteId);
+  if (!reg || !reg.observaciones) return;
+  reg.observaciones = reg.observaciones.filter((o) => o.id !== observacionId);
+  if (reg.observaciones.length > 0) {
+    const ultima = reg.observaciones[reg.observaciones.length - 1];
+    reg.observacion = ultima.texto;
+    reg.observacionTexto = ultima.texto;
+  } else if (reg.estado === "Observacion") {
+    reg.observacion = undefined;
+    reg.observacionTexto = undefined;
+  }
+}
+
+export function agregarPermisoMock(
+  comercianteId: string,
+  fecha: string,
+  motivo: string,
+  fechaInicio?: string,
+  fechaFin?: string
+): PermisoDetalle {
+  let registros = asistenciaHistorica.get(fecha);
+  if (!registros) {
+    registros = [];
+    asistenciaHistorica.set(fecha, registros);
+  }
+  let reg = registros.find((r) => r.comercianteId === comercianteId);
+  if (!reg) {
+    const comerciante = getComerciantePorId(comercianteId);
+    reg = {
+      id: `asist-${comercianteId}-${fecha}`,
+      comercianteId,
+      puestoId: comerciante?.puestoId ?? "",
+      fecha,
+      estado: "Permiso",
+      observacion: motivo,
+      observaciones: [],
+      permisos: [],
+    };
+    registros.push(reg);
+  }
+  if (!reg.permisos) {
+    reg.permisos = [];
+  }
+  // Validación de Permisos: si el comerciante ya tiene un permiso registrado para esa fecha exacta, lanza un error
+  const yaExiste = reg.permisos.some((p) => p.fecha === fecha);
+  if (yaExiste) {
+    throw new Error("Ya existe un permiso registrado para esta fecha.");
+  }
+
+  const nuevoPermiso: PermisoDetalle = {
+    id: `perm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+    motivo,
+    fecha,
+    fechaInicio: fechaInicio || fecha,
+    fechaFin: fechaFin || fecha,
+  };
+  reg.permisos.push(nuevoPermiso);
+  reg.estado = "Permiso";
+  reg.observacion = motivo;
+  reg.permisoInicio = nuevoPermiso.fechaInicio;
+  reg.permisoFin = nuevoPermiso.fechaFin;
+  asistenciaOverrides.set(`${comercianteId}:${fecha}`, "Permiso");
+  return nuevoPermiso;
+}
+
+export function eliminarPermisoMock(
+  comercianteId: string,
+  fecha: string,
+  permisoId: string
+): void {
+  const registros = asistenciaHistorica.get(fecha);
+  if (!registros) return;
+  const reg = registros.find((r) => r.comercianteId === comercianteId);
+  if (!reg || !reg.permisos) return;
+  reg.permisos = reg.permisos.filter((p) => p.id !== permisoId);
+  if (reg.permisos.length > 0) {
+    const ultimo = reg.permisos[reg.permisos.length - 1];
+    reg.permisoInicio = ultimo.fechaInicio;
+    reg.permisoFin = ultimo.fechaFin;
+    reg.observacion = ultimo.motivo;
+  } else if (reg.estado === "Permiso") {
+    reg.permisoInicio = undefined;
+    reg.permisoFin = undefined;
+    reg.observacion = undefined;
   }
 }
 
@@ -361,7 +547,8 @@ export function getEstadoOverride(
 export function setPermisoComercianteRango(
   comercianteId: string,
   inicio: string,
-  fin: string
+  fin: string,
+  motivo: string = "Permiso concedido"
 ) {
   // Marcar todos los días del rango como Permiso
   const startDate = new Date(inicio + "T00:00:00");
@@ -370,7 +557,11 @@ export function setPermisoComercianteRango(
 
   while (current <= endDate) {
     const fecha = format(current, "yyyy-MM-dd");
-    setEstadoAsistencia(comercianteId, fecha, "Permiso", "Permiso concedido");
+    try {
+      agregarPermisoMock(comercianteId, fecha, motivo, inicio, fin);
+    } catch {
+      // Si ya existía un permiso para esa fecha exacta en el bucle, ignorar duplicado de rango
+    }
     current.setDate(current.getDate() + 1);
   }
 }

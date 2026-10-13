@@ -4,6 +4,8 @@ import type { IAsistenciaRepository } from "@/domain/ports/asistencia.repository
 import type {
   EstadoAsistencia,
   RegistroAsistencia,
+  ObservacionDetalle,
+  PermisoDetalle,
 } from "@/domain/models/asistencia.model";
 import {
   getAsistenciaPorFecha,
@@ -12,6 +14,10 @@ import {
   getAsistenciaNaveRango,
   setEstadoAsistencia,
   setPermisoComercianteRango,
+  agregarObservacionMock,
+  eliminarObservacionMock,
+  agregarPermisoMock,
+  eliminarPermisoMock,
 } from "@/infrastructure/mocks/mercado.mock";
 
 export class AsistenciaMockRepository implements IAsistenciaRepository {
@@ -70,6 +76,47 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
     fechaFin: string
   ): Promise<void> {
     setPermisoComercianteRango(comercianteId, fechaInicio, fechaFin);
+    return Promise.resolve();
+  }
+
+  async agregarObservacion(
+    comercianteId: string,
+    fecha: string,
+    texto: string,
+    fechaHora?: string
+  ): Promise<ObservacionDetalle> {
+    return Promise.resolve(
+      agregarObservacionMock(comercianteId, fecha, texto, fechaHora)
+    );
+  }
+
+  async eliminarObservacion(
+    comercianteId: string,
+    fecha: string,
+    observacionId: string
+  ): Promise<void> {
+    eliminarObservacionMock(comercianteId, fecha, observacionId);
+    return Promise.resolve();
+  }
+
+  async agregarPermiso(
+    comercianteId: string,
+    fecha: string,
+    motivo: string,
+    fechaInicio?: string,
+    fechaFin?: string
+  ): Promise<PermisoDetalle> {
+    return Promise.resolve(
+      agregarPermisoMock(comercianteId, fecha, motivo, fechaInicio, fechaFin)
+    );
+  }
+
+  async eliminarPermiso(
+    comercianteId: string,
+    fecha: string,
+    permisoId: string
+  ): Promise<void> {
+    eliminarPermisoMock(comercianteId, fecha, permisoId);
     return Promise.resolve();
   }
 }
