@@ -1,12 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { format, subDays } from "date-fns";
-import { es } from "date-fns/locale";
 import {
   AlertTriangle,
-  Calendar as CalendarIcon,
   CheckCircle2,
   Eye as EyeIcon,
   MessageSquareWarning,
@@ -15,8 +13,6 @@ import {
   XCircle,
   Trash2,
 } from "lucide-react";
-import { Calendar } from "@/components/ui/calendar";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +23,10 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { es } from "date-fns/locale";
 import type {
   EstadoAsistencia,
   Puesto,
@@ -50,12 +50,6 @@ export const ESTADO_CONFIG: Record<
     text: "text-white",
     ring: "ring-red-700/30",
     label: "Ausente",
-  },
-  Observacion: {
-    bg: "bg-blue-600",
-    text: "text-white",
-    ring: "ring-blue-600/30",
-    label: "Observación",
   },
   Permiso: {
     bg: "bg-purple-700",
@@ -186,8 +180,12 @@ export function ComercianteModal({
   const [registroAyer, setRegistroAyer] = useState<RegistroAsistencia | null>(null);
   const [estadoActual, setEstadoActual] = useState<EstadoAsistencia>(estadoInicial);
   const [novedadTexto, setNovedadTexto] = useState("");
-  const [permisoInicio, setPermisoInicio] = useState(fecha);
-  const [permisoFin, setPermisoFin] = useState(fecha);
+  const [fechaInicioPermiso, setFechaInicioPermiso] = useState<Date | undefined>(
+    () => new Date(fecha + "T00:00:00")
+  );
+  const [fechaFinPermiso, setFechaFinPermiso] = useState<Date | undefined>(
+    () => new Date(fecha + "T00:00:00")
+  );
   const [openInicio, setOpenInicio] = useState(false);
   const [openFin, setOpenFin] = useState(false);
   const [permisoError, setPermisoError] = useState("");
@@ -211,8 +209,10 @@ export function ComercianteModal({
         if (actual) {
           const obs = actual.observacionTexto || actual.observacion || "";
           setNovedadTexto(obs);
-          if (actual.permisoInicio) setPermisoInicio(actual.permisoInicio);
-          if (actual.permisoFin) setPermisoFin(actual.permisoFin);
+          if (actual.permisoInicio && actual.permisoFin) {
+            setFechaInicioPermiso(new Date(actual.permisoInicio + "T00:00:00"));
+            setFechaFinPermiso(new Date(actual.permisoFin + "T00:00:00"));
+          }
         }
       }
     }
@@ -223,30 +223,17 @@ export function ComercianteModal({
   }, [comerciante.idInterno, fecha]);
 
   const observacionExistente = registroActual?.observacionTexto || registroActual?.observacion || "";
-  const tieneObservacionPrevia = Boolean(observacionExistente.trim());
-  const tienePermisoPrevio = estadoInicial === "Permiso" || Boolean(registroActual?.permisoInicio);
-
-  const fechaInicioObj = useMemo(() => {
-    if (!permisoInicio) return undefined;
-    const d = new Date(permisoInicio + "T00:00:00");
-    return isNaN(d.getTime()) ? undefined : d;
-  }, [permisoInicio]);
-
-  const fechaFinObj = useMemo(() => {
-    if (!permisoFin) return undefined;
-    const d = new Date(permisoFin + "T00:00:00");
-    return isNaN(d.getTime()) ? undefined : d;
-  }, [permisoFin]);
+  const tieneObservacionPrevia = Boolean(observacionExistente.trim()) || Boolean(registroActual?.observaciones && registroActual.observaciones.length > 0);
+  const tienePermisoPrevio = estadoInicial === "Permiso" || Boolean(registroActual?.permisoInicio) || Boolean(registroActual?.permisos && registroActual.permisos.length > 0);
 
   const [confirmAlert, setConfirmAlert] = useState<{
     isOpen: boolean;
     nuevoEstado: "Presente" | "Ausente";
-    tipo: "observacion" | "permiso";
+    tipo: "permiso";
     mensaje: string;
   } | null>(null);
 
   const [panelActivo, setPanelActivo] = useState<"observacion" | "permiso" | null>(() => {
-    if (estadoInicial === "Observacion") return "observacion";
     if (estadoInicial === "Permiso") return "permiso";
     return null;
   });
@@ -254,21 +241,10 @@ export function ComercianteModal({
   const estadoConfig = ESTADO_CONFIG[estadoActual] ?? ESTADO_CONFIG["Pendiente"];
 
   const observacionAnterior =
-    registroAyer?.estado === "Observacion" ? (registroAyer.observacionTexto || registroAyer.observacion) : null;
+    registroAyer?.observacionTexto || registroAyer?.observacion || null;
 
   async function handleSeleccionarEstado(nuevoEstado: "Presente" | "Ausente") {
     if (estadoActual === nuevoEstado && panelActivo === null) return;
-
-    if (estadoActual === "Observacion" || Boolean(novedadTexto.trim())) {
-      setConfirmAlert({
-        isOpen: true,
-        nuevoEstado,
-        tipo: "observacion",
-        mensaje:
-          "Cambiar la asistencia eliminará la observación registrada para este día. ¿Desea continuar?",
-      });
-      return;
-    }
 
     if (estadoActual === "Permiso" || tienePermisoPrevio) {
       setConfirmAlert({
@@ -276,7 +252,7 @@ export function ComercianteModal({
         nuevoEstado,
         tipo: "permiso",
         mensaje:
-          "Cambiar la asistencia eliminará el permiso asignado a este comerciante. ¿Desea continuar?",
+          "Cambiar la asistencia a " + nuevoEstado + " modificará el estado del comerciante. ¿Desea continuar?",
       });
       return;
     }
@@ -290,28 +266,17 @@ export function ComercianteModal({
 
   async function handleConfirmarCambio() {
     if (!confirmAlert) return;
-    const { nuevoEstado, tipo } = confirmAlert;
+    const { nuevoEstado } = confirmAlert;
 
-    if (tipo === "observacion") {
-      setNovedadTexto("");
-      setPanelActivo(null);
-      setEstadoActual(nuevoEstado);
-      await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
-      onEstadoChange(nuevoEstado);
-      toast.success(`Asistencia registrada como ${nuevoEstado}`, {
-        description: "Se eliminó la observación registrada para este día.",
-      });
-    } else if (tipo === "permiso") {
-      setPermisoInicio("");
-      setPermisoFin("");
-      setPanelActivo(null);
-      setEstadoActual(nuevoEstado);
-      await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
-      onEstadoChange(nuevoEstado);
-      toast.success(`Asistencia registrada como ${nuevoEstado}`, {
-        description: "Se eliminó el permiso asignado.",
-      });
-    }
+    setFechaInicioPermiso(undefined);
+    setFechaFinPermiso(undefined);
+    setPanelActivo(null);
+    setEstadoActual(nuevoEstado);
+    await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
+    onEstadoChange(nuevoEstado);
+    toast.success(`Asistencia registrada como ${nuevoEstado}`, {
+      description: "Se eliminó el permiso asignado.",
+    });
 
     setConfirmAlert(null);
   }
@@ -324,38 +289,43 @@ export function ComercianteModal({
     setPanelActivo((actual) => (actual === "permiso" ? null : "permiso"));
   }
 
-  const yaExistePermisoParaFecha = Boolean(
-    registroActual?.permisos?.some((p) => p.fecha === permisoInicio)
+  const fechaInicioSel = fechaInicioPermiso ? format(fechaInicioPermiso, "yyyy-MM-dd") : "";
+  const fechaFinSel = fechaFinPermiso ? format(fechaFinPermiso, "yyyy-MM-dd") : "";
+
+  const yaExistePermisoRango = Boolean(
+    registroActual?.permisos?.some(
+      (p) => p.fechaInicio === fechaInicioSel && p.fechaFin === fechaFinSel
+    )
   );
 
   async function handleGuardarObservacion() {
     if (!novedadTexto.trim()) return;
+    // Requerimiento 1: Aditivo en el historial, NO muta el estado principal
     await onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
-    setEstadoActual("Observacion");
-    onEstadoChange("Observacion");
     setNovedadTexto("");
     const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
       comerciante.idInterno,
       fecha
     );
     setRegistroActual(actualizado);
+    toast.success("Observación registrada exitosamente");
   }
 
   async function handleGuardarPermiso() {
     setPermisoError("");
-    if (!permisoInicio || !permisoFin) {
-      setPermisoError("Debe seleccionar fecha de inicio y fin.");
+    if (!fechaInicioSel || !fechaFinSel) {
+      setPermisoError("Debe seleccionar la Fecha de Inicio y la Fecha de Fin.");
       return;
     }
-    if (permisoInicio > permisoFin) {
-      setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
+    if (fechaFinPermiso! < fechaInicioPermiso!) {
+      setPermisoError("La Fecha de Fin no puede ser anterior a la Fecha de Inicio.");
       return;
     }
-    if (yaExistePermisoParaFecha) {
-      setPermisoError("Ya existe un permiso registrado para esta fecha.");
+    if (yaExistePermisoRango) {
+      setPermisoError("Ya existe un permiso registrado para este rango de fechas.");
       return;
     }
-    await onPermisoAsignado(permisoInicio, permisoFin);
+    await onPermisoAsignado(fechaInicioSel, fechaFinSel);
     setEstadoActual("Permiso");
     onEstadoChange("Permiso");
     const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
@@ -363,6 +333,9 @@ export function ComercianteModal({
       fecha
     );
     setRegistroActual(actualizado);
+    toast.success("Permiso asignado exitosamente", {
+      description: `Vigencia: ${fechaInicioSel} al ${fechaFinSel}.`,
+    });
   }
 
   async function handleConfirmarEliminacion() {
@@ -491,12 +464,12 @@ export function ComercianteModal({
               Ausente
             </Button>
 
-            {/* Observación */}
+            {/* Observación (Panel de Metadatos) */}
             <Button
               type="button"
-              variant={estadoActual === "Observacion" ? "default" : "outline"}
+              variant={panelActivo === "observacion" ? "default" : "outline"}
               className={
-                estadoActual === "Observacion"
+                panelActivo === "observacion"
                   ? "bg-blue-600 text-white hover:bg-blue-600/90 shadow-sm"
                   : "text-blue-600 border-blue-600/30 hover:bg-blue-600/10"
               }
@@ -504,6 +477,11 @@ export function ComercianteModal({
             >
               <EyeIcon className="w-4 h-4 mr-1.5 shrink-0" />
               Observación
+              {registroActual?.observaciones && registroActual.observaciones.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.2 rounded-full text-xs bg-blue-100 text-blue-700 font-bold">
+                  {registroActual.observaciones.length}
+                </span>
+              )}
             </Button>
 
             {/* Permiso */}
@@ -608,37 +586,31 @@ export function ComercianteModal({
                 )}
               </div>
 
-              <div className="flex flex-col sm:flex-row gap-4">
-                <div className="flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
                   <label className="text-xs font-medium text-gray-700 block mb-1">
                     Fecha de Inicio
                   </label>
                   <Popover open={openInicio} onOpenChange={setOpenInicio}>
                     <PopoverTrigger
                       type="button"
-                      className="flex h-9 w-full items-center justify-between rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
                     >
-                      <span className="truncate">
-                        {fechaInicioObj
-                          ? format(fechaInicioObj, "dd/MM/yyyy", { locale: es })
-                          : "Seleccionar fecha"}
-                      </span>
-                      <CalendarIcon size={14} className="text-gray-700 shrink-0" />
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                      <span className="truncate">{fechaInicioPermiso ? format(fechaInicioPermiso, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
                     </PopoverTrigger>
-                    <PopoverContent
-                      className="w-auto p-0"
-                      align="center"
-                      side="bottom"
-                      avoidCollisions={true}
-                      collisionBoundary={typeof window !== "undefined" ? document.body : undefined}
-                    >
+                    <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={fechaInicioObj}
-                        onSelect={(date) => {
-                          if (date) {
-                            setPermisoInicio(format(date, "yyyy-MM-dd"));
+                        selected={fechaInicioPermiso}
+                        onSelect={(d) => {
+                          if (d) {
+                            setFechaInicioPermiso(d);
                             setOpenInicio(false);
+                            setPermisoError("");
+                            if (fechaFinPermiso && d > fechaFinPermiso) {
+                              setFechaFinPermiso(d);
+                            }
                           }
                         }}
                         locale={es}
@@ -648,38 +620,30 @@ export function ComercianteModal({
                   </Popover>
                 </div>
 
-                <div className="flex-1">
+                <div>
                   <label className="text-xs font-medium text-gray-700 block mb-1">
                     Fecha de Fin
                   </label>
                   <Popover open={openFin} onOpenChange={setOpenFin}>
                     <PopoverTrigger
                       type="button"
-                      className="flex h-9 w-full items-center justify-between rounded-lg border border-institucional-whiteSmokeBlack/50 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
                     >
-                      <span className="truncate">
-                        {fechaFinObj
-                          ? format(fechaFinObj, "dd/MM/yyyy", { locale: es })
-                          : "Seleccionar fecha"}
-                      </span>
-                      <CalendarIcon size={14} className="text-gray-700 shrink-0" />
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                      <span className="truncate">{fechaFinPermiso ? format(fechaFinPermiso, "dd/MM/yyyy") : "Seleccionar fin"}</span>
                     </PopoverTrigger>
-                    <PopoverContent
-                      className="w-auto p-0"
-                      align="center"
-                      side="bottom"
-                      avoidCollisions={true}
-                      collisionBoundary={typeof window !== "undefined" ? document.body : undefined}
-                    >
+                    <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={fechaFinObj}
-                        onSelect={(date) => {
-                          if (date) {
-                            setPermisoFin(format(date, "yyyy-MM-dd"));
+                        selected={fechaFinPermiso}
+                        onSelect={(d) => {
+                          if (d) {
+                            setFechaFinPermiso(d);
                             setOpenFin(false);
+                            setPermisoError("");
                           }
                         }}
+                        disabled={(date) => (fechaInicioPermiso ? date < fechaInicioPermiso : false)}
                         locale={es}
                         autoFocus
                       />
@@ -689,10 +653,10 @@ export function ComercianteModal({
               </div>
 
               {/* Alerta proactiva si la fecha ya tiene un permiso */}
-              {yaExistePermisoParaFecha && (
+              {yaExistePermisoRango && (
                 <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
                   <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                  <span>Ya existe un permiso registrado para la fecha seleccionada ({permisoInicio}).</span>
+                  <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
                 </div>
               )}
 
@@ -741,7 +705,7 @@ export function ComercianteModal({
               <Button
                 type="button"
                 onClick={handleGuardarPermiso}
-                disabled={yaExistePermisoParaFecha || !permisoInicio || !permisoFin}
+                disabled={yaExistePermisoRango || !fechaInicioSel}
                 size="sm"
                 className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
               >

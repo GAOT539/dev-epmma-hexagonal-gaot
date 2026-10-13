@@ -127,11 +127,11 @@ export default function ListasPage() {
   const [obsDialogOpen, setObsDialogOpen] = useState(false);
   const [obsCommerciante, setObsCommerciante] = useState<Comerciante | null>(null);
 
-  // Estado para confirmación de sobrescritura de Permiso u Observación
+  // Estado para confirmación de sobrescritura de Permiso
   const [confirmacionEstado, setConfirmacionEstado] = useState<{
     id: string;
     nuevoEstado: EstadoAsistencia;
-    tipoAdvertencia: "Permiso" | "Observacion";
+    tipoAdvertencia: "Permiso";
   } | null>(null);
 
   // ── Puestos y Comerciantes de la Nave con estado ───────────────────────────
@@ -233,18 +233,6 @@ export default function ListasPage() {
       return;
     }
 
-    if (
-      (estado === "Presente" || estado === "Ausente") &&
-      estadoActual === "Observacion"
-    ) {
-      setConfirmacionEstado({
-        id: comercianteId,
-        nuevoEstado: estado,
-        tipoAdvertencia: "Observacion",
-      });
-      return;
-    }
-
     await aplicarCambioEstado(comercianteId, estado);
   }
 
@@ -271,10 +259,13 @@ export default function ListasPage() {
     motivo: string = "Permiso concedido"
   ) {
     try {
-      await asistenciaService.agregarPermiso(comercianteId, inicio, motivo, inicio, fin);
-      if (inicio !== fin) {
-        await asistenciaService.asignarPermisoRango(comercianteId, inicio, fin);
-      }
+      await asistenciaService.agregarPermiso(
+        comercianteId,
+        fechaStr,
+        motivo,
+        inicio,
+        fin
+      );
 
       const startDate = new Date(inicio + "T00:00:00");
       const endDate = new Date(fin + "T00:00:00");
@@ -290,7 +281,7 @@ export default function ListasPage() {
       setOverrides(newOverrides);
       await recargarAsistencias();
       toast.success("Permiso asignado exitosamente", {
-        description: `Rango: ${inicio} al ${fin}.`,
+        description: `Vigencia: ${inicio} al ${fin}.`,
       });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al asignar permiso");
@@ -299,12 +290,11 @@ export default function ListasPage() {
 
   async function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
     try {
-      const key = `${comercianteId}:${fechaStr}`;
-      setOverrides((prev) => ({ ...prev, [key]: "Observacion" }));
+      // Requerimiento 1: "Observación" es un metadato aditivo (NO muta el estado principal)
       await asistenciaService.agregarObservacion(comercianteId, fechaStr, texto);
       await recargarAsistencias();
       toast.success("Observación registrada exitosamente", {
-        description: "Se ha actualizado la novedad del comerciante.",
+        description: "Se ha agregado al historial del comerciante.",
       });
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Error al registrar observación");
@@ -326,9 +316,6 @@ export default function ListasPage() {
 
   function handleNovedadDesdeModal(comercianteId: string, texto: string) {
     handleObservacionSaveDirecto(comercianteId, texto);
-    if (modalData && modalData.comerciante.idInterno === comercianteId) {
-      setModalData({ ...modalData, estado: "Observacion" });
-    }
   }
 
   return (
@@ -572,9 +559,7 @@ export default function ListasPage() {
               Confirmar cambio de asistencia
             </DialogTitle>
             <DialogDescription className="text-sm text-gray-700 font-medium pt-2 leading-relaxed">
-              {confirmacionEstado?.tipoAdvertencia === "Permiso"
-                ? `Este comerciante tiene un Permiso activo. ¿Está seguro de que desea sobrescribirlo y marcarlo como ${confirmacionEstado?.nuevoEstado} para el día de hoy?`
-                : `Este comerciante tiene una Observación registrada. ¿Está seguro de que desea sobrescribirla y marcarlo como ${confirmacionEstado?.nuevoEstado} para el día de hoy?`}
+              Este comerciante tiene un Permiso activo. ¿Está seguro de que desea sobrescribirlo y marcarlo como {confirmacionEstado?.nuevoEstado} para el día de hoy?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="mt-4 flex sm:justify-end gap-2">

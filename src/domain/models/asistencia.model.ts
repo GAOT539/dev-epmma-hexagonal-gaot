@@ -3,7 +3,6 @@
 export type EstadoAsistencia =
   | "Presente"
   | "Ausente"
-  | "Observacion"
   | "Permiso"
   | "Pendiente"
   | "Vacante";
@@ -17,9 +16,10 @@ export interface ObservacionDetalle {
 export interface PermisoDetalle {
   id: string;
   motivo: string;
-  fecha: string; // YYYY-MM-DD
-  fechaInicio?: string;
-  fechaFin?: string;
+  fechaAsignacion: string; // YYYY-MM-DD (cuándo se registró el permiso)
+  fechaInicio: string;     // YYYY-MM-DD
+  fechaFin: string;        // YYYY-MM-DD
+  fecha?: string;          // YYYY-MM-DD (para retrocompatibilidad)
 }
 
 export interface RegistroAsistencia {

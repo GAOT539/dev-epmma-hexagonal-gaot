@@ -188,15 +188,17 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
       let observacionTexto: string | undefined = undefined;
       let observacion: string | undefined = undefined;
 
-      // Distribución aleatoria
+      // Distribución aleatoria (sin estado Observacion)
       const r = rand();
       if (r < 0.70) estado = "Presente";
       else if (r < 0.85) estado = "Ausente";
-      else if (r < 0.95) estado = "Observacion";
+      else if (r < 0.95) estado = "Pendiente";
       else estado = "Permiso";
 
-      if (estado === "Observacion" && !observacion) {
-        observacion = "En observación";
+      // Observaciones como metadatos puros independientes del estado
+      const tieneObs = rand() < 0.15;
+      if (tieneObs) {
+        observacion = "Novedad registrada";
         observacionTexto = pick(TEXTOS_NOVEDAD);
       } else if (estado === "Permiso") {
         observacion = "Permiso concedido";
@@ -216,9 +218,10 @@ function generarAsistenciaHistorica(): Map<string, RegistroAsistencia[]> {
         permisos.push({
           id: `perm-hist-${comerciante.idInterno}-${fecha}-1`,
           motivo: observacion || "Permiso concedido",
-          fecha,
+          fechaAsignacion: fecha,
           fechaInicio: fecha,
           fechaFin: format(subDays(hoy, Math.max(0, d - 2)), "yyyy-MM-dd"),
+          fecha,
         });
       }
 
@@ -329,6 +332,19 @@ export function getAsistenciaNaveRango(
   return resultado.sort((a, b) => a.fecha.localeCompare(b.fecha));
 }
 
+export function getAsistenciaRango(
+  fechaInicio: string,
+  fechaFin: string
+): RegistroAsistencia[] {
+  const resultado: RegistroAsistencia[] = [];
+  asistenciaHistorica.forEach((registros, fecha) => {
+    if (fecha >= fechaInicio && fecha <= fechaFin) {
+      resultado.push(...registros);
+    }
+  });
+  return resultado.sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
 export function getTotalPuestos(): number {
   return allPuestos.length;
 }
@@ -419,9 +435,7 @@ export function agregarObservacionMock(
       comercianteId,
       puestoId: comerciante?.puestoId ?? "",
       fecha,
-      estado: "Observacion",
-      observacion: texto,
-      observacionTexto: texto,
+      estado: "Pendiente",
       observaciones: [],
       permisos: [],
     };
@@ -436,10 +450,7 @@ export function agregarObservacionMock(
     fechaHora: fechaHora || format(new Date(), "hh:mm a"),
   };
   reg.observaciones.push(nuevaObs);
-  reg.estado = "Observacion";
-  reg.observacion = texto;
-  reg.observacionTexto = texto;
-  asistenciaOverrides.set(`${comercianteId}:${fecha}`, "Observacion");
+  // Requerimiento 1: "Observación" es un metadato aditivo, NO muta el estado principal
   return nuevaObs;
 }
 
@@ -457,7 +468,7 @@ export function eliminarObservacionMock(
     const ultima = reg.observaciones[reg.observaciones.length - 1];
     reg.observacion = ultima.texto;
     reg.observacionTexto = ultima.texto;
-  } else if (reg.estado === "Observacion") {
+  } else {
     reg.observacion = undefined;
     reg.observacionTexto = undefined;
   }
@@ -465,26 +476,25 @@ export function eliminarObservacionMock(
 
 export function agregarPermisoMock(
   comercianteId: string,
-  fecha: string,
+  fechaAsignacion: string,
   motivo: string,
-  fechaInicio?: string,
-  fechaFin?: string
+  fechaInicio: string,
+  fechaFin: string
 ): PermisoDetalle {
-  let registros = asistenciaHistorica.get(fecha);
+  let registros = asistenciaHistorica.get(fechaAsignacion);
   if (!registros) {
     registros = [];
-    asistenciaHistorica.set(fecha, registros);
+    asistenciaHistorica.set(fechaAsignacion, registros);
   }
   let reg = registros.find((r) => r.comercianteId === comercianteId);
   if (!reg) {
     const comerciante = getComerciantePorId(comercianteId);
     reg = {
-      id: `asist-${comercianteId}-${fecha}`,
+      id: `asist-${comercianteId}-${fechaAsignacion}`,
       comercianteId,
       puestoId: comerciante?.puestoId ?? "",
-      fecha,
-      estado: "Permiso",
-      observacion: motivo,
+      fecha: fechaAsignacion,
+      estado: "Pendiente",
       observaciones: [],
       permisos: [],
     };
@@ -493,25 +503,63 @@ export function agregarPermisoMock(
   if (!reg.permisos) {
     reg.permisos = [];
   }
-  // Validación de Permisos: si el comerciante ya tiene un permiso registrado para esa fecha exacta, lanza un error
-  const yaExiste = reg.permisos.some((p) => p.fecha === fecha);
+  const yaExiste = reg.permisos.some(
+    (p) => p.fechaInicio === fechaInicio && p.fechaFin === fechaFin
+  );
   if (yaExiste) {
-    throw new Error("Ya existe un permiso registrado para esta fecha.");
+    throw new Error("Ya existe un permiso registrado para este rango de fechas.");
   }
 
   const nuevoPermiso: PermisoDetalle = {
     id: `perm-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
     motivo,
-    fecha,
-    fechaInicio: fechaInicio || fecha,
-    fechaFin: fechaFin || fecha,
+    fechaAsignacion,
+    fechaInicio,
+    fechaFin,
+    fecha: fechaAsignacion,
   };
   reg.permisos.push(nuevoPermiso);
-  reg.estado = "Permiso";
-  reg.observacion = motivo;
-  reg.permisoInicio = nuevoPermiso.fechaInicio;
-  reg.permisoFin = nuevoPermiso.fechaFin;
-  asistenciaOverrides.set(`${comercianteId}:${fecha}`, "Permiso");
+
+  // Marcar los días dentro del rango como Permiso
+  const startDate = new Date(fechaInicio + "T00:00:00");
+  const endDate = new Date(fechaFin + "T00:00:00");
+  const current = new Date(startDate);
+
+  while (current <= endDate) {
+    const dStr = format(current, "yyyy-MM-dd");
+    let dRegs = asistenciaHistorica.get(dStr);
+    if (!dRegs) {
+      dRegs = [];
+      asistenciaHistorica.set(dStr, dRegs);
+    }
+    const dReg = dRegs.find((r) => r.comercianteId === comercianteId);
+    if (dReg) {
+      dReg.estado = "Permiso";
+      dReg.permisoInicio = fechaInicio;
+      dReg.permisoFin = fechaFin;
+      if (!dReg.permisos) dReg.permisos = [];
+      if (!dReg.permisos.some((p) => p.id === nuevoPermiso.id)) {
+        dReg.permisos.push(nuevoPermiso);
+      }
+    } else {
+      const com = getComerciantePorId(comercianteId);
+      dRegs.push({
+        id: `asist-${comercianteId}-${dStr}`,
+        comercianteId,
+        puestoId: com?.puestoId ?? "",
+        fecha: dStr,
+        estado: "Permiso",
+        observacion: motivo,
+        permisoInicio: fechaInicio,
+        permisoFin: fechaFin,
+        observaciones: [],
+        permisos: [nuevoPermiso],
+      });
+    }
+    asistenciaOverrides.set(`${comercianteId}:${dStr}`, "Permiso");
+    current.setDate(current.getDate() + 1);
+  }
+
   return nuevoPermiso;
 }
 
@@ -520,21 +568,19 @@ export function eliminarPermisoMock(
   fecha: string,
   permisoId: string
 ): void {
-  const registros = asistenciaHistorica.get(fecha);
-  if (!registros) return;
-  const reg = registros.find((r) => r.comercianteId === comercianteId);
-  if (!reg || !reg.permisos) return;
-  reg.permisos = reg.permisos.filter((p) => p.id !== permisoId);
-  if (reg.permisos.length > 0) {
-    const ultimo = reg.permisos[reg.permisos.length - 1];
-    reg.permisoInicio = ultimo.fechaInicio;
-    reg.permisoFin = ultimo.fechaFin;
-    reg.observacion = ultimo.motivo;
-  } else if (reg.estado === "Permiso") {
-    reg.permisoInicio = undefined;
-    reg.permisoFin = undefined;
-    reg.observacion = undefined;
-  }
+  asistenciaHistorica.forEach((regs, f) => {
+    const reg = regs.find((r) => r.comercianteId === comercianteId);
+    if (reg?.permisos) {
+      reg.permisos = reg.permisos.filter((p) => p.id !== permisoId);
+      if (reg.permisos.length === 0 && reg.estado === "Permiso") {
+        reg.estado = "Pendiente";
+        reg.permisoInicio = undefined;
+        reg.permisoFin = undefined;
+        reg.observacion = undefined;
+        asistenciaOverrides.delete(`${comercianteId}:${f}`);
+      }
+    }
+  });
 }
 
 export function getEstadoOverride(

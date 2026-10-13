@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export type EstadoAsistenciaKey = "Presente" | "Ausente" | "Observacion" | "Permiso" | "Pendiente" | "Vacante";
+export type EstadoAsistenciaKey = "Presente" | "Ausente" | "Permiso" | "Pendiente" | "Vacante";
 
 export const ESTADO_COLORES_SOLIDOS: Record<
   EstadoAsistenciaKey,
@@ -26,14 +26,6 @@ export const ESTADO_COLORES_SOLIDOS: Record<
     hex: "#B91C1C",
     label: "Ausente",
     ring: "ring-red-700/30",
-  },
-  Observacion: {
-    bg: "bg-blue-600",
-    text: "text-white",
-    solidClass: "bg-blue-600 text-white",
-    hex: "#2563EB",
-    label: "Observación",
-    ring: "ring-blue-600/30",
   },
   Permiso: {
     bg: "bg-purple-700",

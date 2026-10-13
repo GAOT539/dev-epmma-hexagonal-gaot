@@ -47,6 +47,13 @@ export class AsistenciaService {
     );
   }
 
+  async obtenerAsistenciaRango(
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]> {
+    return this.repository.obtenerAsistenciaRango(fechaInicio, fechaFin);
+  }
+
   async registrarAsistencia(
     comercianteId: string,
     fecha: string,
@@ -99,14 +106,14 @@ export class AsistenciaService {
 
   async agregarPermiso(
     comercianteId: string,
-    fecha: string,
+    fechaAsignacion: string,
     motivo: string,
-    fechaInicio?: string,
-    fechaFin?: string
+    fechaInicio: string,
+    fechaFin: string
   ): Promise<PermisoDetalle> {
     return this.repository.agregarPermiso(
       comercianteId,
-      fecha,
+      fechaAsignacion,
       motivo,
       fechaInicio,
       fechaFin

@@ -23,6 +23,10 @@ export interface IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<RegistroAsistencia[]>;
+  obtenerAsistenciaRango(
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]>;
   registrarAsistencia(
     comercianteId: string,
     fecha: string,
@@ -48,10 +52,10 @@ export interface IAsistenciaRepository {
   ): Promise<void>;
   agregarPermiso(
     comercianteId: string,
-    fecha: string,
+    fechaAsignacion: string,
     motivo: string,
-    fechaInicio?: string,
-    fechaFin?: string
+    fechaInicio: string,
+    fechaFin: string
   ): Promise<PermisoDetalle>;
   eliminarPermiso(
     comercianteId: string,

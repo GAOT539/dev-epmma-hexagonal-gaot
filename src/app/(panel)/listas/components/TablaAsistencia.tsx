@@ -13,6 +13,11 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Calendar as CalendarIcon } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import {
   Dialog,
   DialogContent,
@@ -103,8 +108,10 @@ export function PuestoCard({
 
   const [panelActivo, setPanelActivo] = useState<"observacion" | "permiso" | null>(null);
   const [obsTexto, setObsTexto] = useState("");
-  const [permisoInicio, setPermisoInicio] = useState(fecha);
-  const [permisoFin, setPermisoFin] = useState(fecha);
+  const [fechaInicio, setFechaInicio] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
+  const [fechaFin, setFechaFin] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
+  const [openInicio, setOpenInicio] = useState(false);
+  const [openFin, setOpenFin] = useState(false);
   const [permisoMotivo, setPermisoMotivo] = useState("Permiso concedido");
   const [permisoError, setPermisoError] = useState("");
 
@@ -135,14 +142,20 @@ export function PuestoCard({
     );
   }
 
-  // Validación proactiva de fecha para permisos (Fase 3)
-  const yaExistePermisoFecha = Boolean(
-    registro?.permisos?.some((p) => p.fecha === permisoInicio)
+  // Validación proactiva de rango de fechas para permisos (Fase 3 & Requerimiento 2)
+  const fechaInicioSel = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : "";
+  const fechaFinSel = fechaFin ? format(fechaFin, "yyyy-MM-dd") : "";
+
+  const yaExistePermisoRango = Boolean(
+    registro?.permisos?.some(
+      (p) => p.fechaInicio === fechaInicioSel && p.fechaFin === fechaFinSel
+    )
   );
 
   async function handleGuardarObservacion(e: React.MouseEvent) {
     e.stopPropagation();
     if (!comerciante || !obsTexto.trim()) return;
+    // Requerimiento 1: Aditivo en el historial, NO muta el estado principal
     await onObservacionGuardada(comerciante.idInterno, obsTexto.trim());
     setObsTexto("");
     if (onActualizarAsistencia) {
@@ -154,22 +167,22 @@ export function PuestoCard({
     e.stopPropagation();
     setPermisoError("");
     if (!comerciante) return;
-    if (!permisoInicio || !permisoFin) {
-      setPermisoError("Debe seleccionar fecha de inicio y fin.");
+    if (!fechaInicioSel || !fechaFinSel) {
+      setPermisoError("Debe seleccionar la Fecha de Inicio y la Fecha de Fin.");
       return;
     }
-    if (permisoInicio > permisoFin) {
-      setPermisoError("La fecha de inicio no puede ser posterior a la de fin.");
+    if (fechaFin! < fechaInicio!) {
+      setPermisoError("La Fecha de Fin no puede ser anterior a la Fecha de Inicio.");
       return;
     }
-    if (yaExistePermisoFecha) {
-      setPermisoError("Ya existe un permiso registrado para esta fecha.");
+    if (yaExistePermisoRango) {
+      setPermisoError("Ya existe un permiso registrado para este rango de fechas.");
       return;
     }
     await onPermisoAsignado(
       comerciante.idInterno,
-      permisoInicio,
-      permisoFin,
+      fechaInicioSel,
+      fechaFinSel,
       permisoMotivo.trim() || "Permiso concedido"
     );
     if (onActualizarAsistencia) {
@@ -273,11 +286,15 @@ export function PuestoCard({
             }}
           />
           <AccionBtn
-            label="Observación"
+            label={
+              registro?.observaciones && registro.observaciones.length > 0
+                ? `Observación (${registro.observaciones.length})`
+                : "Observación"
+            }
             Icon={EyeIcon}
             activeClass="bg-blue-600 text-white hover:bg-blue-600/90"
             inactiveClass="text-blue-600 border border-blue-600/30 hover:bg-blue-600/10"
-            isActive={estado === "Observacion" || panelActivo === "observacion"}
+            isActive={panelActivo === "observacion"}
             onClick={(e) => {
               e.stopPropagation();
               setPanelActivo((curr) => (curr === "observacion" ? null : "observacion"));
@@ -405,34 +422,69 @@ export function PuestoCard({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
             <div>
-              <label className="text-xs font-medium text-gray-700">
+              <label className="text-xs font-medium text-gray-700 block mb-1">
                 Fecha de Inicio
               </label>
-              <input
-                type="date"
-                value={permisoInicio}
-                onChange={(e) => {
-                  setPermisoInicio(e.target.value);
-                  setPermisoError("");
-                }}
-                className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-              />
+              <Popover open={openInicio} onOpenChange={setOpenInicio}>
+                <PopoverTrigger
+                  type="button"
+                  className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                >
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                  <span className="truncate">{fechaInicio ? format(fechaInicio, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fechaInicio}
+                    onSelect={(d) => {
+                      if (d) {
+                        setFechaInicio(d);
+                        setOpenInicio(false);
+                        setPermisoError("");
+                        if (fechaFin && d > fechaFin) {
+                          setFechaFin(d);
+                        }
+                      }
+                    }}
+                    locale={es}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
+
             <div>
-              <label className="text-xs font-medium text-gray-700">
+              <label className="text-xs font-medium text-gray-700 block mb-1">
                 Fecha de Fin
               </label>
-              <input
-                type="date"
-                value={permisoFin}
-                onChange={(e) => {
-                  setPermisoFin(e.target.value);
-                  setPermisoError("");
-                }}
-                className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-              />
+              <Popover open={openFin} onOpenChange={setOpenFin}>
+                <PopoverTrigger
+                  type="button"
+                  className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                >
+                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                  <span className="truncate">{fechaFin ? format(fechaFin, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={fechaFin}
+                    onSelect={(d) => {
+                      if (d) {
+                        setFechaFin(d);
+                        setOpenFin(false);
+                        setPermisoError("");
+                      }
+                    }}
+                    disabled={(date) => (fechaInicio ? date < fechaInicio : false)}
+                    locale={es}
+                    autoFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -449,11 +501,11 @@ export function PuestoCard({
             />
           </div>
 
-          {/* Alerta Proactiva de Restricción de Fecha en Permisos */}
-          {yaExistePermisoFecha && (
+          {/* Alerta Proactiva de Restricción de Rango de Fechas en Permisos */}
+          {yaExistePermisoRango && (
             <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
               <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-              <span>Ya existe un permiso registrado para la fecha seleccionada ({permisoInicio}).</span>
+              <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
             </div>
           )}
 
@@ -515,7 +567,7 @@ export function PuestoCard({
             <Button
               type="button"
               size="sm"
-              disabled={yaExistePermisoFecha || !permisoInicio || !permisoFin}
+              disabled={yaExistePermisoRango || !fechaInicioSel}
               className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
               onClick={handleGuardarPermiso}
             >
@@ -659,7 +711,6 @@ export function TreemapView({
             const bgColorMap: Record<string, string> = {
               Presente: "bg-green-700 text-white",
               Ausente: "bg-red-700 text-white",
-              Observacion: "bg-blue-600 text-white",
               Permiso: "bg-purple-700 text-white",
               Pendiente: "bg-slate-600 text-white",
               Vacante: "bg-gray-700 text-white",
@@ -721,13 +772,12 @@ export function TreemapView({
       {/* Leyenda */}
       <div className="flex flex-wrap gap-3 mt-4 px-1">
         {(
-          ["Presente", "Ausente", "Observacion", "Permiso", "Pendiente", "Vacante"] as const
+          ["Presente", "Ausente", "Permiso", "Pendiente", "Vacante"] as const
         ).map((key) => {
           const config = ESTADO_CONFIG[key];
           const bgMap: Record<string, string> = {
             Presente: "bg-green-700",
             Ausente: "bg-red-700",
-            Observacion: "bg-blue-600",
             Permiso: "bg-purple-700",
             Pendiente: "bg-slate-600",
             Vacante: "bg-gray-700",

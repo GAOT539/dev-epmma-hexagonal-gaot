@@ -12,6 +12,7 @@ import {
   getAsistenciaComerciantePorFecha,
   getAsistenciaComercianteRango,
   getAsistenciaNaveRango,
+  getAsistenciaRango,
   setEstadoAsistencia,
   setPermisoComercianteRango,
   agregarObservacionMock,
@@ -50,6 +51,15 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
   ): Promise<RegistroAsistencia[]> {
     return Promise.resolve([
       ...getAsistenciaNaveRango(naveId, fechaInicio, fechaFin),
+    ]);
+  }
+
+  async obtenerAsistenciaRango(
+    fechaInicio: string,
+    fechaFin: string
+  ): Promise<RegistroAsistencia[]> {
+    return Promise.resolve([
+      ...getAsistenciaRango(fechaInicio, fechaFin),
     ]);
   }
 
@@ -101,13 +111,19 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
 
   async agregarPermiso(
     comercianteId: string,
-    fecha: string,
+    fechaAsignacion: string,
     motivo: string,
-    fechaInicio?: string,
-    fechaFin?: string
+    fechaInicio: string,
+    fechaFin: string
   ): Promise<PermisoDetalle> {
     return Promise.resolve(
-      agregarPermisoMock(comercianteId, fecha, motivo, fechaInicio, fechaFin)
+      agregarPermisoMock(
+        comercianteId,
+        fechaAsignacion,
+        motivo,
+        fechaInicio,
+        fechaFin
+      )
     );
   }
 
