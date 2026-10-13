@@ -15,6 +15,16 @@ export class ImportadorService {
     return this.repository.simularImportacion(registros);
   }
 
+  async guardarImportacion(
+    registros: ImportacionRegistro[]
+  ): Promise<ImportacionResultado> {
+    return this.repository.guardarImportacion(registros);
+  }
+
+  async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {
+    return this.repository.parsearExcel(data);
+  }
+
   async parsearXML(contenido: string): Promise<ImportacionRegistro[]> {
     return this.repository.parsearXML(contenido);
   }

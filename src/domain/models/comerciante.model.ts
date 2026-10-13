@@ -29,10 +29,15 @@ export type { Nave, EstadoRegistroNave } from "./nave.model";
 // ── Importación XML/CSV de Catastro ──────────────────────────────────────────
 
 export interface ImportacionRegistro {
-  nave: string;
+  ciu: string;
+  cedula: string;
+  nombre: string;
   contribuyente: string;
+  actividad: string;
+  nave: string;
+  puesto: string;
   numBodega: string;
-  gen01Codi: string;
+  gen01Codi?: string;
 }
 
 export interface ImportacionResultado {

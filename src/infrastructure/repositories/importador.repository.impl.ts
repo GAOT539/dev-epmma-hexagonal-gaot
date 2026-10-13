@@ -6,6 +6,8 @@ import type {
 } from "@/domain/models/comerciante.model";
 import {
   simularImportacion,
+  guardarImportacion,
+  parsearExcel,
   parsearXML,
   parsearCSV,
   generarRegistrosEjemplo,
@@ -17,6 +19,18 @@ export class ImportadorMockRepository implements IImportadorRepository {
   ): Promise<ImportacionResultado> {
     const res = simularImportacion(registros);
     return Promise.resolve({ ...res });
+  }
+
+  async guardarImportacion(
+    registros: ImportacionRegistro[]
+  ): Promise<ImportacionResultado> {
+    const res = guardarImportacion(registros);
+    return Promise.resolve({ ...res });
+  }
+
+  async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {
+    const res = parsearExcel(data);
+    return Promise.resolve([...res]);
   }
 
   async parsearXML(contenido: string): Promise<ImportacionRegistro[]> {
