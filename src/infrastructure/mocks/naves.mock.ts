@@ -1,5 +1,5 @@
 import type { Nave, EstadoRegistroNave } from "@/domain/models/nave.model";
-import { sincronizarNavesSupervisorDesdeNaves } from "./auth.mock";
+import { sincronizarNavesSupervisorDesdeNaves, getSupervisores } from "./auth.mock";
 
 // ── Lista de Supervisores Disponibles en el Sistema ──────────────────────────
 
@@ -10,7 +10,12 @@ export const SUPERVISORES_DISPONIBLES = [
 ];
 
 export function obtenerSupervisoresDisponibles(): string[] {
-  return [...SUPERVISORES_DISPONIBLES];
+  try {
+    const deUsuarios = getSupervisores().map((s) => `${s.nombres} ${s.apellidos}`.trim());
+    return Array.from(new Set([...SUPERVISORES_DISPONIBLES, ...deUsuarios]));
+  } catch {
+    return [...SUPERVISORES_DISPONIBLES];
+  }
 }
 
 // ── Datos iniciales simulados (compatibilidad con mercado.mock.ts) ───────────
@@ -219,4 +224,53 @@ export function cambiarEstadoNave(
   };
 
   return { ...navesData[index] };
+}
+
+/**
+ * Sincroniza bidireccionalmente la asignación de un supervisor hacia las naves.
+ * Actualiza la lista `supervisores` de cada nave en `navesData`:
+ * - Si el ID o nombre de la nave está incluido en `navesAsignadas`, asegura que el nombre del supervisor esté en `supervisores`.
+ * - Si no está incluido en `navesAsignadas`, remueve el nombre del supervisor (o su nombre previo si cambió).
+ */
+export function sincronizarSupervisorEnNaves(
+  nombreSupervisor: string,
+  navesAsignadas: string[],
+  nombreAnterior?: string
+): void {
+  const nombreLimpio = nombreSupervisor.trim();
+  const nombreAntLimpio = nombreAnterior ? nombreAnterior.trim() : "";
+
+  for (const nave of navesData) {
+    if (!nave.supervisores) {
+      nave.supervisores = [];
+    }
+
+    const estaAsignada =
+      navesAsignadas.includes(nave.id) ||
+      (nave.nombre && navesAsignadas.includes(nave.nombre));
+
+    if (estaAsignada) {
+      // Si el supervisor cambió de nombre, retirar el nombre previo de la nave
+      if (nombreAntLimpio && nombreAntLimpio.toLowerCase() !== nombreLimpio.toLowerCase()) {
+        nave.supervisores = nave.supervisores.filter(
+          (s) => s.trim().toLowerCase() !== nombreAntLimpio.toLowerCase()
+        );
+      }
+      // Agregar el nuevo nombre si aún no figura
+      const yaExiste = nave.supervisores.some(
+        (s) => s.trim().toLowerCase() === nombreLimpio.toLowerCase()
+      );
+      if (!yaExiste && nombreLimpio) {
+        nave.supervisores.push(nombreLimpio);
+      }
+    } else {
+      // Remover al supervisor de esta nave si estaba presente
+      nave.supervisores = nave.supervisores.filter((s) => {
+        const sLimpio = s.trim().toLowerCase();
+        const esActual = sLimpio === nombreLimpio.toLowerCase();
+        const esAnterior = Boolean(nombreAntLimpio && sLimpio === nombreAntLimpio.toLowerCase());
+        return !esActual && !esAnterior;
+      });
+    }
+  }
 }

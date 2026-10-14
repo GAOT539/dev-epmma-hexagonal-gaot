@@ -72,11 +72,6 @@ function UserFormDialog({
       return;
     }
 
-    if (rol === "SUPERVISOR" && navesAsignadas.length === 0) {
-      setError("Un supervisor debe tener al menos una nave asignada.");
-      return;
-    }
-
     setGuardando(true);
     try {
       if (isEdit && user) {
@@ -184,7 +179,10 @@ function UserFormDialog({
           {/* Selector múltiple de naves (solo para supervisor) */}
           {rol === "SUPERVISOR" && (
             <div className="space-y-2 md:col-span-2">
-              <Label>Naves Asignadas</Label>
+              <Label>
+                Naves Asignadas{" "}
+                <span className="text-gray-500 font-normal text-xs">(Opcional)</span>
+              </Label>
               <div className="flex flex-wrap gap-2">
                 {naves.map((n) => {
                   const isSelected = navesAsignadas.includes(n.id);

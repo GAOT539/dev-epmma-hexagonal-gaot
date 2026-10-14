@@ -1,6 +1,7 @@
 // ── Infraestructura: Mock de Autenticación ───────────────────────────────────
 
 import type { Rol, Usuario } from "@/domain/models/comerciante.model";
+import { sincronizarSupervisorEnNaves } from "./naves.mock";
 
 // ── Datos de usuarios simulados ──────────────────────────────────────────────
 
@@ -235,6 +236,14 @@ export function getSupervisores(): Usuario[] {
 
 let nextUserId = usuarios.length + 1;
 
+/**
+ * Crea un nuevo usuario en el sistema.
+ * 
+ * Regla de negocio y simulación backend:
+ * - Genera credenciales iniciales con clave temporal `cedula*`.
+ * - Si el usuario es SUPERVISOR, sincroniza bidireccionalmente las naves asignadas
+ *   con las listas de supervisores de cada nave en el módulo de Naves.
+ */
 export function crearUsuario(data: {
   cedula: string;
   nombres: string;
@@ -243,6 +252,7 @@ export function crearUsuario(data: {
   navesAsignadas?: string[];
 }): Usuario {
   const id = `u-new-${String(nextUserId++).padStart(2, "0")}`;
+  const naves = data.rol === "SUPERVISOR" ? (data.navesAsignadas ?? []) : undefined;
   const nuevoUsuario: MockUsuario = {
     id,
     cedula: data.cedula,
@@ -252,13 +262,26 @@ export function crearUsuario(data: {
     mustChangePassword: true,
     passwordHash: `${data.cedula}*`,
     passwordActual: `${data.cedula}*`,
-    navesAsignadas: data.navesAsignadas,
+    navesAsignadas: naves,
     estado: "Habilitado",
   };
   usuarios.push(nuevoUsuario);
+
+  if (data.rol === "SUPERVISOR") {
+    const nombreCompleto = `${data.nombres} ${data.apellidos}`.trim();
+    sincronizarSupervisorEnNaves(nombreCompleto, naves ?? []);
+  }
+
   return toUsuario(nuevoUsuario);
 }
 
+/**
+ * Actualiza los datos de un usuario existente.
+ * 
+ * Regla de negocio y simulación backend:
+ * - Si el rol es o era SUPERVISOR, sincroniza bidireccionalmente las naves asignadas
+ *   con las listas de supervisores en cada nave (actualizando o removiendo nombres).
+ */
 export function editarUsuario(
   id: string,
   data: {
@@ -272,27 +295,64 @@ export function editarUsuario(
   const idx = usuarios.findIndex((u) => u.id === id);
   if (idx === -1) return null;
 
+  const anterior = usuarios[idx];
+  const nombreAnterior = `${anterior.nombres} ${anterior.apellidos}`.trim();
+  const nuevoRol = data.rol !== undefined ? data.rol : anterior.rol;
+
   usuarios[idx] = {
-    ...usuarios[idx],
+    ...anterior,
     ...(data.nombres !== undefined && { nombres: data.nombres }),
     ...(data.apellidos !== undefined && { apellidos: data.apellidos }),
     ...(data.cedula !== undefined && { cedula: data.cedula }),
     ...(data.rol !== undefined && { rol: data.rol }),
-    ...(data.navesAsignadas !== undefined && { navesAsignadas: data.navesAsignadas }),
+    navesAsignadas:
+      nuevoRol === "SUPERVISOR"
+        ? (data.navesAsignadas !== undefined ? data.navesAsignadas : anterior.navesAsignadas ?? [])
+        : undefined,
   };
+
+  const actualizado = usuarios[idx];
+  const nombreActualizado = `${actualizado.nombres} ${actualizado.apellidos}`.trim();
+
+  // Sincronización bidireccional con naves
+  if (anterior.rol === "SUPERVISOR" || actualizado.rol === "SUPERVISOR") {
+    if (actualizado.rol === "SUPERVISOR") {
+      sincronizarSupervisorEnNaves(
+        nombreActualizado,
+        actualizado.navesAsignadas ?? [],
+        nombreAnterior
+      );
+    } else {
+      sincronizarSupervisorEnNaves(nombreActualizado, [], nombreAnterior);
+    }
+  }
 
   return toUsuario(usuarios[idx]);
 }
 
+/**
+ * Deshabilita un usuario en el sistema.
+ * 
+ * Regla de negocio y simulación backend:
+ * - Si es SUPERVISOR, remueve su asignación de todas las naves en el módulo de naves.
+ */
 export function eliminarUsuario(id: string): boolean {
   const idx = usuarios.findIndex((u) => u.id === id);
   if (idx === -1) return false;
   // No permitir eliminar al superadmin
   if (usuarios[idx].id === "u-super") return false;
+
+  const user = usuarios[idx];
   usuarios[idx] = {
-    ...usuarios[idx],
+    ...user,
     estado: "Deshabilitado",
   };
+
+  if (user.rol === "SUPERVISOR") {
+    const nombreCompleto = `${user.nombres} ${user.apellidos}`.trim();
+    sincronizarSupervisorEnNaves(nombreCompleto, []);
+  }
+
   return true;
 }
 
@@ -331,7 +391,7 @@ function toUsuario(m: MockUsuario): Usuario {
 /** Mapa de ítems de menú permitidos por rol */
 export const MENU_POR_ROL: Record<Rol, string[]> = {
   SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
-  TIC: ["/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
+  TIC: ["/listas", "/reportes", "/catastro", "/auditoria", "/ingreso-catastro", "/configuracion"],
   DIRECTOR: ["/reportes", "/naves", "/ingreso-catastro", "/configuracion"],
   JEFE_OPERATIVO: ["/reportes", "/configuracion"],
   SUPERVISOR: ["/listas", "/reportes", "/catastro", "/ingreso-catastro", "/configuracion"],
