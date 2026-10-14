@@ -1,5 +1,5 @@
 /**
- * Utilidades para clasificación y diagnóstico de errores en EPMMA.
+ * Utilidades para clasificación y diagnóstico de errores en EP-EMA.
  */
 
 export function esErrorConexion(error: unknown): boolean {

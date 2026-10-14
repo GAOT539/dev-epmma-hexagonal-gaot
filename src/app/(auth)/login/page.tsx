@@ -5,7 +5,8 @@ import Image from "next/image";
 import { Eye, EyeOff, Lock, Check, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useAuth, validatePassword } from "@/application/services/auth.service";
+import { useAuth, validatePassword, MENU_POR_ROL } from "@/application/services/auth.service";
+import type { Usuario } from "@/domain/models/comerciante.model";
 
 import {
   Dialog,
@@ -185,12 +186,13 @@ function PasswordChangeModal({
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [usuarioAutenticado, setUsuarioAutenticado] = useState<Usuario | null>(null);
 
   function handleLogin(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -204,6 +206,10 @@ export default function LoginPage() {
       return;
     }
 
+    if (result.user) {
+      setUsuarioAutenticado(result.user);
+    }
+
     setIsLoading(true);
 
     // Verificar si necesita cambiar contraseña
@@ -214,21 +220,25 @@ export default function LoginPage() {
     }
 
     toast.success("Acceso concedido", {
-      description: "Bienvenido al Sistema de Gestión EPMMA.",
+      description: "Bienvenido al Sistema de Gestión EP-EMA.",
     });
 
+    const rutaDestino = (result.user && MENU_POR_ROL[result.user.rol]?.[0]) || "/listas";
+
     setTimeout(() => {
-      router.push("/listas");
+      router.push(rutaDestino);
     }, 600);
   }
 
   function handlePasswordChanged() {
     setShowPasswordChange(false);
     toast.success("Acceso concedido", {
-      description: "Bienvenido al Sistema de Gestión EPMMA.",
+      description: "Bienvenido al Sistema de Gestión EP-EMA.",
     });
+    const uActivo = usuarioAutenticado || user;
+    const rutaDestino = (uActivo && MENU_POR_ROL[uActivo.rol]?.[0]) || "/listas";
     setTimeout(() => {
-      router.push("/listas");
+      router.push(rutaDestino);
     }, 600);
   }
 
@@ -242,7 +252,7 @@ export default function LoginPage() {
           <div className="relative w-28 h-28 sm:w-36 sm:h-36 bg-base-white rounded-full p-2 shadow-md">
             <Image
               src="/images/logo.png"
-              alt="Logo Institucional EPMMA"
+              alt="Logo Institucional EP-EMA"
               fill
               sizes="144px"
               className="object-contain rounded-full"
@@ -250,7 +260,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="mt-4 text-xl sm:text-2xl font-bold text-base-white text-center leading-tight">
-            EPMMA
+            EP-EMA
           </h1>
           <p className="text-base-white/80 text-sm sm:text-base text-center mt-1">
             Sistema de Gestión Institucional
@@ -335,7 +345,7 @@ export default function LoginPage() {
 
           {/* Footer */}
           <p className="mt-6 text-center text-sm text-gray-700 font-medium">
-            © {new Date().getFullYear()} EPMMA · Todos los derechos reservados
+            © {new Date().getFullYear()} EP-EMA · Todos los derechos reservados
           </p>
         </div>
 

@@ -10,7 +10,7 @@ export default function NotFound() {
         <div className="relative w-32 h-20 mb-6">
           <Image
             src="/images/logo.png"
-            alt="Logo EPMMA"
+            alt="Logo EP-EMA"
             fill
             sizes="128px"
             className="object-contain"

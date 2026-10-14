@@ -53,7 +53,7 @@ export function ErrorEstado({
     mensaje ||
     (esConexion
       ? "No es posible establecer comunicación con el servidor del Mercado Mayorista. Verifique su conexión de red o espere a que el servicio sea reestablecido."
-      : "Se ha producido un error imprevisto al procesar la solicitud. Si el problema persiste tras reintentar, por favor comuníquese con el departamento TIC de EPMMA.");
+      : "Se ha producido un error imprevisto al procesar la solicitud. Si el problema persiste tras reintentar, por favor comuníquese con el departamento TIC de EP-EMA.");
 
   const textoRetryFinal = textoRetry || (esConexion ? "Reintentar conexión" : "Intentar nuevamente");
 

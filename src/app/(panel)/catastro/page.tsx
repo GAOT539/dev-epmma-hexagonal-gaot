@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Monitor,
   AlertCircle,
@@ -11,7 +11,7 @@ import {
   Search,
   Loader2,
 } from "lucide-react";
-import { naveService } from "@/application/services/nave.service";
+import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
 import { comercianteService } from "@/application/services/comerciante.service";
 import { useAuth } from "@/application/services/auth.service";
 import type { Comerciante } from "@/domain/models/comerciante.model";
@@ -353,20 +353,37 @@ export default function TicPage() {
     };
   }, [refreshKey]);
 
+  // Naves permitidas para el usuario en sesión
+  const navesVisibles = useMemo(() => {
+    return naves.filter((n) => esNavePermitidaParaUsuario(n, user));
+  }, [naves, user]);
+
   // Filtrar comerciantes
   const comerciantesFiltrados = comerciantes.filter((c) => {
+    // Si el usuario es supervisor, aislar estrictamente a sus naves autorizadas
+    if (user?.rol === "SUPERVISOR") {
+      const naveDelCom = naves.find(
+        (n) =>
+          n.puestos?.some((p) => p.comercianteId === c.idInterno) ||
+          (c.nave && c.nave.toUpperCase() === n.nombre.toUpperCase())
+      );
+      if (!naveDelCom || !esNavePermitidaParaUsuario(naveDelCom, user)) {
+        return false;
+      }
+    }
+
     // Filtro por nave si está seleccionado
     if (selectedNaveId) {
-      const nave = naves.find(n => n.id === selectedNaveId);
+      const nave = navesVisibles.find((n) => n.id === selectedNaveId);
       if (!nave) return false;
       const perteneceANave =
-        nave.puestos?.some(p => p.comercianteId === c.idInterno) ||
+        nave.puestos?.some((p) => p.comercianteId === c.idInterno) ||
         (c.nave && c.nave.toUpperCase() === nave.nombre.toUpperCase());
       if (!perteneceANave) return false;
     }
 
     if (!searchQuery.trim()) return true;
-    
+
     const q = searchQuery.toLowerCase();
     return (
       c.contribuyente.toLowerCase().includes(q) ||
@@ -425,7 +442,7 @@ export default function TicPage() {
             className="h-9 w-full sm:w-auto min-w-[200px] rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-sm text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
           >
             <option value="">Todas las naves</option>
-            {naves.map((n) => (
+            {navesVisibles.map((n) => (
               <option key={n.id} value={n.id}>
                 {n.nombre}
               </option>
@@ -444,13 +461,15 @@ export default function TicPage() {
               className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white pl-9 pr-3 text-sm text-base-eerieBlack placeholder:text-gray-700 outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30"
             />
           </div>
-          <Button
-            onClick={handleNuevo}
-            className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
-          >
-            <Plus size={14} className="mr-2" />
-            Nuevo Comerciante
-          </Button>
+          {user?.rol !== "SUPERVISOR" && (
+            <Button
+              onClick={handleNuevo}
+              className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
+            >
+              <Plus size={14} className="mr-2" />
+              Nuevo Comerciante
+            </Button>
+          )}
         </div>
 
         {/* Tabla de comerciantes */}
@@ -483,9 +502,11 @@ export default function TicPage() {
                     <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack z-10">
                       PUESTO
                     </th>
-                    <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
-                      ACCIONES
-                    </th>
+                    {user?.rol !== "SUPERVISOR" && (
+                      <th className="sticky top-0 bg-[#e6efe9] px-4 py-2.5 text-center font-semibold text-base-eerieBlack z-10">
+                        ACCIONES
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="block md:table-row-group space-y-3 md:space-y-0">
@@ -541,45 +562,47 @@ export default function TicPage() {
                         <span className="font-semibold text-gray-700 md:hidden">Puesto:</span>
                         <span>{puestoCodigo}</span>
                       </td>
-                      <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
-                        <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
-                        <div className="flex items-center justify-end md:justify-center gap-1">
-                          {!isDisabled && (
+                      {user?.rol !== "SUPERVISOR" && (
+                        <td className="flex justify-between items-center pt-2.5 mt-1 border-t border-institucional-whiteSmokeBlack/10 md:border-t-0 md:pt-0 md:px-4 md:py-2.5 text-center md:table-cell">
+                          <span className="font-semibold text-gray-700 md:hidden">Acciones:</span>
+                          <div className="flex items-center justify-end md:justify-center gap-1">
+                            {!isDisabled && (
+                              <button
+                                type="button"
+                                onClick={() => handleEditar(com)}
+                                className="flex h-7 w-7 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => handleEditar(com)}
-                              className="flex h-7 w-7 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
-                              title="Editar"
+                              onClick={async () => {
+                                if (isDisabled) {
+                                  await comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined });
+                                  toast.success("Habilitado");
+                                  setRefreshKey(k => k + 1);
+                                } else {
+                                  handleEliminar(com);
+                                }
+                              }}
+                              className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                                isDisabled ? "text-acento-verdeOliva1 hover:bg-acento-verdeOliva1/10" : "text-base-red hover:bg-base-red/10"
+                              }`}
+                              title={isDisabled ? "Habilitar" : "Deshabilitar"}
                             >
-                              <Pencil size={13} />
+                              {isDisabled ? <CheckCircle2 size={13} /> : <Trash2 size={13} />}
                             </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              if (isDisabled) {
-                                await comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined });
-                                toast.success("Habilitado");
-                                setRefreshKey(k => k + 1);
-                              } else {
-                                handleEliminar(com);
-                              }
-                            }}
-                            className={`flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
-                              isDisabled ? "text-acento-verdeOliva1 hover:bg-acento-verdeOliva1/10" : "text-base-red hover:bg-base-red/10"
-                            }`}
-                            title={isDisabled ? "Habilitar" : "Deshabilitar"}
-                          >
-                            {isDisabled ? <CheckCircle2 size={13} /> : <Trash2 size={13} />}
-                          </button>
-                        </div>
-                      </td>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   )})}
                   {comerciantesFiltrados.length === 0 && (
                     <tr className="block md:table-row">
                       <td
-                        colSpan={7}
+                        colSpan={user?.rol === "SUPERVISOR" ? 6 : 7}
                         className="block md:table-cell px-4 py-10 text-center text-sm text-gray-700"
                       >
                         No se encontraron comerciantes.

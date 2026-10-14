@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { naveService } from "@/application/services/nave.service";
+import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
 import { comercianteService } from "@/application/services/comerciante.service";
 import { asistenciaService } from "@/application/services/asistencia.service";
 import type { Nave } from "@/domain/models/nave.model";
@@ -115,7 +115,12 @@ export default function ListasPage() {
     };
   }, []);
 
-  const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
+  // Naves filtradas según permisos de rol (Supervisores solo ven sus naves asignadas)
+  const navesPermitidas = useMemo(() => {
+    return naves.filter((n) => esNavePermitidaParaUsuario(n, user));
+  }, [naves, user]);
+
+  const nave = navesPermitidas.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
 
   // Carga asíncrona de asistencias por fecha
@@ -251,6 +256,7 @@ export default function ListasPage() {
   }, [selectedDate]);
 
   function selectNave(naveId: string) {
+    if (!navesPermitidas.some((n) => n.id === naveId)) return;
     setSelectedNaveId(naveId);
     setSearchQuery("");
   }
@@ -514,7 +520,7 @@ export default function ListasPage() {
           </div>
         ) : !nave ? (
           /* ── Selección de nave ── */
-          naves.map((item) => (
+          navesPermitidas.map((item) => (
             <button
               key={item.id}
               type="button"

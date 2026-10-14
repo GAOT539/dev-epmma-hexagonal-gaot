@@ -12,8 +12,8 @@ const roboto = Roboto({
 });
 
 export const metadata: Metadata = {
-  title: "EPMMA - Sistema de Gestión",
-  description: "Sistema institucional de gestión EPMMA",
+  title: "EP-EMA - Sistema de Gestión",
+  description: "Sistema institucional de gestión EP-EMA",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

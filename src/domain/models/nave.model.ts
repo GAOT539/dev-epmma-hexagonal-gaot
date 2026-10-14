@@ -1,4 +1,4 @@
-// ── Dominio: Modelo de Nave del Mercado EPMMA ───────────────────────────────
+// ── Dominio: Modelo de Nave del Mercado EP-EMA ────────────────────────────────
 
 import type { Puesto } from "./comerciante.model";
 

@@ -11,7 +11,7 @@ import {
 import { format, subDays, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { useAuth } from "@/application/services/auth.service";
-import { naveService } from "@/application/services/nave.service";
+import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
 import { comercianteService } from "@/application/services/comerciante.service";
 import { asistenciaService } from "@/application/services/asistencia.service";
 import type { Nave } from "@/domain/models/nave.model";
@@ -147,10 +147,7 @@ export default function ReportesPage() {
 
   // RBAC: Supervisores solo ven sus naves asignadas
   const naves = useMemo(() => {
-    if (user?.rol === "SUPERVISOR" && user.navesAsignadas) {
-      return allNaves.filter((n) => user.navesAsignadas!.includes(n.id));
-    }
-    return allNaves;
+    return allNaves.filter((n) => esNavePermitidaParaUsuario(n, user));
   }, [allNaves, user]);
 
   const navesPermitidasIds = useMemo(() => new Set(naves.map((n) => n.id)), [naves]);
@@ -233,8 +230,14 @@ export default function ReportesPage() {
         const puestoCode = info?.puestoCode ?? "—";
 
         // 1. RBAC: solo naves permitidas para supervisores
-        if (user?.rol === "SUPERVISOR" && user.navesAsignadas) {
-          if (!naveId || !navesPermitidasIds.has(naveId)) return null;
+        if (user?.rol === "SUPERVISOR") {
+          const naveObj = allNaves.find(
+            (n) => n.id === naveId || n.nombre.toUpperCase() === naveNombre.toUpperCase()
+          );
+          const esPermitida = naveObj
+            ? esNavePermitidaParaUsuario(naveObj, user)
+            : navesPermitidasIds.has(naveId);
+          if (!esPermitida) return null;
         }
 
         // 2. Filtro de Nave seleccionada
@@ -279,6 +282,7 @@ export default function ReportesPage() {
       })
     );
   }, [
+    allNaves,
     todosLosComerciantes,
     asistenciaData,
     comerciantePuestoMap,

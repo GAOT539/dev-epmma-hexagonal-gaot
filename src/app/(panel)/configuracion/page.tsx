@@ -159,9 +159,6 @@ export default function ConfiguracionPage() {
           <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
             Configuración del Sistema
           </h1>
-          <p className="mt-1 text-sm text-gray-700 font-medium">
-            Administra tu cuenta y las preferencias de la aplicación.
-          </p>
         </header>
 
         {/* ── Opciones de configuración con Enrutamiento Nativo ── */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   FileText,
   FileSpreadsheet,
@@ -17,6 +17,9 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { importadorService } from "@/application/services/importador.service";
+import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
+import { useAuth } from "@/application/services/auth.service";
+import type { Nave } from "@/domain/models/nave.model";
 import type {
   ImportacionRegistro,
   ImportacionResultado,
@@ -33,6 +36,8 @@ import {
 import { Button } from "@/components/ui/button";
 
 export default function IngresoCatastroPage() {
+  const { user } = useAuth();
+  const [naves, setNaves] = useState<Nave[]>([]);
   const [registros, setRegistros] = useState<ImportacionRegistro[]>([]);
   const [resultado, setResultado] = useState<ImportacionResultado | null>(null);
   const [analisis, setAnalisis] = useState<ImportacionResultado | null>(null);
@@ -43,6 +48,15 @@ export default function IngresoCatastroPage() {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [parseando, setParseando] = useState(false);
   const [procesando, setProcesando] = useState(false);
+
+  useEffect(() => {
+    naveService.obtenerNaves().then(setNaves);
+  }, []);
+
+  const navesAutorizadas = useMemo(
+    () => naves.filter((n) => esNavePermitidaParaUsuario(n, user)),
+    [naves, user]
+  );
 
   async function procesarArchivo(file: File) {
     setArchivoNombre(file.name);
@@ -74,6 +88,36 @@ export default function IngresoCatastroPage() {
       if (parsed.length === 0) {
         toast.error("No se detectaron comerciantes válidos con cédula en el archivo.");
         return;
+      }
+
+      // Validación estricta de aislamiento de naves para el rol SUPERVISOR
+      if (user?.rol === "SUPERVISOR") {
+        const navesDetectadas = Array.from(
+          new Set(
+            parsed
+              .map((p) => (p.nave || "").trim().toUpperCase())
+              .filter(Boolean)
+          )
+        );
+
+        const todasPermitidas =
+          navesDetectadas.length > 0 &&
+          navesDetectadas.every((naveDetectada) =>
+            navesAutorizadas.some(
+              (na) =>
+                na.nombre.trim().toUpperCase() === naveDetectada ||
+                na.id.trim().toLowerCase() === naveDetectada.toLowerCase()
+            )
+          );
+
+        if (!todasPermitidas) {
+          toast.error(
+            "Acceso denegado: No tiene permisos sobre la nave detectada en el archivo. Solo puede ingresar catastro de sus naves asignadas."
+          );
+          setRegistros([]);
+          setArchivoNombre("");
+          return;
+        }
       }
 
       setRegistros(parsed);
@@ -167,6 +211,19 @@ export default function IngresoCatastroPage() {
                 Reconoce estructuras tabulares delimitadas por comas o etiquetas XML.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ── Aviso sutil de Naves Autorizadas para SUPERVISOR ── */}
+        {paso === "cargar" && user?.rol === "SUPERVISOR" && (
+          <div className="flex items-center gap-2 rounded-xl border border-institucional-green/20 bg-institucional-green/10 px-4 py-2.5 text-xs font-semibold text-institucional-green w-fit">
+            <Building2 size={16} />
+            <span>
+              Naves autorizadas para importación:{" "}
+              <strong className="text-base-eerieBlack font-bold">
+                {navesAutorizadas.map((n) => n.nombre).join(", ") || "Ninguna asignada"}
+              </strong>
+            </span>
           </div>
         )}
 

@@ -21,7 +21,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
 
   useEffect(() => {
     // Registro del error en consola para depuración técnica
-    console.error("Error capturado por el Error Boundary de EPMMA:", error);
+    console.error("Error capturado por el Error Boundary de EP-EMA:", error);
   }, [error]);
 
   const esFalloConexion = esErrorConexion(error);
@@ -98,7 +98,7 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
 
             <p className="mt-3 text-sm text-gray-600 leading-relaxed max-w-md mx-auto">
               Se ha producido un error imprevisto en la aplicación. Si el problema persiste
-              tras reintentar, por favor comuníquese con el departamento TIC de EPMMA para
+              tras reintentar, por favor comuníquese con el departamento TIC de EP-EMA para
               asistencia técnica.
             </p>
 

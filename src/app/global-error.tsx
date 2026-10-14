@@ -29,7 +29,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
 
           <p className="mt-3 text-sm text-gray-600 leading-relaxed max-w-md mx-auto">
             Se ha producido una interrupción a nivel del núcleo de la aplicación.
-            Por favor, intente recargar el sistema o contacte al departamento TIC de EPMMA si el inconveniente continúa.
+            Por favor, intente recargar el sistema o contacte al departamento TIC de EP-EMA si el inconveniente continúa.
           </p>
 
           {/* Código de Diagnóstico */}

@@ -1,6 +1,5 @@
-// ── Infraestructura: Mock de Gestión de Naves y Puestos ─────────────────────
-
 import type { Nave, EstadoRegistroNave } from "@/domain/models/nave.model";
+import { sincronizarNavesSupervisorDesdeNaves } from "./auth.mock";
 
 // ── Lista de Supervisores Disponibles en el Sistema ──────────────────────────
 
@@ -117,6 +116,7 @@ export function crearNave(
   };
 
   navesData.push(nuevaNave);
+  sincronizarNavesSupervisorDesdeNaves(navesData);
   return { ...nuevaNave };
 }
 
@@ -157,6 +157,7 @@ export function actualizarNave(
     supervisores: data.supervisores !== undefined ? data.supervisores : anterior.supervisores,
   };
 
+  sincronizarNavesSupervisorDesdeNaves(navesData);
   return { ...navesData[index] };
 }
 
@@ -191,6 +192,7 @@ export function eliminarNave(id: string): { exito: boolean; mensaje: string } {
   }
 
   navesData.splice(index, 1);
+  sincronizarNavesSupervisorDesdeNaves(navesData);
   return {
     exito: true,
     mensaje: `Nave ${nave.nombre} eliminada exitosamente.`,

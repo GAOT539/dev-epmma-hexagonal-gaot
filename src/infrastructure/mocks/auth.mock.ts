@@ -4,12 +4,24 @@ import type { Rol, Usuario } from "@/domain/models/comerciante.model";
 
 // ── Datos de usuarios simulados ──────────────────────────────────────────────
 
+/**
+ * Contraseña maestra unificada para perfiles de prueba y desarrollo.
+ * Todos los usuarios de prueba quemados comparten esta clave por defecto.
+ */
 const SUPERADMIN_PASS = "1500888985*admin";
 
 interface MockUsuario extends Usuario {
   passwordActual: string;
 }
 
+/**
+ * Usuarios de prueba preconfigurados con acceso inmediato (sin requerir cambio inicial de contraseña).
+ * 
+ * Regla de negocio para el Backend Real:
+ * - Cada usuario estará registrado en la tabla `usuarios` con su hash bcrypt en `password_hash`.
+ * - Los roles determinarán los permisos de acceso y el menú autorizado.
+ * - Endpoint equivalente: POST /api/v1/auth/login
+ */
 const mockUsuarios: MockUsuario[] = [
   {
     id: "u-super",
@@ -18,18 +30,10 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Sistema",
     rol: "SUPERADMIN",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
-  },
-  {
-    id: "u-tic-01",
-    cedula: "1801234567",
-    nombres: "Carlos",
-    apellidos: "Medina Ruiz",
-    rol: "TIC",
-    mustChangePassword: false,
-    passwordHash: SUPERADMIN_PASS,
-    passwordActual: SUPERADMIN_PASS,
+    estado: "Habilitado",
   },
   {
     id: "u-dir-01",
@@ -38,8 +42,10 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Sánchez López",
     rol: "DIRECTOR",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
+    estado: "Habilitado",
   },
   {
     id: "u-jefe-01",
@@ -48,8 +54,10 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Vargas Mendoza",
     rol: "JEFE_OPERATIVO",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
+    estado: "Habilitado",
   },
   {
     id: "u-sup-01",
@@ -58,9 +66,11 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Torres Guzmán",
     rol: "SUPERVISOR",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-a", "nave-b"],
+    estado: "Habilitado",
   },
   {
     id: "u-sup-02",
@@ -69,9 +79,11 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Castillo Vera",
     rol: "SUPERVISOR",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-c", "nave-d"],
+    estado: "Habilitado",
   },
   {
     id: "u-sup-03",
@@ -80,9 +92,23 @@ const mockUsuarios: MockUsuario[] = [
     apellidos: "Mora Salcedo",
     rol: "SUPERVISOR",
     mustChangePassword: false,
+    debeCambiarPassword: false,
     passwordHash: SUPERADMIN_PASS,
     passwordActual: SUPERADMIN_PASS,
     navesAsignadas: ["nave-e"],
+    estado: "Habilitado",
+  },
+  {
+    id: "u-tic-01",
+    cedula: "1801234567",
+    nombres: "Carlos",
+    apellidos: "Medina Ruiz",
+    rol: "TIC",
+    mustChangePassword: false,
+    debeCambiarPassword: false,
+    passwordHash: SUPERADMIN_PASS,
+    passwordActual: SUPERADMIN_PASS,
+    estado: "Habilitado",
   },
 ];
 
@@ -96,23 +122,42 @@ export function resetMockUsuarios() {
 
 // ── Funciones de autenticación ───────────────────────────────────────────────
 
+/**
+ * Autentica un usuario verificando credenciales en memoria.
+ * 
+ * Reglas de negocio:
+ * 1. Permite acceso por número de cédula o por identificador corto ("admin", "director", "jefe", "supervisor", "tic").
+ * 2. Valida contraseña contra passwordActual.
+ * 3. Bloquea el acceso si el usuario se encuentra con estado "Deshabilitado".
+ * 
+ * Conexión futura con backend real:
+ * Se ejecutará vía POST /api/v1/auth/login, validando el identificador (cédula o alias institucional)
+ * y comparando el hash de contraseña con bcrypt/argon2.
+ */
 export function authenticateUser(
   identificador: string,
   password: string
 ): Usuario | null {
   const idLimpio = identificador.trim().toLowerCase();
 
-  // Superusuario u otros perfiles por cédula o alias
   const user = usuarios.find((u) => {
-    const coincideId =
-      u.cedula.toLowerCase() === idLimpio ||
-      (idLimpio === "admin" && u.rol === "SUPERADMIN") ||
-      (idLimpio === "tic" && u.rol === "TIC") ||
-      (idLimpio === "director" && u.rol === "DIRECTOR") ||
-      (idLimpio === "jefe" && u.rol === "JEFE_OPERATIVO") ||
-      (idLimpio === "supervisor" && u.id === "u-sup-01");
+    // Verificar que el usuario no esté deshabilitado
+    if (u.estado === "Deshabilitado") return false;
 
-    return coincideId && u.passwordActual === password;
+    // Coincidencia por cédula o cédula alternativa superadmin
+    const coincideCedula =
+      u.cedula.toLowerCase() === idLimpio ||
+      (u.id === "u-super" && idLimpio === "1800000001");
+
+    // Coincidencia por identificador corto / alias por rol
+    const coincideAlias =
+      (idLimpio === "admin" && (u.rol === "SUPERADMIN" || u.id === "u-super")) ||
+      (idLimpio === "director" && (u.rol === "DIRECTOR" || u.id === "u-dir-01")) ||
+      (idLimpio === "jefe" && (u.rol === "JEFE_OPERATIVO" || u.id === "u-jefe-01")) ||
+      (idLimpio === "supervisor" && u.id === "u-sup-01") ||
+      (idLimpio === "tic" && (u.rol === "TIC" || u.id === "u-tic-01"));
+
+    return (coincideCedula || coincideAlias) && u.passwordActual === password;
   });
 
   return user ? toUsuario(user) : null;
@@ -289,5 +334,30 @@ export const MENU_POR_ROL: Record<Rol, string[]> = {
   TIC: ["/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
   DIRECTOR: ["/reportes", "/naves", "/ingreso-catastro", "/configuracion"],
   JEFE_OPERATIVO: ["/reportes", "/configuracion"],
-  SUPERVISOR: ["/listas", "/configuracion"],
+  SUPERVISOR: ["/listas", "/reportes", "/catastro", "/ingreso-catastro", "/configuracion"],
 };
+
+/**
+ * Sincroniza dinámicamente las naves asignadas de cada supervisor en base a las naves registradas en /naves.
+ */
+export function sincronizarNavesSupervisorDesdeNaves(naves: { id: string; supervisores?: string[] }[]): void {
+  for (const u of usuarios) {
+    if (u.rol === "SUPERVISOR") {
+      const nombreCompleto = `${u.nombres} ${u.apellidos}`.trim().toLowerCase();
+      const navesEncontradas = naves
+        .filter((n) =>
+          (n.supervisores ?? []).some((sup) => {
+            const supLimpio = sup.trim().toLowerCase();
+            return (
+              supLimpio === nombreCompleto ||
+              supLimpio.includes(nombreCompleto) ||
+              nombreCompleto.includes(supLimpio)
+            );
+          })
+        )
+        .map((n) => n.id);
+
+      u.navesAsignadas = navesEncontradas;
+    }
+  }
+}

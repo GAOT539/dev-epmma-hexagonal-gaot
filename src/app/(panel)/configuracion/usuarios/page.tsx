@@ -10,6 +10,8 @@ import {
   Key,
   Loader2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/application/services/auth.service";
 import { usuarioService } from "@/application/services/usuario.service";
 import { naveService } from "@/application/services/nave.service";
 import type { Rol, Usuario } from "@/domain/models/usuario.model";
@@ -238,6 +240,16 @@ function UserFormDialog({
 }
 
 export default function ConfiguracionUsuariosPage() {
+  const router = useRouter();
+  const { user, isLoading } = useAuth();
+
+  // Protección de ruta: Solo TIC y SUPERADMIN tienen acceso a la gestión de usuarios
+  useEffect(() => {
+    if (!isLoading && user && user.rol !== "SUPERADMIN" && user.rol !== "TIC") {
+      router.replace("/configuracion");
+    }
+  }, [user, isLoading, router]);
+
   const [allUsuarios, setAllUsuarios] = useState<Usuario[]>([]);
   const [naves, setNaves] = useState<Nave[]>([]);
   const [cargando, setCargando] = useState(true);
@@ -324,6 +336,10 @@ export default function ConfiguracionUsuariosPage() {
   const usuariosGestionables = allUsuarios
     .filter((u) => u.rol !== "SUPERADMIN" && u.rol !== "TIC")
     .filter((u) => u.estado !== "Deshabilitado");
+
+  if (isLoading || (user && user.rol !== "SUPERADMIN" && user.rol !== "TIC")) {
+    return null;
+  }
 
   return (
     <div className="min-h-[100dvh] bg-institucional-whiteSmoke flex flex-col">
