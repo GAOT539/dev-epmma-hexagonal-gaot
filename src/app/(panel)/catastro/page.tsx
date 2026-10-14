@@ -359,7 +359,9 @@ export default function TicPage() {
     if (selectedNaveId) {
       const nave = naves.find(n => n.id === selectedNaveId);
       if (!nave) return false;
-      const perteneceANave = nave.puestos?.some(p => p.comercianteId === c.idInterno);
+      const perteneceANave =
+        nave.puestos?.some(p => p.comercianteId === c.idInterno) ||
+        (c.nave && c.nave.toUpperCase() === nave.nombre.toUpperCase());
       if (!perteneceANave) return false;
     }
 
@@ -489,9 +491,9 @@ export default function TicPage() {
                 <tbody className="block md:table-row-group space-y-3 md:space-y-0">
                   {comerciantesFiltrados.map((com) => {
                     const isDisabled = !!com.deshabilitadoPor;
-                    // Buscar nave y puesto (solo visual)
-                    let naveNombre = "—";
-                    let puestoCodigo = "—";
+                    // Buscar nave y puesto (solo visual) con fallback seguro
+                    let naveNombre = com.nave || "—";
+                    let puestoCodigo = com.puestoId || "—";
                     for (const n of naves) {
                       const p = n.puestos?.find(p => p.comercianteId === com.idInterno);
                       if (p) {

@@ -19,6 +19,8 @@ import {
   eliminarNave,
   cambiarEstadoNave,
   obtenerSupervisoresDisponibles,
+  registrarNaveConComerciantes,
+  navesConComerciantes,
 } from "./naves.mock";
 
 export {
@@ -30,6 +32,8 @@ export {
   eliminarNave,
   cambiarEstadoNave,
   obtenerSupervisoresDisponibles,
+  registrarNaveConComerciantes,
+  navesConComerciantes,
 };
 
 // ── Pools de datos ───────────────────────────────────────────────────────────
@@ -629,28 +633,72 @@ export function agregarComerciante(data: {
   const comId = `com-${String(nextComerciante++).padStart(4, "0")}`;
   const cedula = data.cedula || genCedula(nextComerciante);
 
+  // 1. Detección o auto-creación de Nave
+  let naveEncontrada: Nave | null = null;
+  const navesExistentes = obtenerNaves();
+  const nombreBuscado = (data.nave || "").trim().toUpperCase();
+  const idBuscado = (data.naveId || "").trim();
+
+  if (idBuscado) {
+    naveEncontrada = navesExistentes.find((n) => n.id === idBuscado) ?? null;
+  }
+  if (!naveEncontrada && nombreBuscado) {
+    naveEncontrada = navesExistentes.find(
+      (n) => n.nombre.trim().toUpperCase() === nombreBuscado
+    ) ?? null;
+  }
+
+  if (!naveEncontrada && (nombreBuscado || idBuscado)) {
+    const nombreCrear = data.nave?.trim() || `NAVE ${idBuscado.toUpperCase()}`;
+    naveEncontrada = crearNave(nombreCrear, 100);
+  }
+
+  const naveFinalNombre = naveEncontrada?.nombre || data.nave;
+  const naveIdFinal = naveEncontrada ? naveEncontrada.id : (data.naveId || "nave-a");
+
+  // 2. Manejo y auto-creación de Puesto
+  if (data.puestoId && data.puestoId !== "-") {
+    const puestoCodigo = data.puestoId.trim();
+
+    let puesto = allPuestos.find(
+      (p) =>
+        p.naveId === naveIdFinal &&
+        (p.codigo.toUpperCase() === puestoCodigo.toUpperCase() || p.id === puestoCodigo)
+    );
+
+    if (!puesto) {
+      const puestoUnicoId = `${naveIdFinal}-${puestoCodigo}`;
+      puesto = {
+        id: puestoUnicoId,
+        codigo: puestoCodigo,
+        naveId: naveIdFinal,
+        estado: "Ocupado",
+        comercianteId: comId,
+      };
+      allPuestos.push(puesto);
+    } else {
+      puesto.estado = "Ocupado";
+      puesto.comercianteId = comId;
+    }
+
+    if (naveEncontrada) {
+      registrarNaveConComerciantes(naveEncontrada.id);
+    }
+  }
+
   const comerciante: Comerciante = {
     idInterno: comId,
     ciu: data.ciu,
     cedula,
     contribuyente: data.contribuyente,
     actividad: data.actividad,
-    puestoId: data.puestoId ?? null,
-    nave: data.nave,
+    puestoId: data.puestoId && data.puestoId !== "-" ? data.puestoId : null,
+    nave: naveFinalNombre,
     estadoRegistro: data.estadoRegistro ?? "Habilitado",
-    creadoPor: "sistema"
+    creadoPor: "sistema",
   };
 
   allComerciantes.push(comerciante);
-
-  // Marcar puesto como ocupado si tiene puestoId
-  if (data.puestoId) {
-    const puesto = allPuestos.find((p) => p.id === data.puestoId);
-    if (puesto) {
-      puesto.estado = "Ocupado";
-      puesto.comercianteId = comId;
-    }
-  }
 
   return comerciante;
 }

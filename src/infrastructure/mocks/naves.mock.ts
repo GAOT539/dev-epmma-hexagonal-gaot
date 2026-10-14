@@ -65,7 +65,11 @@ const navesData: Nave[] = [
 ];
 
 // Naves operativas del mercado con comerciantes registrados en el mock
-const navesConComerciantes = new Set(["nave-a", "nave-b", "nave-c", "nave-d", "nave-e"]);
+export const navesConComerciantes = new Set(["nave-a", "nave-b", "nave-c", "nave-d", "nave-e"]);
+
+export function registrarNaveConComerciantes(naveId: string): void {
+  navesConComerciantes.add(naveId);
+}
 
 // ── API CRUD Simulada ────────────────────────────────────────────────────────
 
