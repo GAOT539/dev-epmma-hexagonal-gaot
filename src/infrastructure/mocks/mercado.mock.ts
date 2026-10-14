@@ -13,7 +13,11 @@ import type {
   ReconciliacionResumen,
   CambioReconciliacion,
 } from "@/domain/models/comerciante.model";
-import { format, subDays } from "date-fns";
+import { format, subDays, addDays, eachDayOfInterval } from "date-fns";
+import {
+  sincronizarControlAsistenciaManual,
+  sincronizarControlPersistencia,
+} from "./auditoria.mock";
 import {
   obtenerNaves,
   obtenerNavePorId,
@@ -427,6 +431,267 @@ export function setEstadoAsistencia(
     });
     asistenciaHistorica.set(fecha, registros);
   }
+
+  // Sincronización en vivo con Control de Supervisores (auditoria.mock.ts)
+  try {
+    const com = getComerciantePorId(comercianteId);
+    if (com) {
+      const naveNombre = com.nave || "NAVE A";
+      const navesList = getNaves();
+      const naveObj = navesList.find(
+        (n) =>
+          n.nombre.toUpperCase() === naveNombre.toUpperCase() ||
+          n.id === naveNombre.toLowerCase()
+      );
+      const naveIdFinal = naveObj?.id || naveNombre.toLowerCase().replace(/\s+/g, "-");
+      const supervisorNombre = naveObj?.supervisores?.[0] || "Supervisor Asignado";
+
+      sincronizarControlAsistenciaManual({
+        naveId: naveIdFinal,
+        naveNombre: naveObj?.nombre || naveNombre,
+        supervisorNombre,
+        fechaJornada: fecha,
+        comercianteId,
+        ciu: com.ciu,
+        cedula: com.cedula,
+        contribuyente: com.contribuyente,
+        puesto: com.puestoId || "",
+        nuevoEstado: estado,
+      });
+    }
+  } catch {
+    // Tolerante ante llamadas tempranas de inicio
+  }
+}
+
+/**
+ * Registra asistencia masiva mediante persistencia desde la última fecha con toma real.
+ * 
+ * ¿Cómo funciona en el mock?
+ * 1. Identifica los puestos ocupados y comerciantes activos de la nave especificada.
+ * 2. Busca hacia atrás desde el día anterior a fechaHasta cuál fue el último día (fechaOrigen)
+ *    donde se registró lista real (al menos 1 comerciante con Presente o Ausente).
+ * 3. REGLA ESTRICTA DE PERSISTENCIA (SOLO PENDIENTES):
+ *    - La persistencia SOLO se aplica a los comerciantes cuyo estado actual en la fecha procesada
+ *      sea 'Pendiente' (o que aún no tengan registro en ese día).
+ *    - Los comerciantes que ya tenían un estado registrado ('Presente', 'Ausente', 'Permiso')
+ *      NO SE TOCAN: conservan su estado y en el Control de Supervisores mantienen su método como 'MANUAL'.
+ *    - Los comerciantes en 'Pendiente' buscan hacia atrás su último estado operativo registrado
+ *      ('Presente' o 'Ausente', respetando 'Permiso' vigente y sin arrastrar observaciones)
+ *      y quedan registrados con el método 'PERSISTENCIA'.
+ * 4. Sincroniza las sesiones de Control de Supervisores (auditoria.mock.ts) con la etiqueta CON_PERSISTENCIA,
+ *    registrando la trazabilidad, fechaOrigen y comentario justificado.
+ * 
+ * Conexión futura con backend real:
+ * Se invocará vía POST /api/v1/asistencia/persistencia con payload:
+ * { naveId, fechaHasta, supervisorNombre, comentario }.
+ * El backend ejecutará una sentencia SQL condicional del estilo:
+ *   UPDATE asistencia_detalle 
+ *   SET estado = :estadoPersistido, metodo = 'PERSISTENCIA', observaciones = '[]'
+ *   WHERE nave_id = :naveId AND fecha BETWEEN :inicio AND :fin AND estado = 'PENDIENTE';
+ * Los registros con estado <> 'PENDIENTE' no se alteran, preservando la autoría manual del supervisor.
+ */
+export function registrarAsistenciaConPersistenciaMock(
+  naveId: string,
+  fechaHasta: string,
+  supervisorNombre: string,
+  comentario?: string
+): { fechaOrigen: string; diasCubiertos: number } {
+  const navesList = getNaves();
+  const nave = navesList.find(
+    (n) => n.id === naveId || n.nombre.toLowerCase() === naveId.toLowerCase()
+  );
+  const naveNombre = nave?.nombre || naveId.toUpperCase();
+
+  // 1. Identificar comerciantes de la nave
+  const comerciantesNave = allComerciantes.filter(
+    (c) =>
+      (c.nave ?? "").toUpperCase() === naveNombre.toUpperCase() ||
+      (c.nave ?? "").toLowerCase() === naveId.toLowerCase()
+  );
+
+  if (comerciantesNave.length === 0) {
+    throw new Error(`No se encontraron comerciantes activos en la nave ${naveNombre}.`);
+  }
+
+  // 2. Buscar hacia atrás la fechaOrigen (último día con toma real)
+  const fechaHastaDate = new Date(fechaHasta + "T00:00:00");
+  let fechaOrigen: string | null = null;
+
+  for (let d = 1; d <= 30; d++) {
+    const fStr = format(subDays(fechaHastaDate, d), "yyyy-MM-dd");
+    const regs = asistenciaHistorica.get(fStr);
+    if (regs && regs.length > 0) {
+      const tieneTomaReal = regs.some(
+        (r) =>
+          comerciantesNave.some((c) => c.idInterno === r.comercianteId) &&
+          (r.estado === "Presente" || r.estado === "Ausente")
+      );
+      if (tieneTomaReal) {
+        fechaOrigen = fStr;
+        break;
+      }
+    }
+  }
+
+  // Si no se encontró en los últimos 30 días, tomar el día inmediatamente anterior
+  if (!fechaOrigen) {
+    fechaOrigen = format(subDays(fechaHastaDate, 1), "yyyy-MM-dd");
+  }
+
+  // 3. Generar intervalo [fechaOrigen + 1 día, fechaHasta]
+  const fechaOrigenDate = new Date(fechaOrigen + "T00:00:00");
+  const fechaInicioIntervalo = addDays(fechaOrigenDate, 1);
+
+  if (fechaInicioIntervalo > fechaHastaDate) {
+    return { fechaOrigen, diasCubiertos: 0 };
+  }
+
+  const fechasIntervalo = eachDayOfInterval({
+    start: fechaInicioIntervalo,
+    end: fechaHastaDate,
+  }).map((d) => format(d, "yyyy-MM-dd"));
+
+  const regsOrigen = asistenciaHistorica.get(fechaOrigen) ?? [];
+
+  // Mapeo detallado por cada fecha destino para el Control de Supervisores
+  const mapeoPorFecha: Record<
+    string,
+    Array<{
+      comercianteId: string;
+      ciu: string;
+      cedula: string;
+      contribuyente: string;
+      puesto: string;
+      estado: EstadoAsistencia;
+      metodo: "MANUAL" | "PERSISTENCIA";
+    }>
+  > = {};
+
+  for (const fechaDestino of fechasIntervalo) {
+    let regsDestino = asistenciaHistorica.get(fechaDestino);
+    if (!regsDestino) {
+      regsDestino = [];
+      asistenciaHistorica.set(fechaDestino, regsDestino);
+    }
+
+    const comerciantesMapeadosFecha: Array<{
+      comercianteId: string;
+      ciu: string;
+      cedula: string;
+      contribuyente: string;
+      puesto: string;
+      estado: EstadoAsistencia;
+      metodo: "MANUAL" | "PERSISTENCIA";
+    }> = [];
+
+    for (const comerciante of comerciantesNave) {
+      const regDestinoExistente = regsDestino.find(
+        (r) => r.comercianteId === comerciante.idInterno
+      );
+
+      // ── REGLA ESTRICTA 1: Comerciantes ya registrados NO se tocan ─────────
+      if (regDestinoExistente && regDestinoExistente.estado !== "Pendiente") {
+        comerciantesMapeadosFecha.push({
+          comercianteId: comerciante.idInterno,
+          ciu: comerciante.ciu,
+          cedula: comerciante.cedula,
+          contribuyente: comerciante.contribuyente,
+          puesto: comerciante.puestoId ?? "",
+          estado: regDestinoExistente.estado,
+          metodo: "MANUAL",
+        });
+        continue;
+      }
+
+      // ── REGLA ESTRICTA 2: Solo a los "Pendiente" o sin registro se les aplica persistencia ──
+      let estadoFinal: EstadoAsistencia = "Presente";
+
+      // Buscar hacia atrás el último estado operativo del comerciante
+      const regOrigen = regsOrigen.find((r) => r.comercianteId === comerciante.idInterno);
+      let estadoEncontrado: EstadoAsistencia | undefined = undefined;
+      let permisoOrigen: PermisoDetalle | undefined = undefined;
+
+      if (regOrigen && regOrigen.estado !== "Pendiente") {
+        estadoEncontrado = regOrigen.estado;
+        if (regOrigen.estado === "Permiso" && regOrigen.permisos && regOrigen.permisos.length > 0) {
+          permisoOrigen = regOrigen.permisos[0];
+        }
+      } else {
+        // Búsqueda histórica retrospectiva hacia atrás
+        const fechaDestinoDate = new Date(fechaDestino + "T00:00:00");
+        for (let d = 1; d <= 30; d++) {
+          const fPrev = format(subDays(fechaDestinoDate, d), "yyyy-MM-dd");
+          const regsPrev = asistenciaHistorica.get(fPrev);
+          const rPrev = regsPrev?.find((r) => r.comercianteId === comerciante.idInterno);
+          if (rPrev && rPrev.estado !== "Pendiente") {
+            estadoEncontrado = rPrev.estado;
+            if (rPrev.estado === "Permiso" && rPrev.permisos && rPrev.permisos.length > 0) {
+              permisoOrigen = rPrev.permisos[0];
+            }
+            break;
+          }
+        }
+      }
+
+      if (estadoEncontrado === "Presente" || estadoEncontrado === "Ausente") {
+        estadoFinal = estadoEncontrado;
+      } else if (estadoEncontrado === "Permiso") {
+        const permisoVigente = permisoOrigen
+          ? permisoOrigen.fechaInicio <= fechaDestino && permisoOrigen.fechaFin >= fechaDestino
+          : false;
+        estadoFinal = permisoVigente ? "Permiso" : "Presente";
+      } else {
+        estadoFinal = "Presente";
+      }
+
+      // Regla de Cero Observaciones arrastradas
+      if (regDestinoExistente) {
+        regDestinoExistente.estado = estadoFinal;
+        regDestinoExistente.observacion = undefined;
+        regDestinoExistente.observacionTexto = undefined;
+        regDestinoExistente.observaciones = [];
+      } else {
+        regsDestino.push({
+          id: `asist-${comerciante.idInterno}-${fechaDestino}`,
+          comercianteId: comerciante.idInterno,
+          puestoId: comerciante.puestoId ?? "",
+          fecha: fechaDestino,
+          estado: estadoFinal,
+          observaciones: [],
+          permisos: [],
+        });
+      }
+
+      comerciantesMapeadosFecha.push({
+        comercianteId: comerciante.idInterno,
+        ciu: comerciante.ciu,
+        cedula: comerciante.cedula,
+        contribuyente: comerciante.contribuyente,
+        puesto: comerciante.puestoId ?? "",
+        estado: estadoFinal,
+        metodo: "PERSISTENCIA",
+      });
+    }
+
+    mapeoPorFecha[fechaDestino] = comerciantesMapeadosFecha;
+  }
+
+  // 4. Sincronizar con Control de Supervisores (auditoria.mock.ts)
+  sincronizarControlPersistencia({
+    naveId,
+    naveNombre,
+    supervisorNombre,
+    fechaOrigen,
+    fechasDestino: fechasIntervalo,
+    comentario,
+    mapeoPorFecha,
+  });
+
+  return {
+    fechaOrigen,
+    diasCubiertos: fechasIntervalo.length,
+  };
 }
 
 export function agregarObservacionMock(

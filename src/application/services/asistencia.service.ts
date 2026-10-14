@@ -131,6 +131,20 @@ export class AsistenciaService {
       permisoId
     );
   }
+
+  async registrarAsistenciaConPersistencia(
+    naveId: string,
+    fechaHasta: string,
+    supervisorNombre: string,
+    comentario?: string
+  ): Promise<{ fechaOrigen: string; diasCubiertos: number }> {
+    return this.repository.registrarAsistenciaConPersistencia(
+      naveId,
+      fechaHasta,
+      supervisorNombre,
+      comentario
+    );
+  }
 }
 
 export const asistenciaService = new AsistenciaService(asistenciaRepository);

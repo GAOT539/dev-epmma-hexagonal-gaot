@@ -25,7 +25,7 @@ const allLinks = [
   { href: "/reportes",         label: "Reportes",            Icon: BarChart3       },
   { href: "/catastro",         label: "Catastro",            Icon: Monitor         },
   { href: "/naves",            label: "Naves",               Icon: Building2       },
-  { href: "/auditoria",        label: "Auditoría",           Icon: ScrollText      },
+  { href: "/auditoria",        label: "Control de Supervisores", Icon: ScrollText      },
   { href: "/ingreso-catastro", label: "Ingreso de Catastro", Icon: FileSpreadsheet },
   { href: "/configuracion",    label: "Config",              Icon: Settings        },
 ] as const;

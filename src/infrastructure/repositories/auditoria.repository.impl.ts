@@ -2,11 +2,14 @@
 import type {
   IAuditoriaRepository,
   FiltrosAuditoria,
+  FiltrosControlSupervisor,
 } from "@/domain/ports/auditoria.repository";
-import type { LogAuditoria } from "@/domain/models/auditoria.model";
+import type { LogAuditoria, SesionControlSupervisor } from "@/domain/models/auditoria.model";
 import {
   getLogsFiltrados,
   agregarLog,
+  getSesionesControl,
+  registrarSesionControl,
 } from "@/infrastructure/mocks/auditoria.mock";
 
 export class AuditoriaMockRepository implements IAuditoriaRepository {
@@ -20,6 +23,19 @@ export class AuditoriaMockRepository implements IAuditoriaRepository {
     log: Omit<LogAuditoria, "id" | "timestamp">
   ): Promise<void> {
     agregarLog(log);
+    return Promise.resolve();
+  }
+
+  async obtenerSesionesControl(
+    filtros: FiltrosControlSupervisor
+  ): Promise<SesionControlSupervisor[]> {
+    return Promise.resolve([...getSesionesControl(filtros)]);
+  }
+
+  async registrarSesionControl(
+    sesion: SesionControlSupervisor
+  ): Promise<void> {
+    registrarSesionControl(sesion);
     return Promise.resolve();
   }
 }

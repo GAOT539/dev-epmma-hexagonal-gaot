@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   UserCog,
   LogOut,
-  Shield,
   ChevronRight,
   Lock,
   Users,
@@ -187,25 +186,6 @@ export default function ConfiguracionPage() {
               </button>
             </li>
 
-            {/* 2. Permisos y Roles (Sub-ruta nativa) */}
-            <li>
-              <Link
-                href="/configuracion/permisos"
-                id="permisos"
-                className="group flex w-full items-center gap-4 rounded-xl bg-base-white px-5 py-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 transition-all duration-150 hover:ring-institucional-green/30 hover:bg-institucional-green/5"
-              >
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-acento-morado/10">
-                  <Shield size={20} strokeWidth={1.75} className="text-acento-morado" aria-hidden="true" />
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  <p className="font-semibold text-sm leading-tight text-base-eerieBlack">Permisos y Roles</p>
-                  <p className="mt-0.5 text-xs text-gray-700 font-medium line-clamp-1">
-                    Tu rol actual: {user?.rol?.replace("_", " ") ?? "—"}
-                  </p>
-                </div>
-                <ChevronRight size={16} strokeWidth={2} className="shrink-0 text-gray-700 transition-transform duration-150 group-hover:translate-x-0.5" aria-hidden="true" />
-              </Link>
-            </li>
 
             {/* 3. Gestión de Usuarios (solo TIC / SUPERADMIN, Sub-ruta nativa) */}
             {isAdmin && (

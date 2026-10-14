@@ -62,4 +62,10 @@ export interface IAsistenciaRepository {
     fecha: string,
     permisoId: string
   ): Promise<void>;
+  registrarAsistenciaConPersistencia(
+    naveId: string,
+    fechaHasta: string,
+    supervisorNombre: string,
+    comentario?: string
+  ): Promise<{ fechaOrigen: string; diasCubiertos: number }>;
 }

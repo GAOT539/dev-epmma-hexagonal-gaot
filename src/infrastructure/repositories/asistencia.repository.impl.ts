@@ -19,6 +19,7 @@ import {
   eliminarObservacionMock,
   agregarPermisoMock,
   eliminarPermisoMock,
+  registrarAsistenciaConPersistenciaMock,
 } from "@/infrastructure/mocks/mercado.mock";
 
 export class AsistenciaMockRepository implements IAsistenciaRepository {
@@ -134,6 +135,22 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
   ): Promise<void> {
     eliminarPermisoMock(comercianteId, fecha, permisoId);
     return Promise.resolve();
+  }
+
+  async registrarAsistenciaConPersistencia(
+    naveId: string,
+    fechaHasta: string,
+    supervisorNombre: string,
+    comentario?: string
+  ): Promise<{ fechaOrigen: string; diasCubiertos: number }> {
+    return Promise.resolve(
+      registrarAsistenciaConPersistenciaMock(
+        naveId,
+        fechaHasta,
+        supervisorNombre,
+        comentario
+      )
+    );
   }
 }
 

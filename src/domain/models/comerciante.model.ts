@@ -79,4 +79,4 @@ export type {
   ObservacionDetalle,
   PermisoDetalle,
 } from "./asistencia.model";
-export type { LogAuditoria } from "./auditoria.model";
+export type { LogAuditoria, SesionControlSupervisor, DetalleComercianteControl, EtiquetaControlSupervisor, ResumenSesionControl } from "./auditoria.model";

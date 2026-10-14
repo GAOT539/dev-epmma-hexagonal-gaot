@@ -19,11 +19,13 @@ import {
   Calendar as CalendarIcon,
   CalendarDays,
   ChevronDown,
+  CopyCheck,
   Search,
   ToggleLeft,
   ToggleRight,
   Loader2,
 } from "lucide-react";
+import { useAuth } from "@/application/services/auth.service";
 import {
   Dialog,
   DialogContent,
@@ -33,6 +35,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { eachDayOfInterval, format, isToday, isFuture, subDays } from "date-fns";
@@ -70,8 +73,23 @@ export default function ListasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"lista" | "treemap">("lista");
+  const [viewMode, setViewMode] = useState<"lista" | "treemap">(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("epmma_last_view_mode");
+        if (saved === "lista" || saved === "treemap") return saved;
+      } catch {
+        // Ignorar en entornos sin acceso a storage
+      }
+    }
+    return "lista";
+  });
   const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
+
+  const { user } = useAuth();
+  const [modalPersistenciaOpen, setModalPersistenciaOpen] = useState(false);
+  const [comentarioPersistencia, setComentarioPersistencia] = useState("");
+  const [guardandoPersistencia, setGuardandoPersistencia] = useState(false);
 
   const [asistenciaDelDia, setAsistenciaDelDia] = useState<RegistroAsistencia[]>([]);
   const [comerciantesMap, setComerciantesMap] = useState<Map<string, Comerciante>>(new Map());
@@ -130,6 +148,42 @@ export default function ListasPage() {
     nuevoEstado: EstadoAsistencia;
     tipoAdvertencia: "Permiso";
   } | null>(null);
+
+  async function handleRegistrarPersistencia() {
+    if (!selectedNaveId) return;
+    setGuardandoPersistencia(true);
+    try {
+      const supervisorNombre = user
+        ? `${user.nombres} ${user.apellidos}`
+        : "Supervisor Asignado";
+
+      const res = await asistenciaService.registrarAsistenciaConPersistencia(
+        selectedNaveId,
+        fechaStr,
+        supervisorNombre,
+        comentarioPersistencia.trim() || undefined
+      );
+
+      toast.success(
+        `Asistencia registrada con persistencia desde ${res.fechaOrigen} (${res.diasCubiertos} ${
+          res.diasCubiertos === 1 ? "día cubierto" : "días cubiertos"
+        }).`
+      );
+
+      // Recargar datos actualizados
+      const nuevosDatos = await asistenciaService.obtenerAsistenciaPorFecha(fechaStr);
+      setAsistenciaDelDia(nuevosDatos);
+      setOverrides({});
+      setModalPersistenciaOpen(false);
+      setComentarioPersistencia("");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Error al registrar persistencia";
+      toast.error(msg);
+    } finally {
+      setGuardandoPersistencia(false);
+    }
+  }
 
   // ── Puestos y Comerciantes de la Nave con estado ───────────────────────────
   const puestosConEstado = !nave
@@ -404,8 +458,8 @@ export default function ListasPage() {
 
         {/* Barra de búsqueda + toggle vista */}
         {nave && (
-          <div className="mt-4 flex w-full items-center gap-2">
-            <div className="relative flex-1 min-w-0">
+          <div className="mt-4 flex w-full flex-wrap sm:flex-nowrap items-center gap-2">
+            <div className="relative flex-1 min-w-[180px]">
               <Search
                 size={16}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-700"
@@ -419,12 +473,26 @@ export default function ListasPage() {
               />
             </div>
 
+            {/* Botón Registrar con Persistencia */}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setModalPersistenciaOpen(true)}
+              className="flex shrink-0 items-center gap-1.5 h-10 px-3 text-xs font-semibold text-institucional-green border-institucional-green/30 hover:bg-institucional-green/10 transition-colors"
+            >
+              <CopyCheck size={16} className="text-institucional-green shrink-0" />
+              <span>Registrar con Persistencia</span>
+            </Button>
+
             {/* Toggle vista */}
             <button
               type="button"
-              onClick={() =>
-                setViewMode((v) => (v === "lista" ? "treemap" : "lista"))
-              }
+              onClick={() => {
+                const nuevoModo = viewMode === "lista" ? "treemap" : "lista";
+                setViewMode(nuevoModo);
+                localStorage.setItem("epmma_last_view_mode", nuevoModo);
+              }}
               className="flex shrink-0 whitespace-nowrap items-center gap-2 rounded-lg bg-base-white px-3 sm:px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40"
             >
               {viewMode === "lista" ? (
@@ -573,6 +641,77 @@ export default function ListasPage() {
               onClick={handleConfirmarSobrescritura}
             >
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Registrar Asistencia con Persistencia */}
+      <Dialog
+        open={modalPersistenciaOpen}
+        disablePointerDismissal={true}
+        onOpenChange={(open) => {
+          if (!open && !guardandoPersistencia) {
+            setModalPersistenciaOpen(false);
+            setComentarioPersistencia("");
+          }
+        }}
+      >
+        <DialogContent
+          className="w-[95vw] max-w-lg sm:max-w-lg md:max-w-xl p-6 bg-base-white rounded-2xl shadow-xl"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-base-eerieBlack flex items-center gap-2">
+              <CopyCheck className="text-institucional-green" size={20} />
+              Registrar Asistencia con Persistencia
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="mt-2 space-y-2">
+            <label className="text-xs font-semibold text-gray-700">
+              Comentario o justificación (opcional)
+            </label>
+            <Textarea
+              placeholder="Comentario (opcional)..."
+              value={comentarioPersistencia}
+              onChange={(e) => setComentarioPersistencia(e.target.value)}
+              rows={4}
+              className="text-sm resize-none"
+              maxLength={250}
+              disabled={guardandoPersistencia}
+            />
+          </div>
+
+          <DialogFooter className="mt-6 flex flex-col-reverse sm:flex-row gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setModalPersistenciaOpen(false);
+                setComentarioPersistencia("");
+              }}
+              disabled={guardandoPersistencia}
+              className="w-full sm:w-auto"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleRegistrarPersistencia}
+              disabled={guardandoPersistencia}
+              className="w-full sm:w-auto bg-institucional-green text-base-white hover:bg-institucional-green/90 gap-2"
+            >
+              {guardandoPersistencia ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Procesando...</span>
+                </>
+              ) : (
+                <>
+                  <CopyCheck size={16} />
+                  <span>Confirmar</span>
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

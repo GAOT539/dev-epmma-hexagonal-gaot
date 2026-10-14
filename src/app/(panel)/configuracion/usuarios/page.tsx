@@ -342,12 +342,6 @@ export default function ConfiguracionUsuariosPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/configuracion/permisos"
-              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-institucional-green hover:bg-institucional-green/10 transition-colors"
-            >
-              Permisos
-            </Link>
             <Button
               size="sm"
               onClick={() => {
