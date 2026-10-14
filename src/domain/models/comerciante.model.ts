@@ -40,9 +40,34 @@ export interface ImportacionRegistro {
   gen01Codi?: string;
 }
 
+export type TipoCambioReconciliacion =
+  | "NUEVO"
+  | "REEMPLAZO_OCUPANTE"
+  | "CAMBIO_PUESTO"
+  | "ACTUALIZACION"
+  | "VACANTE";
+
+export interface CambioReconciliacion {
+  tipo: TipoCambioReconciliacion;
+  puesto: string;
+  detalle: string;
+  anterior?: string;
+  nuevo?: string;
+}
+
+export interface ReconciliacionResumen {
+  naveDetectada: string;
+  esNaveNueva: boolean;
+  capacidadNave: number;
+  totalOcupados: number;
+  totalVacantes: number;
+  cambiosDetectados: CambioReconciliacion[];
+}
+
 export interface ImportacionResultado {
   exitosos: number;
   errores: { fila: number; mensaje: string }[];
+  reconciliacion?: ReconciliacionResumen;
 }
 
 // ── Re-exportaciones para compatibilidad retrocompatible ─────────────────────

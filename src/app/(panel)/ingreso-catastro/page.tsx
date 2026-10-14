@@ -10,10 +10,17 @@ import {
   Loader2,
   CheckCircle2,
   ArrowRight,
+  Building2,
+  RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import Link from "next/link";
 import { importadorService } from "@/application/services/importador.service";
-import type { ImportacionRegistro, ImportacionResultado } from "@/domain/models/comerciante.model";
+import type {
+  ImportacionRegistro,
+  ImportacionResultado,
+} from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -28,6 +35,8 @@ import { Button } from "@/components/ui/button";
 export default function IngresoCatastroPage() {
   const [registros, setRegistros] = useState<ImportacionRegistro[]>([]);
   const [resultado, setResultado] = useState<ImportacionResultado | null>(null);
+  const [analisis, setAnalisis] = useState<ImportacionResultado | null>(null);
+  const [mostrarCambios, setMostrarCambios] = useState(true);
   const [isDragOver, setIsDragOver] = useState(false);
   const [archivoNombre, setArchivoNombre] = useState("");
   const [paso, setPaso] = useState<"cargar" | "preview" | "resultado">("cargar");
@@ -68,6 +77,8 @@ export default function IngresoCatastroPage() {
       }
 
       setRegistros(parsed);
+      const sim = await importadorService.simularImportacion(parsed);
+      setAnalisis(sim);
       setPaso("preview");
       toast.success(`${parsed.length} comerciantes detectados correctamente.`);
     } catch (error) {
@@ -111,6 +122,7 @@ export default function IngresoCatastroPage() {
   function handleReiniciar() {
     setRegistros([]);
     setResultado(null);
+    setAnalisis(null);
     setArchivoNombre("");
     setPaso("cargar");
   }
@@ -234,6 +246,90 @@ export default function IngresoCatastroPage() {
               </button>
             </div>
 
+            {/* Resumen de Reconciliación Mensual */}
+            {analisis?.reconciliacion && (
+              <div className="p-4 sm:p-5 border-b border-institucional-whiteSmokeBlack/15 bg-slate-50/70 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Building2 size={18} className="text-institucional-green" />
+                    <span className="font-bold text-sm text-base-eerieBlack">
+                      Reconciliación: {analisis.reconciliacion.naveDetectada}
+                    </span>
+                    {analisis.reconciliacion.esNaveNueva ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                        Se creará como Nueva Nave
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                        Nave Existente (Actualización Mensual)
+                      </span>
+                    )}
+                  </div>
+                  {analisis.reconciliacion.cambiosDetectados.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setMostrarCambios(!mostrarCambios)}
+                      className="text-xs text-institucional-green hover:underline font-medium inline-flex items-center gap-1"
+                    >
+                      <span>{mostrarCambios ? "Ocultar detalle de cambios" : "Ver detalle de cambios"}</span>
+                      {mostrarCambios ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="rounded-lg bg-base-white p-3 border border-institucional-whiteSmokeBlack/15 shadow-sm">
+                    <p className="text-xs font-medium text-gray-500">Capacidad Nave</p>
+                    <p className="text-lg font-bold text-base-eerieBlack">{analisis.reconciliacion.capacidadNave} puestos</p>
+                  </div>
+                  <div className="rounded-lg bg-base-white p-3 border border-emerald-200/60 shadow-sm">
+                    <p className="text-xs font-medium text-emerald-700">Ocupados en Archivo</p>
+                    <p className="text-lg font-bold text-emerald-700">{analisis.reconciliacion.totalOcupados}</p>
+                  </div>
+                  <div className="rounded-lg bg-base-white p-3 border border-blue-200/60 shadow-sm">
+                    <p className="text-xs font-medium text-acento-azul1">Vacantes Resultantes</p>
+                    <p className="text-lg font-bold text-acento-azul1">{analisis.reconciliacion.totalVacantes}</p>
+                  </div>
+                  <div className="rounded-lg bg-base-white p-3 border border-amber-200/60 shadow-sm">
+                    <p className="text-xs font-medium text-amber-700">Cambios Detectados</p>
+                    <p className="text-lg font-bold text-amber-700">{analisis.reconciliacion.cambiosDetectados.length}</p>
+                  </div>
+                </div>
+
+                {mostrarCambios && analisis.reconciliacion.cambiosDetectados.length > 0 && (
+                  <div className="mt-2 rounded-lg bg-base-white border border-institucional-whiteSmokeBlack/20 p-3 max-h-48 overflow-y-auto space-y-2">
+                    <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                      <RefreshCw size={13} className="text-institucional-green" />
+                      <span>Modificaciones mensuales detectadas ({analisis.reconciliacion.cambiosDetectados.length}):</span>
+                    </div>
+                    {analisis.reconciliacion.cambiosDetectados.map((c, idx) => (
+                      <div
+                        key={idx}
+                        className="text-xs flex items-start gap-2 p-2 rounded bg-slate-50 border border-slate-200/70"
+                      >
+                        <span
+                          className={`font-semibold px-1.5 py-0.5 rounded text-[10px] shrink-0 ${
+                            c.tipo === "REEMPLAZO_OCUPANTE"
+                              ? "bg-purple-100 text-purple-800 border border-purple-200"
+                              : c.tipo === "CAMBIO_PUESTO"
+                              ? "bg-blue-100 text-blue-800 border border-blue-200"
+                              : c.tipo === "VACANTE"
+                              ? "bg-gray-100 text-gray-700 border border-gray-300"
+                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          }`}
+                        >
+                          {c.tipo}
+                        </span>
+                        <div className="flex-1 text-gray-700">
+                          <span className="font-semibold text-gray-900">Puesto {c.puesto}:</span> {c.detalle}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Tabla con scroll horizontal */}
             <div className="flex-1 overflow-x-auto overflow-y-auto max-h-[520px]">
               <table className="w-full text-xs">
@@ -322,6 +418,77 @@ export default function IngresoCatastroPage() {
                   <p className="text-xs text-gray-700 font-medium mt-0.5">Observaciones o descartes</p>
                 </div>
               </div>
+
+              {resultado.reconciliacion && (
+                <div className="mt-6 max-w-xl mx-auto text-left rounded-xl bg-slate-50 border border-institucional-whiteSmokeBlack/20 p-4 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-institucional-whiteSmokeBlack/15 pb-2">
+                    <div className="flex items-center gap-2">
+                      <Building2 size={16} className="text-institucional-green" />
+                      <span className="font-semibold text-xs text-base-eerieBlack">
+                        Nave: {resultado.reconciliacion.naveDetectada}
+                      </span>
+                      {resultado.reconciliacion.esNaveNueva ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
+                          Nueva Nave Registrada
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800">
+                          Actualización Mensual Aplicada
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="rounded-lg bg-base-white p-2 border border-institucional-whiteSmokeBlack/10">
+                      <p className="text-[10px] text-gray-500 font-medium">Capacidad</p>
+                      <p className="text-sm font-bold text-base-eerieBlack">{resultado.reconciliacion.capacidadNave}</p>
+                    </div>
+                    <div className="rounded-lg bg-base-white p-2 border border-institucional-whiteSmokeBlack/10">
+                      <p className="text-[10px] text-emerald-700 font-medium">Ocupados</p>
+                      <p className="text-sm font-bold text-emerald-700">{resultado.reconciliacion.totalOcupados}</p>
+                    </div>
+                    <div className="rounded-lg bg-base-white p-2 border border-institucional-whiteSmokeBlack/10">
+                      <p className="text-[10px] text-acento-azul1 font-medium">Vacantes</p>
+                      <p className="text-sm font-bold text-acento-azul1">{resultado.reconciliacion.totalVacantes}</p>
+                    </div>
+                  </div>
+
+                  {resultado.reconciliacion.cambiosDetectados.length > 0 && (
+                    <div className="mt-3">
+                      <div className="text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <RefreshCw size={12} className="text-institucional-green" />
+                        <span>Resumen de Modificaciones Realizadas ({resultado.reconciliacion.cambiosDetectados.length}):</span>
+                      </div>
+                      <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                        {resultado.reconciliacion.cambiosDetectados.map((c, idx) => (
+                          <div
+                            key={idx}
+                            className="text-xs flex items-start gap-2 p-2 rounded bg-base-white border border-slate-200"
+                          >
+                            <span
+                              className={`font-semibold px-1.5 py-0.5 rounded text-[10px] shrink-0 ${
+                                c.tipo === "REEMPLAZO_OCUPANTE"
+                                  ? "bg-purple-100 text-purple-800"
+                                  : c.tipo === "CAMBIO_PUESTO"
+                                  ? "bg-blue-100 text-blue-800"
+                                  : c.tipo === "VACANTE"
+                                  ? "bg-gray-100 text-gray-700"
+                                  : "bg-emerald-100 text-emerald-800"
+                              }`}
+                            >
+                              {c.tipo}
+                            </span>
+                            <div className="flex-1 text-gray-700">
+                              <span className="font-semibold text-gray-900">Puesto {c.puesto}:</span> {c.detalle}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <Button

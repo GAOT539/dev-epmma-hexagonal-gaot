@@ -2,12 +2,14 @@
 import type { INaveRepository } from "@/domain/ports/nave.repository";
 import type { Nave } from "@/domain/models/nave.model";
 import {
-  crearNave,
-  actualizarNave,
   eliminarNave,
   obtenerSupervisoresDisponibles,
 } from "@/infrastructure/mocks/naves.mock";
-import { getNaves } from "@/infrastructure/mocks/mercado.mock";
+import {
+  getNaves,
+  crearNave,
+  actualizarNave,
+} from "@/infrastructure/mocks/mercado.mock";
 
 export class NaveMockRepository implements INaveRepository {
   async obtenerNaves(): Promise<Nave[]> {

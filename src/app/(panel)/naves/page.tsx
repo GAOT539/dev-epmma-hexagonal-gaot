@@ -128,11 +128,19 @@ export default function NavesPage() {
 
     // Cálculo de puestos actualmente ocupados por comerciantes en esta nave
     const comerciantes = await comercianteService.obtenerComerciantes();
-    const ocupados = comerciantes.filter(
+    const puestosOcupadosEnNave = new Set(
+      (nave.puestos ?? [])
+        .filter((p) => p.estado === "Ocupado" && p.comercianteId)
+        .map((p) => p.comercianteId)
+    );
+    const comerciantesEnNave = comerciantes.filter(
       (c) =>
-        c.nave?.toLowerCase() === nave.nombre.toLowerCase() ||
-        c.nave === nave.nombre
-    ).length;
+        c.estadoRegistro !== "Deshabilitado" &&
+        ((c.nave && c.nave.trim().toUpperCase() === nave.nombre.trim().toUpperCase()) ||
+          puestosOcupadosEnNave.has(c.idInterno))
+    );
+    const puestosOcupadosNave = (nave.puestos ?? []).filter((p) => p.estado === "Ocupado").length;
+    const ocupados = Math.max(comerciantesEnNave.length, puestosOcupadosNave);
     setPuestosOcupados(ocupados);
   }
 

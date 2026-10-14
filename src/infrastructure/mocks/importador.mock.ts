@@ -5,7 +5,11 @@ import type {
   ImportacionRegistro,
   ImportacionResultado,
 } from "@/domain/models/comerciante.model";
-import { getNaves, agregarComerciante } from "./mercado.mock";
+import {
+  getNaves,
+  analizarReconciliacion,
+  ejecutarReconciliacionImportacion,
+} from "./mercado.mock";
 
 // ── Datos de ejemplo para simular un archivo XML/CSV ─────────────────────────
 
@@ -645,47 +649,14 @@ export function simularImportacion(
     exitosos++;
   }
 
-  return { exitosos, errores };
+  const reconciliacion = exitosos > 0 ? analizarReconciliacion(registros) : undefined;
+  return { exitosos, errores, reconciliacion };
 }
 
 export function guardarImportacion(
   registros: ImportacionRegistro[]
 ): ImportacionResultado {
-  const errores: { fila: number; mensaje: string }[] = [];
-  let exitosos = 0;
-
-  for (let i = 0; i < registros.length; i++) {
-    const reg = registros[i];
-    const nombre = (reg.nombre || reg.contribuyente || "").trim();
-
-    if (!nombre || nombre.toUpperCase() === "SIN NOMBRE") {
-      errores.push({
-        fila: i + 1,
-        mensaje: "Registro omitido: Nombre no especificado.",
-      });
-      continue;
-    }
-
-    try {
-      agregarComerciante({
-        ciu: reg.ciu || "-",
-        cedula: reg.cedula,
-        contribuyente: nombre,
-        actividad: reg.actividad || "GENERAL",
-        nave: reg.nave || "NO DEFINIDA",
-        puestoId: reg.puesto && reg.puesto !== "-" ? reg.puesto : null,
-        estadoRegistro: "Habilitado",
-      });
-      exitosos++;
-    } catch {
-      errores.push({
-        fila: i + 1,
-        mensaje: `Error al persistir comerciante "${nombre}"`,
-      });
-    }
-  }
-
-  return { exitosos, errores };
+  return ejecutarReconciliacionImportacion(registros);
 }
 
 // ── Parseo de XML y CSV ─────────────────────────────────────────────────────

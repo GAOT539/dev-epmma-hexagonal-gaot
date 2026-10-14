@@ -42,29 +42,33 @@ const STORAGE_KEY = "epmma_auth_user";
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<Usuario | null>(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = sessionStorage.getItem(STORAGE_KEY);
-        if (stored) {
-          return JSON.parse(stored);
-        }
-      } catch {
-        // sessionStorage no disponible o datos corruptos
-      }
-    }
-    return null;
-  });
-  const [isLoading] = useState(false);
+  const [user, setUser] = useState<Usuario | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Persistir usuario en sessionStorage
+  // Restaurar usuario desde sessionStorage solo en el cliente al montar (evita Hydration Mismatch)
   useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setUser(JSON.parse(stored));
+      }
+    } catch {
+      // sessionStorage no disponible o datos corruptos
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Persistir usuario en sessionStorage solo después de completar la carga inicial
+  useEffect(() => {
+    if (isLoading) return;
     if (user) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     } else {
       sessionStorage.removeItem(STORAGE_KEY);
     }
-  }, [user]);
+  }, [user, isLoading]);
 
   const login = useCallback(
     (identificador: string, password: string) => {

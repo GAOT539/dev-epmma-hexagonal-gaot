@@ -8,13 +8,17 @@ import type {
   EstadoAsistencia,
   ObservacionDetalle,
   PermisoDetalle,
+  ImportacionRegistro,
+  ImportacionResultado,
+  ReconciliacionResumen,
+  CambioReconciliacion,
 } from "@/domain/models/comerciante.model";
 import { format, subDays } from "date-fns";
 import {
   obtenerNaves,
   obtenerNavePorId,
-  crearNave,
-  actualizarNave,
+  crearNave as mockCrearNave,
+  actualizarNave as mockActualizarNave,
   actualizarPuestosNave,
   eliminarNave,
   cambiarEstadoNave,
@@ -26,8 +30,6 @@ import {
 export {
   obtenerNaves,
   obtenerNavePorId,
-  crearNave,
-  actualizarNave,
   actualizarPuestosNave,
   eliminarNave,
   cambiarEstadoNave,
@@ -103,11 +105,11 @@ function genCIU(index: number): string {
 // ── Generación de datos ──────────────────────────────────────────────────────
 
 const NAVES_CONFIG = [
-  { id: "nave-a", nombre: "Nave A" },
-  { id: "nave-b", nombre: "Nave B" },
-  { id: "nave-c", nombre: "Nave C" },
-  { id: "nave-d", nombre: "Nave D" },
-  { id: "nave-e", nombre: "Nave E" },
+  { id: "nave-a", nombre: "NAVE A" },
+  { id: "nave-b", nombre: "NAVE B" },
+  { id: "nave-c", nombre: "NAVE C" },
+  { id: "nave-d", nombre: "NAVE D" },
+  { id: "nave-e", nombre: "NAVE E" },
 ];
 
 const LIMITE_PUESTOS = 100;
@@ -125,7 +127,8 @@ function generarPuestosYComerciantes(): {
   for (const nave of NAVES_CONFIG) {
     for (let j = 0; j < LIMITE_PUESTOS; j++) {
       const globalIndex = puestos.length;
-      const puestoId = `P-${nave.nombre.replace("Nave ", "")}${String(globalIndex + 1).padStart(3, "0")}`;
+      const letraNave = nave.nombre.replace(/^NAVE\s*/i, "").trim();
+      const puestoId = `P-${letraNave}${String(globalIndex + 1).padStart(3, "0")}`;
 
       // ~85% ocupados, ~15% vacantes
       const esVacante = rand() < 0.15;
@@ -261,15 +264,21 @@ const asistenciaHistorica = generarAsistenciaHistorica();
 
 export function getNaves(): Nave[] {
   const naves = obtenerNaves();
-  return naves.map((nc) => ({
-    id: nc.id,
-    nombre: nc.nombre,
-    cantidadPuestos: nc.cantidadPuestos,
-    supervisores: nc.supervisores ?? [],
-    estadoRegistro: nc.estadoRegistro,
-    limitePuestos: nc.cantidadPuestos ?? LIMITE_PUESTOS,
-    puestos: allPuestos.filter((p) => p.naveId === nc.id),
-  }));
+  return naves.map((nc) => {
+    const puestosNave = allPuestos.filter((p) => p.naveId === nc.id);
+    if (puestosNave.length < nc.cantidadPuestos) {
+      sincronizarPuestosNave(nc.id, nc.cantidadPuestos, nc.nombre);
+    }
+    return {
+      id: nc.id,
+      nombre: nc.nombre,
+      cantidadPuestos: nc.cantidadPuestos,
+      supervisores: nc.supervisores ?? [],
+      estadoRegistro: nc.estadoRegistro,
+      limitePuestos: nc.cantidadPuestos ?? LIMITE_PUESTOS,
+      puestos: allPuestos.filter((p) => p.naveId === nc.id),
+    };
+  });
 }
 
 export function getPuestosPorNave(naveId: string): Puesto[] {
@@ -778,4 +787,411 @@ export function getPuestosVacantesPorNave(naveId: string): Puesto[] {
   return allPuestos.filter(
     (p) => p.naveId === naveId && p.estado === "Vacante"
   );
+}
+
+// ── Sincronización de Capacidad y Puestos ────────────────────────────────────
+
+export function sincronizarPuestosNave(
+  naveId: string,
+  cantidadPuestos: number,
+  nombreNave?: string
+): void {
+  const nave = obtenerNavePorId(naveId);
+  const nombre = nombreNave || nave?.nombre || naveId;
+  const slug =
+    nombre
+      .toUpperCase()
+      .replace(/^NAVE\s*/i, "")
+      .replace(/[^A-Z0-9]/g, "") || naveId.replace(/^nave-/, "").toUpperCase();
+
+  const puestosExistentes = allPuestos.filter((p) => p.naveId === naveId);
+  const cantidadDeseada = Math.max(1, Math.floor(cantidadPuestos));
+
+  if (puestosExistentes.length < cantidadDeseada) {
+    const faltantes = cantidadDeseada - puestosExistentes.length;
+    let maxIdx = 0;
+    puestosExistentes.forEach((p) => {
+      const match = p.codigo.match(/\d+$/);
+      if (match) {
+        const num = parseInt(match[0], 10);
+        if (num > maxIdx) maxIdx = num;
+      }
+    });
+
+    for (let i = 1; i <= faltantes; i++) {
+      const numPuesto = maxIdx + i;
+      const codigoPuesto = `P-${slug}${String(numPuesto).padStart(3, "0")}`;
+      const idPuesto = `${naveId}-${codigoPuesto}`;
+      allPuestos.push({
+        id: idPuesto,
+        codigo: codigoPuesto,
+        naveId,
+        estado: "Vacante",
+        comercianteId: null,
+      });
+    }
+  } else if (puestosExistentes.length > cantidadDeseada) {
+    const excedente = puestosExistentes.length - cantidadDeseada;
+    let eliminados = 0;
+
+    for (let i = allPuestos.length - 1; i >= 0 && eliminados < excedente; i--) {
+      const p = allPuestos[i];
+      if (p.naveId === naveId && p.estado === "Vacante" && !p.comercianteId) {
+        allPuestos.splice(i, 1);
+        eliminados++;
+      }
+    }
+  }
+}
+
+export function crearNave(
+  nombre: string,
+  cantidadPuestos: number,
+  supervisores: string[] = []
+): Nave {
+  const nueva = mockCrearNave(nombre, cantidadPuestos, supervisores);
+  sincronizarPuestosNave(nueva.id, nueva.cantidadPuestos, nueva.nombre);
+  return nueva;
+}
+
+export function actualizarNave(
+  id: string,
+  data: {
+    nombre?: string;
+    cantidadPuestos?: number;
+    supervisores?: string[];
+  }
+): Nave | null {
+  const actualizada = mockActualizarNave(id, data);
+  if (actualizada) {
+    if (data.cantidadPuestos !== undefined) {
+      sincronizarPuestosNave(actualizada.id, actualizada.cantidadPuestos, actualizada.nombre);
+    }
+    if (data.nombre) {
+      const nuevoNombreUpper = data.nombre.trim().toUpperCase();
+      allComerciantes.forEach((c) => {
+        if (c.nave?.toUpperCase() === actualizada.nombre.toUpperCase()) {
+          c.nave = nuevoNombreUpper;
+        }
+      });
+    }
+  }
+  return actualizada;
+}
+
+// ── Motor de Reconciliación Mensual de Catastro ──────────────────────────────
+
+function normalizarCodigoPuesto(cod: string): string {
+  if (!cod || cod === "-") return "";
+  let clean = cod.trim().toUpperCase();
+  clean = clean.replace(/^P-[A-Z0-9]+-?/i, "").replace(/^P-/i, "");
+  if (/^0+(\d+)$/.test(clean)) {
+    clean = clean.replace(/^0+/, "");
+  }
+  return clean;
+}
+
+function sonCodigosPuestoEquivalentes(cod1: string, cod2: string): boolean {
+  if (!cod1 || !cod2 || cod1 === "-" || cod2 === "-") return false;
+  const upper1 = cod1.trim().toUpperCase();
+  const upper2 = cod2.trim().toUpperCase();
+  if (upper1 === upper2) return true;
+  const n1 = normalizarCodigoPuesto(upper1);
+  const n2 = normalizarCodigoPuesto(upper2);
+  return n1.length > 0 && n1 === n2;
+}
+
+export function analizarReconciliacion(
+  registros: ImportacionRegistro[]
+): ReconciliacionResumen {
+  const regConNave = registros.find((r) => r.nave && r.nave !== "NO DEFINIDA");
+  const naveDetectada = (regConNave?.nave || "NO DEFINIDA").trim().toUpperCase();
+
+  const navesExistentes = obtenerNaves();
+  const naveEncontrada = navesExistentes.find(
+    (n) => n.nombre.trim().toUpperCase() === naveDetectada
+  ) ?? null;
+
+  if (!naveEncontrada) {
+    const totalOcupados = registros.length;
+    const capacidadNave = Math.max(totalOcupados, 100);
+    const totalVacantes = Math.max(0, capacidadNave - totalOcupados);
+    const cambiosDetectados: CambioReconciliacion[] = registros.map((r) => ({
+      tipo: "NUEVO",
+      puesto: r.puesto || "-",
+      nuevo: r.nombre,
+      detalle: `Nuevo comerciante ${r.nombre} asignado al puesto ${r.puesto || "-"}`,
+    }));
+
+    return {
+      naveDetectada,
+      esNaveNueva: true,
+      capacidadNave,
+      totalOcupados,
+      totalVacantes,
+      cambiosDetectados,
+    };
+  }
+
+  // Nave existente
+  const puestosNave = allPuestos.filter((p) => p.naveId === naveEncontrada.id);
+  const puestosDeNaveIds = new Set(puestosNave.map((p) => p.id));
+  const comerciantesNave = allComerciantes.filter(
+    (c) =>
+      c.estadoRegistro !== "Deshabilitado" &&
+      (c.nave?.trim().toUpperCase() === naveDetectada ||
+        (c.puestoId &&
+          (puestosDeNaveIds.has(c.puestoId) ||
+            puestosNave.some((p) => p.codigo === c.puestoId))))
+  );
+
+  const totalOcupados = registros.length;
+  const capacidadNave = Math.max(naveEncontrada.cantidadPuestos, totalOcupados);
+  const totalVacantes = Math.max(0, capacidadNave - totalOcupados);
+  const cambiosDetectados: CambioReconciliacion[] = [];
+
+  const cedulasEnArchivo = new Set(registros.map((r) => r.cedula));
+  const cedulasVistas = new Set<string>();
+
+  for (const reg of registros) {
+    if (cedulasVistas.has(reg.cedula)) continue;
+    cedulasVistas.add(reg.cedula);
+
+    const comMismaCedula = comerciantesNave.find((c) => c.cedula === reg.cedula);
+    const puestoActual = puestosNave.find(
+      (p) =>
+        sonCodigosPuestoEquivalentes(p.codigo, reg.puesto) ||
+        p.id === reg.puesto ||
+        p.codigo.toUpperCase() === (reg.puesto || "").toUpperCase()
+    );
+    const ocupanteActualPuesto =
+      puestoActual && puestoActual.comercianteId
+        ? comerciantesNave.find((c) => c.idInterno === puestoActual.comercianteId)
+        : null;
+
+    if (comMismaCedula) {
+      const puestoAnterior = comMismaCedula.puestoId || "-";
+      if (!sonCodigosPuestoEquivalentes(puestoAnterior, reg.puesto)) {
+        cambiosDetectados.push({
+          tipo: "CAMBIO_PUESTO",
+          puesto: reg.puesto,
+          anterior: puestoAnterior,
+          nuevo: reg.puesto,
+          detalle: `Puesto actualizado de ${puestoAnterior} a ${reg.puesto} para ${reg.nombre}`,
+        });
+      } else if (
+        comMismaCedula.contribuyente.trim().toUpperCase() !== reg.nombre.trim().toUpperCase() ||
+        comMismaCedula.actividad.trim().toUpperCase() !== reg.actividad.trim().toUpperCase()
+      ) {
+        cambiosDetectados.push({
+          tipo: "ACTUALIZACION",
+          puesto: reg.puesto,
+          anterior: `${comMismaCedula.contribuyente} (${comMismaCedula.actividad})`,
+          nuevo: `${reg.nombre} (${reg.actividad})`,
+          detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad})`,
+        });
+      }
+    } else if (ocupanteActualPuesto && ocupanteActualPuesto.cedula !== reg.cedula) {
+      cambiosDetectados.push({
+        tipo: "REEMPLAZO_OCUPANTE",
+        puesto: reg.puesto,
+        anterior: ocupanteActualPuesto.contribuyente,
+        nuevo: reg.nombre,
+        detalle: `Puesto ${reg.puesto}: Se reemplazó a ${ocupanteActualPuesto.contribuyente} por ${reg.nombre}`,
+      });
+    } else {
+      cambiosDetectados.push({
+        tipo: "NUEVO",
+        puesto: reg.puesto,
+        nuevo: reg.nombre,
+        detalle: `Nuevo comerciante ${reg.nombre} asignado al puesto ${reg.puesto}`,
+      });
+    }
+  }
+
+  // Puestos que pasan a vacantes (comerciantes anteriores que no vinieron en el nuevo archivo)
+  const comerciantesSalientes = comerciantesNave.filter(
+    (c) => !cedulasEnArchivo.has(c.cedula)
+  );
+
+  for (const comSaliente of comerciantesSalientes) {
+    cambiosDetectados.push({
+      tipo: "VACANTE",
+      puesto: comSaliente.puestoId || "S/N",
+      anterior: comSaliente.contribuyente,
+      detalle: `Puesto ${comSaliente.puestoId || "S/N"} queda Vacante (anterior ocupante: ${comSaliente.contribuyente})`,
+    });
+  }
+
+  return {
+    naveDetectada,
+    esNaveNueva: false,
+    capacidadNave,
+    totalOcupados,
+    totalVacantes,
+    cambiosDetectados,
+  };
+}
+
+export function ejecutarReconciliacionImportacion(
+  registros: ImportacionRegistro[]
+): ImportacionResultado {
+  const reconciliacion = analizarReconciliacion(registros);
+  const errores: { fila: number; mensaje: string }[] = [];
+  let exitosos = 0;
+
+  const naveDetectada = reconciliacion.naveDetectada;
+  let naveActual = obtenerNaves().find(
+    (n) => n.nombre.trim().toUpperCase() === naveDetectada
+  );
+
+  if (!naveActual) {
+    naveActual = crearNave(naveDetectada, reconciliacion.capacidadNave);
+  } else if (naveActual.cantidadPuestos < reconciliacion.capacidadNave) {
+    actualizarNave(naveActual.id, { cantidadPuestos: reconciliacion.capacidadNave });
+  }
+
+  const naveIdFinal = naveActual.id;
+  const puestosNave = allPuestos.filter((p) => p.naveId === naveIdFinal);
+  const puestosDeNaveIds = new Set(puestosNave.map((p) => p.id));
+  const cedulasEnArchivo = new Set(registros.map((r) => r.cedula));
+
+  // Desvincular comerciantes salientes de sus puestos
+  const comerciantesNave = allComerciantes.filter(
+    (c) =>
+      c.estadoRegistro !== "Deshabilitado" &&
+      (c.nave?.trim().toUpperCase() === naveDetectada ||
+        (c.puestoId &&
+          (puestosDeNaveIds.has(c.puestoId) ||
+            puestosNave.some((p) => p.codigo === c.puestoId))))
+  );
+
+  for (const com of comerciantesNave) {
+    if (!cedulasEnArchivo.has(com.cedula)) {
+      const puestoAnterior = allPuestos.find(
+        (p) =>
+          p.naveId === naveIdFinal &&
+          (p.comercianteId === com.idInterno ||
+            p.id === com.puestoId ||
+            p.codigo === com.puestoId)
+      );
+      if (puestoAnterior) {
+        puestoAnterior.estado = "Vacante";
+        puestoAnterior.comercianteId = null;
+      }
+      com.puestoId = null;
+    }
+  }
+
+  // Insertar o actualizar comerciantes del archivo
+  for (let i = 0; i < registros.length; i++) {
+    const reg = registros[i];
+    const nombre = (reg.nombre || reg.contribuyente || "").trim();
+    if (
+      !nombre ||
+      nombre.toUpperCase() === "SIN NOMBRE" ||
+      !reg.cedula ||
+      reg.cedula === "-"
+    ) {
+      errores.push({
+        fila: i + 1,
+        mensaje: "El campo Nombre y Cédula son obligatorios.",
+      });
+      continue;
+    }
+
+    try {
+      const comExistente = allComerciantes.find((c) => c.cedula === reg.cedula);
+      const puestoCodigo = reg.puesto && reg.puesto !== "-" ? reg.puesto.trim() : null;
+
+      let puestoTarget = puestoCodigo
+        ? allPuestos.find(
+            (p) =>
+              p.naveId === naveIdFinal &&
+              (sonCodigosPuestoEquivalentes(p.codigo, puestoCodigo) ||
+                p.codigo.toUpperCase() === puestoCodigo.toUpperCase() ||
+                p.id === puestoCodigo)
+          )
+        : null;
+
+      if (!puestoTarget && puestoCodigo) {
+        const puestoUnicoId = `${naveIdFinal}-${puestoCodigo}`;
+        puestoTarget = {
+          id: puestoUnicoId,
+          codigo: puestoCodigo,
+          naveId: naveIdFinal,
+          estado: "Ocupado",
+          comercianteId: null,
+        };
+        allPuestos.push(puestoTarget);
+      }
+
+      if (comExistente) {
+        // Liberar puesto anterior si cambió
+        if (
+          comExistente.puestoId &&
+          puestoTarget &&
+          comExistente.puestoId !== puestoTarget.codigo &&
+          comExistente.puestoId !== puestoTarget.id
+        ) {
+          const prevP = allPuestos.find(
+            (p) =>
+              p.naveId === naveIdFinal &&
+              (p.id === comExistente?.puestoId || p.codigo === comExistente?.puestoId)
+          );
+          if (prevP) {
+            prevP.estado = "Vacante";
+            prevP.comercianteId = null;
+          }
+        }
+
+        comExistente.contribuyente = nombre;
+        comExistente.actividad = reg.actividad || "GENERAL";
+        comExistente.nave = naveActual.nombre;
+        comExistente.puestoId = puestoCodigo;
+        comExistente.estadoRegistro = "Habilitado";
+
+        if (puestoTarget) {
+          puestoTarget.estado = "Ocupado";
+          puestoTarget.comercianteId = comExistente.idInterno;
+        }
+      } else {
+        // Si el puesto estaba ocupado por otro, desvincular al anterior
+        if (puestoTarget && puestoTarget.comercianteId) {
+          const ocupanteAnterior = allComerciantes.find(
+            (c) => c.idInterno === puestoTarget?.comercianteId
+          );
+          if (ocupanteAnterior) {
+            ocupanteAnterior.puestoId = null;
+          }
+        }
+
+        agregarComerciante({
+          ciu: reg.ciu || "-",
+          cedula: reg.cedula,
+          contribuyente: nombre,
+          actividad: reg.actividad || "GENERAL",
+          nave: naveActual.nombre,
+          puestoId: puestoCodigo,
+          estadoRegistro: "Habilitado",
+        });
+      }
+
+      exitosos++;
+    } catch {
+      errores.push({
+        fila: i + 1,
+        mensaje: `Error al persistir comerciante "${nombre}"`,
+      });
+    }
+  }
+
+  sincronizarPuestosNave(naveIdFinal, reconciliacion.capacidadNave, naveActual.nombre);
+  registrarNaveConComerciantes(naveIdFinal);
+
+  return {
+    exitosos,
+    errores,
+    reconciliacion,
+  };
 }

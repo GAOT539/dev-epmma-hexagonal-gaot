@@ -86,9 +86,6 @@ export default function ListasPage() {
     ]).then(([navesData, comData]) => {
       if (activo) {
         setNaves(navesData);
-        if (navesData.length > 0 && !selectedNaveId) {
-          setSelectedNaveId(navesData[0].id);
-        }
         const map = new Map<string, Comerciante>();
         comData.forEach((c) => map.set(c.idInterno, c));
         setComerciantesMap(map);
@@ -98,7 +95,7 @@ export default function ListasPage() {
     return () => {
       activo = false;
     };
-  }, [selectedNaveId]);
+  }, []);
 
   const nave = naves.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
