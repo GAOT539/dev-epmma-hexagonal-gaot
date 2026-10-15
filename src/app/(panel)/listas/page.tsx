@@ -87,6 +87,7 @@ export default function ListasPage() {
   const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
 
   const { user } = useAuth();
+  const esModoConsultaLista = user?.rol === "JEFE_OPERATIVO" || user?.rol === "DIRECTOR";
   const [modalPersistenciaOpen, setModalPersistenciaOpen] = useState(false);
   const [comentarioPersistencia, setComentarioPersistencia] = useState("");
   const [guardandoPersistencia, setGuardandoPersistencia] = useState(false);
@@ -480,16 +481,18 @@ export default function ListasPage() {
             </div>
 
             {/* Botón Registrar con Persistencia */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setModalPersistenciaOpen(true)}
-              className="flex shrink-0 items-center gap-1.5 h-10 px-3 text-xs font-semibold text-institucional-green border-institucional-green/30 hover:bg-institucional-green/10 transition-colors"
-            >
-              <CopyCheck size={16} className="text-institucional-green shrink-0" />
-              <span>Registrar con Persistencia</span>
-            </Button>
+            {!esModoConsultaLista && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalPersistenciaOpen(true)}
+                className="flex shrink-0 items-center gap-1.5 h-10 px-3 text-xs font-semibold text-institucional-green border-institucional-green/30 hover:bg-institucional-green/10 transition-colors"
+              >
+                <CopyCheck size={16} className="text-institucional-green shrink-0" />
+                <span>Registrar con Persistencia</span>
+              </Button>
+            )}
 
             {/* Toggle vista */}
             <button
@@ -575,6 +578,7 @@ export default function ListasPage() {
                   onObservacionGuardada={handleObservacionSaveDirecto}
                   onPermisoAsignado={handleAsignarPermisoDirecto}
                   onActualizarAsistencia={recargarAsistencias}
+                  soloLectura={esModoConsultaLista}
                 />
               </div>
             ) : (
@@ -601,6 +605,7 @@ export default function ListasPage() {
             handleEstadoChange(modalData.comerciante.idInterno, e);
             setModalData((prev) => (prev ? { ...prev, estado: e } : null));
           }}
+          soloLectura={esModoConsultaLista}
         />
       )}
 

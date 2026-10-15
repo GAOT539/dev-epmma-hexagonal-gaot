@@ -392,8 +392,8 @@ function toUsuario(m: MockUsuario): Usuario {
 export const MENU_POR_ROL: Record<Rol, string[]> = {
   SUPERADMIN: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
   TIC: ["/listas", "/reportes", "/catastro", "/auditoria", "/ingreso-catastro", "/configuracion"],
-  DIRECTOR: ["/reportes", "/naves", "/ingreso-catastro", "/configuracion"],
-  JEFE_OPERATIVO: ["/reportes", "/configuracion"],
+  DIRECTOR: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
+  JEFE_OPERATIVO: ["/listas", "/reportes", "/catastro", "/naves", "/auditoria", "/ingreso-catastro", "/configuracion"],
   SUPERVISOR: ["/listas", "/reportes", "/catastro", "/ingreso-catastro", "/configuracion"],
 };
 

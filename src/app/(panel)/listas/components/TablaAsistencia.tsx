@@ -86,6 +86,7 @@ export function PuestoCard({
   onObservacionGuardada,
   onPermisoAsignado,
   onActualizarAsistencia,
+  soloLectura = false,
 }: {
   puesto: Puesto;
   comerciante: Comerciante | null;
@@ -102,6 +103,7 @@ export function PuestoCard({
     motivo?: string
   ) => Promise<void> | void;
   onActualizarAsistencia?: () => Promise<void> | void;
+  soloLectura?: boolean;
 }) {
   const config = ESTADO_CONFIG[estado];
   const isVacante = puesto.estado === "Vacante";
@@ -260,31 +262,35 @@ export function PuestoCard({
         </div>
 
         {/* Botones de acción: Presente, Ausente, Observación, Permiso */}
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap w-full sm:w-auto">
-          <AccionBtn
-            label="Presente"
-            Icon={CheckCircle2}
-            activeClass="bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90"
-            inactiveClass="text-acento-verdeOliva1 border border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
-            isActive={estado === "Presente"}
-            onClick={(e) => {
-              e.stopPropagation();
-              setPanelActivo(null);
-              onEstadoChange("Presente");
-            }}
-          />
-          <AccionBtn
-            label="Ausente"
-            Icon={XCircle}
-            activeClass="bg-red-700 text-white hover:bg-red-700/90"
-            inactiveClass="text-red-700 border border-red-700/30 hover:bg-red-700/10"
-            isActive={estado === "Ausente"}
-            onClick={(e) => {
-              e.stopPropagation();
-              setPanelActivo(null);
-              onEstadoChange("Ausente");
-            }}
-          />
+        <div className={soloLectura ? "grid grid-cols-2 gap-2 w-full sm:w-auto" : "grid grid-cols-2 gap-2 sm:flex sm:flex-wrap w-full sm:w-auto"}>
+          {!soloLectura && (
+            <>
+              <AccionBtn
+                label="Presente"
+                Icon={CheckCircle2}
+                activeClass="bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90"
+                inactiveClass="text-acento-verdeOliva1 border border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
+                isActive={estado === "Presente"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPanelActivo(null);
+                  onEstadoChange("Presente");
+                }}
+              />
+              <AccionBtn
+                label="Ausente"
+                Icon={XCircle}
+                activeClass="bg-red-700 text-white hover:bg-red-700/90"
+                inactiveClass="text-red-700 border border-red-700/30 hover:bg-red-700/10"
+                isActive={estado === "Ausente"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setPanelActivo(null);
+                  onEstadoChange("Ausente");
+                }}
+              />
+            </>
+          )}
           <AccionBtn
             label={
               registro?.observaciones && registro.observaciones.length > 0
@@ -323,7 +329,7 @@ export function PuestoCard({
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold text-base-eerieBlack flex items-center gap-1.5">
               <EyeIcon size={14} className="text-blue-600" />
-              Registrar Observación
+              {soloLectura ? "Observaciones Registradas" : "Registrar Observación"}
             </h4>
             <button
               type="button"
@@ -335,8 +341,8 @@ export function PuestoCard({
             </button>
           </div>
 
-          {/* Listado Histórico de Observaciones con Botón de Eliminar */}
-          {registro?.observaciones && registro.observaciones.length > 0 && (
+          {/* Listado Histórico de Observaciones */}
+          {registro?.observaciones && registro.observaciones.length > 0 ? (
             <div className="space-y-1.5 pb-1">
               <span className="text-[11px] font-semibold text-blue-900 block">
                 Historial de observaciones registradas ({registro.observaciones.length}):
@@ -353,51 +359,73 @@ export function PuestoCard({
                       </span>
                       <span className="text-gray-800 break-words">- {obs.texto}</span>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setItemAEliminar({ id: obs.id, tipo: "observacion" });
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                      title="Eliminar observación"
-                      aria-label="Eliminar observación"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {!soloLectura && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setItemAEliminar({ id: obs.id, tipo: "observacion" });
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                        title="Eliminar observación"
+                        aria-label="Eliminar observación"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
-          )}
+          ) : soloLectura ? (
+            <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-blue-100">
+              Sin observaciones registradas en esta jornada.
+            </p>
+          ) : null}
 
-          <Textarea
-            placeholder="Describa la observación o situación observada..."
-            value={obsTexto}
-            onChange={(e) => setObsTexto(e.target.value)}
-            rows={2}
-            className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
-          />
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setPanelActivo(null)}
-            >
-              Cerrar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={!obsTexto.trim()}
-              className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
-              onClick={handleGuardarObservacion}
-            >
-              Guardar Observación
-            </Button>
-          </div>
+          {!soloLectura ? (
+            <>
+              <Textarea
+                placeholder="Describa la observación o situación observada..."
+                value={obsTexto}
+                onChange={(e) => setObsTexto(e.target.value)}
+                rows={2}
+                className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
+              />
+              <div className="flex justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setPanelActivo(null)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!obsTexto.trim()}
+                  className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
+                  onClick={handleGuardarObservacion}
+                >
+                  Guardar Observación
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex justify-end pt-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs"
+                onClick={() => setPanelActivo(null)}
+              >
+                Cerrar
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -410,7 +438,7 @@ export function PuestoCard({
           <div className="flex items-center justify-between">
             <h4 className="text-xs font-semibold text-base-eerieBlack flex items-center gap-1.5">
               <ShieldAlert size={14} className="text-acento-morado" />
-              Asignar Permiso
+              {soloLectura ? "Permisos Registrados" : "Asignar Permiso"}
             </h4>
             <button
               type="button"
@@ -422,158 +450,220 @@ export function PuestoCard({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            <div>
-              <label className="text-xs font-medium text-gray-700 block mb-1">
-                Fecha de Inicio
-              </label>
-              <Popover open={openInicio} onOpenChange={setOpenInicio}>
-                <PopoverTrigger
-                  type="button"
-                  className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                >
-                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                  <span className="truncate">{fechaInicio ? format(fechaInicio, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={fechaInicio}
-                    onSelect={(d) => {
-                      if (d) {
-                        setFechaInicio(d);
-                        setOpenInicio(false);
-                        setPermisoError("");
-                        if (fechaFin && d > fechaFin) {
-                          setFechaFin(d);
-                        }
-                      }
-                    }}
-                    locale={es}
-                    autoFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            <div>
-              <label className="text-xs font-medium text-gray-700 block mb-1">
-                Fecha de Fin
-              </label>
-              <Popover open={openFin} onOpenChange={setOpenFin}>
-                <PopoverTrigger
-                  type="button"
-                  className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                >
-                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                  <span className="truncate">{fechaFin ? format(fechaFin, "dd/MM/yyyy") : "Seleccionar fin"}</span>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={fechaFin}
-                    onSelect={(d) => {
-                      if (d) {
-                        setFechaFin(d);
-                        setOpenFin(false);
-                        setPermisoError("");
-                      }
-                    }}
-                    disabled={(date) => (fechaInicio ? date < fechaInicio : false)}
-                    locale={es}
-                    autoFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-gray-700">
-              Motivo del Permiso
-            </label>
-            <input
-              type="text"
-              value={permisoMotivo}
-              onChange={(e) => setPermisoMotivo(e.target.value)}
-              placeholder="Ej. Cita médica, Trámite personal..."
-              className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-            />
-          </div>
-
-          {/* Alerta Proactiva de Restricción de Rango de Fechas en Permisos */}
-          {yaExistePermisoRango && (
-            <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
-              <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-              <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
-            </div>
-          )}
-
-          {permisoError && (
-            <p className="text-xs text-base-red font-medium">{permisoError}</p>
-          )}
-
-          {/* Listado Histórico de Permisos (Parte Inferior del Recuadro) */}
-          {registro?.permisos && registro.permisos.length > 0 && (
-            <div className="space-y-1.5 pt-2 border-t border-purple-200">
-              <span className="text-[11px] font-semibold text-purple-900 block">
-                Historial de permisos registrados ({registro.permisos.length}):
-              </span>
-              <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                {registro.permisos.map((perm) => (
-                  <div
-                    key={perm.id}
-                    className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
-                  >
-                    <div className="min-w-0 flex-1 leading-snug">
-                      <span className="font-semibold text-acento-morado mr-1.5">
-                        {perm.fecha}:
-                      </span>
-                      <span className="text-gray-800 break-words">{perm.motivo}</span>
-                      {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
-                        <span className="block text-[11px] text-gray-500">
-                          (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setItemAEliminar({ id: perm.id, tipo: "permiso" });
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                      title="Eliminar permiso"
-                      aria-label="Eliminar permiso"
-                    >
-                      <Trash2 size={13} />
-                    </button>
+          {soloLectura ? (
+            /* Modo Solo Lectura de Permisos */
+            <div className="space-y-2.5">
+              {((registro?.permisos && registro.permisos.length > 0) || (registro?.permisoInicio && registro?.permisoFin)) ? (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-semibold text-purple-900 block">
+                    Permisos activos / registrados:
+                  </span>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                    {registro?.permisos && registro.permisos.length > 0 ? (
+                      registro.permisos.map((perm) => (
+                        <div
+                          key={perm.id}
+                          className="rounded-lg bg-base-white p-2.5 border border-purple-200 text-xs shadow-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between text-acento-morado font-semibold">
+                            <span>Vigencia: {perm.fechaInicio || perm.fecha} al {perm.fechaFin || perm.fecha}</span>
+                            <span className="text-[11px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5">Activo</span>
+                          </div>
+                          <p className="text-gray-800 break-words font-medium">
+                            <span className="text-gray-500 font-normal">Motivo: </span>{perm.motivo || "Permiso concedido"}
+                          </p>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-lg bg-base-white p-2.5 border border-purple-200 text-xs shadow-xs space-y-1">
+                        <div className="flex items-center justify-between text-acento-morado font-semibold">
+                          <span>Vigencia: {registro?.permisoInicio} al {registro?.permisoFin}</span>
+                          <span className="text-[11px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5">Activo</span>
+                        </div>
+                        {registro?.observacion && (
+                          <p className="text-gray-800 break-words font-medium">
+                            <span className="text-gray-500 font-normal">Motivo: </span>{registro.observacion}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                ))}
+                </div>
+              ) : (
+                <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-purple-100">
+                  Este comerciante no registra permisos en esta fecha.
+                </p>
+              )}
+
+              <div className="flex justify-end pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setPanelActivo(null)}
+                >
+                  Cerrar
+                </Button>
               </div>
             </div>
-          )}
+          ) : (
+            /* Modo Normal de Asignación / Edición de Permiso */
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
+                    Fecha de Inicio
+                  </label>
+                  <Popover open={openInicio} onOpenChange={setOpenInicio}>
+                    <PopoverTrigger
+                      type="button"
+                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                    >
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                      <span className="truncate">{fechaInicio ? format(fechaInicio, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={fechaInicio}
+                        onSelect={(d) => {
+                          if (d) {
+                            setFechaInicio(d);
+                            setOpenInicio(false);
+                            setPermisoError("");
+                            if (fechaFin && d > fechaFin) {
+                              setFechaFin(d);
+                            }
+                          }
+                        }}
+                        locale={es}
+                        autoFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
 
-          <div className="flex justify-end gap-2 pt-1">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() => setPanelActivo(null)}
-            >
-              Cerrar
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={yaExistePermisoRango || !fechaInicioSel}
-              className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
-              onClick={handleGuardarPermiso}
-            >
-              Confirmar Permiso
-            </Button>
-          </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-700 block mb-1">
+                    Fecha de Fin
+                  </label>
+                  <Popover open={openFin} onOpenChange={setOpenFin}>
+                    <PopoverTrigger
+                      type="button"
+                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                    >
+                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                      <span className="truncate">{fechaFin ? format(fechaFin, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={fechaFin}
+                        onSelect={(d) => {
+                          if (d) {
+                            setFechaFin(d);
+                            setOpenFin(false);
+                            setPermisoError("");
+                          }
+                        }}
+                        disabled={(date) => (fechaInicio ? date < fechaInicio : false)}
+                        locale={es}
+                        autoFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-gray-700">
+                  Motivo del Permiso
+                </label>
+                <input
+                  type="text"
+                  value={permisoMotivo}
+                  onChange={(e) => setPermisoMotivo(e.target.value)}
+                  placeholder="Ej. Cita médica, Trámite personal..."
+                  className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                />
+              </div>
+
+              {/* Alerta Proactiva de Restricción de Rango de Fechas en Permisos */}
+              {yaExistePermisoRango && (
+                <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
+                  <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                  <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
+                </div>
+              )}
+
+              {permisoError && (
+                <p className="text-xs text-base-red font-medium">{permisoError}</p>
+              )}
+
+              {/* Listado Histórico de Permisos (Parte Inferior del Recuadro) */}
+              {registro?.permisos && registro.permisos.length > 0 && (
+                <div className="space-y-1.5 pt-2 border-t border-purple-200">
+                  <span className="text-[11px] font-semibold text-purple-900 block">
+                    Historial de permisos registrados ({registro.permisos.length}):
+                  </span>
+                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                    {registro.permisos.map((perm) => (
+                      <div
+                        key={perm.id}
+                        className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
+                      >
+                        <div className="min-w-0 flex-1 leading-snug">
+                          <span className="font-semibold text-acento-morado mr-1.5">
+                            {perm.fecha}:
+                          </span>
+                          <span className="text-gray-800 break-words">{perm.motivo}</span>
+                          {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
+                            <span className="block text-[11px] text-gray-500">
+                              (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setItemAEliminar({ id: perm.id, tipo: "permiso" });
+                          }}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                          title="Eliminar permiso"
+                          aria-label="Eliminar permiso"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setPanelActivo(null)}
+                >
+                  Cerrar
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={yaExistePermisoRango || !fechaInicioSel}
+                  className="h-8 text-xs bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
+                  onClick={handleGuardarPermiso}
+                >
+                  Confirmar Permiso
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -631,6 +721,7 @@ export function PuestosList({
   onObservacionGuardada,
   onPermisoAsignado,
   onActualizarAsistencia,
+  soloLectura = false,
 }: {
   items: {
     puesto: Puesto;
@@ -649,6 +740,7 @@ export function PuestosList({
     motivo?: string
   ) => Promise<void> | void;
   onActualizarAsistencia?: () => Promise<void> | void;
+  soloLectura?: boolean;
 }) {
   return (
     <ul className="flex flex-col gap-2" role="list">
@@ -673,6 +765,7 @@ export function PuestosList({
             onObservacionGuardada={onObservacionGuardada}
             onPermisoAsignado={onPermisoAsignado}
             onActualizarAsistencia={onActualizarAsistencia}
+            soloLectura={soloLectura}
           />
         </li>
       ))}

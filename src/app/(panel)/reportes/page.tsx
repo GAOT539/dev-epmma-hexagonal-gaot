@@ -7,6 +7,7 @@ import {
   Search,
   X,
   Loader2,
+  Calendar as CalendarIcon,
 } from "lucide-react";
 import { format, subDays, eachDayOfInterval } from "date-fns";
 import { es } from "date-fns/locale";
@@ -21,8 +22,8 @@ import type {
   RegistroAsistencia,
 } from "@/domain/models/comerciante.model";
 import { Input } from "@/components/ui/input";
-import { DateRangePicker } from "@/components/ui/date-range-picker";
-import type { DateRange } from "react-day-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 // ── Colores por estado ───────────────────────────────────────────────────────
 
@@ -118,14 +119,14 @@ export default function ReportesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [incluirObservaciones, setIncluirObservaciones] = useState(true);
 
-  // DateRangePicker state
-  const [dateRange, setDateRange] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 14),
-    to: new Date(),
-  });
+  // Estados para fechas independientes
+  const [fechaInicioDate, setFechaInicioDate] = useState<Date | undefined>(() => subDays(new Date(), 14));
+  const [fechaFinDate, setFechaFinDate] = useState<Date | undefined>(() => new Date());
+  const [openInicio, setOpenInicio] = useState(false);
+  const [openFin, setOpenFin] = useState(false);
 
-  const fechaInicio = dateRange?.from ? format(dateRange.from, "yyyy-MM-dd") : "";
-  const fechaFin = dateRange?.to ? format(dateRange.to, "yyyy-MM-dd") : "";
+  const fechaInicio = fechaInicioDate ? format(fechaInicioDate, "yyyy-MM-dd") : "";
+  const fechaFin = fechaFinDate ? format(fechaFinDate, "yyyy-MM-dd") : "";
 
   // Cargar naves y comerciantes desde la capa de aplicación
   useEffect(() => {
@@ -493,9 +494,9 @@ export default function ReportesPage() {
           <>
             {/* ── Controles Unificados ── */}
             <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
-              <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 lg:gap-6 w-full">
-                {/* Tarea 1: Buscador de Comerciantes */}
-                <div className="flex flex-col gap-1.5 w-full md:w-80">
+              <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 w-full">
+                {/* Buscador de Comerciantes */}
+                <div className="flex flex-col gap-1.5 w-full md:flex-1 md:min-w-[240px]">
                   <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Buscar Comerciante
                   </label>
@@ -525,7 +526,7 @@ export default function ReportesPage() {
                 </div>
 
                 {/* Filtro de Nave */}
-                <div className="flex flex-col gap-1.5 w-full md:w-auto">
+                <div className="flex flex-col gap-1.5 w-full md:w-auto shrink-0">
                   <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
                     Nave
                   </label>
@@ -543,21 +544,62 @@ export default function ReportesPage() {
                   </select>
                 </div>
 
-                {/* Rango de Fechas */}
-                <div className="flex flex-col gap-1.5 w-full md:w-auto">
+                {/* Selector Fecha Inicio */}
+                <div className="flex flex-col gap-1.5 w-full md:w-auto shrink-0">
                   <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Rango de Fechas
+                    Fecha de Inicio
                   </label>
-                  <DateRangePicker
-                    date={dateRange}
-                    setDate={setDateRange}
-                    placeholder="Seleccionar rango"
-                    className="w-full md:w-auto min-w-[240px]"
-                  />
+                  <Popover open={openInicio} onOpenChange={setOpenInicio}>
+                    <PopoverTrigger className="h-9 w-full md:w-auto inline-flex items-center justify-start rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-left font-normal text-xs text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30 cursor-pointer">
+                      <CalendarIcon className="mr-2 h-4 w-4 text-gray-700 shrink-0" />
+                      <span>{fechaInicioDate ? format(fechaInicioDate, "dd/MM/yyyy") : "Seleccionar"}</span>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        locale={es}
+                        selected={fechaInicioDate}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          setFechaInicioDate(date);
+                          if (fechaFinDate && date > fechaFinDate) {
+                            setFechaFinDate(date);
+                          }
+                          setOpenInicio(false);
+                        }}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Selector Fecha Fin */}
+                <div className="flex flex-col gap-1.5 w-full md:w-auto shrink-0">
+                  <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    Fecha de Fin
+                  </label>
+                  <Popover open={openFin} onOpenChange={setOpenFin}>
+                    <PopoverTrigger className="h-9 w-full md:w-auto inline-flex items-center justify-start rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-left font-normal text-xs text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-1 focus:ring-institucional-green/30 cursor-pointer">
+                      <CalendarIcon className="mr-2 h-4 w-4 text-gray-700 shrink-0" />
+                      <span>{fechaFinDate ? format(fechaFinDate, "dd/MM/yyyy") : "Seleccionar"}</span>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        locale={es}
+                        selected={fechaFinDate}
+                        onSelect={(date) => {
+                          if (!date) return;
+                          setFechaFinDate(date);
+                          setOpenFin(false);
+                        }}
+                        disabled={(date) => (fechaInicioDate ? date < fechaInicioDate : false)}
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
 
                 {/* Toggle de observaciones */}
-                <div className="flex flex-col justify-end w-full md:w-auto">
+                <div className="flex flex-col justify-end w-full md:w-auto shrink-0">
                   <div className="flex items-center gap-2 h-9">
                     <input
                       type="checkbox"
@@ -581,7 +623,7 @@ export default function ReportesPage() {
                   onClick={handleExportPDF}
                   disabled={!hayDatos}
                   className={[
-                    "flex items-center justify-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors w-full md:w-auto mt-2 md:mt-0",
+                    "flex items-center justify-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors w-full md:w-auto shrink-0 mt-2 md:mt-0",
                     hayDatos
                       ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 cursor-pointer"
                       : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",

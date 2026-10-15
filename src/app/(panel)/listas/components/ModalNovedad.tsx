@@ -166,6 +166,7 @@ export function ComercianteModal({
   onPermisoAsignado,
   onNovedadGuardada,
   onEstadoChange,
+  soloLectura = false,
 }: {
   comerciante: Comerciante;
   puesto: Puesto;
@@ -175,6 +176,7 @@ export function ComercianteModal({
   onPermisoAsignado: (inicio: string, fin: string) => void;
   onNovedadGuardada: (comercianteId: string, texto: string) => void;
   onEstadoChange: (estado: EstadoAsistencia) => void;
+  soloLectura?: boolean;
 }) {
   const [registroActual, setRegistroActual] = useState<RegistroAsistencia | null>(null);
   const [registroAyer, setRegistroAyer] = useState<RegistroAsistencia | null>(null);
@@ -432,37 +434,41 @@ export function ComercianteModal({
             )}
           </div>
 
-          {/* 1. Acciones Rápidas (4 Botones en cuadrícula de 2 columnas) */}
+          {/* 1. Acciones Rápidas (4 Botones o 2 en modo consulta) */}
           <div className="grid grid-cols-2 gap-3 mb-3">
-            {/* Presente */}
-            <Button
-              type="button"
-              variant={estadoActual === "Presente" ? "default" : "outline"}
-              className={
-                estadoActual === "Presente"
-                  ? "bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90 shadow-sm"
-                  : "text-acento-verdeOliva1 border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
-              }
-              onClick={() => handleSeleccionarEstado("Presente")}
-            >
-              <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />
-              Presente
-            </Button>
+            {!soloLectura && (
+              <>
+                {/* Presente */}
+                <Button
+                  type="button"
+                  variant={estadoActual === "Presente" ? "default" : "outline"}
+                  className={
+                    estadoActual === "Presente"
+                      ? "bg-acento-verdeOliva1 text-white hover:bg-acento-verdeOliva1/90 shadow-sm"
+                      : "text-acento-verdeOliva1 border-acento-verdeOliva1/30 hover:bg-acento-verdeOliva1/10"
+                  }
+                  onClick={() => handleSeleccionarEstado("Presente")}
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-1.5 shrink-0" />
+                  Presente
+                </Button>
 
-            {/* Ausente */}
-            <Button
-              type="button"
-              variant={estadoActual === "Ausente" ? "default" : "outline"}
-              className={
-                estadoActual === "Ausente"
-                  ? "bg-red-700 text-white hover:bg-red-700/90 shadow-sm"
-                  : "text-red-700 border-red-700/30 hover:bg-red-700/10"
-              }
-              onClick={() => handleSeleccionarEstado("Ausente")}
-            >
-              <XCircle className="w-4 h-4 mr-1.5 shrink-0" />
-              Ausente
-            </Button>
+                {/* Ausente */}
+                <Button
+                  type="button"
+                  variant={estadoActual === "Ausente" ? "default" : "outline"}
+                  className={
+                    estadoActual === "Ausente"
+                      ? "bg-red-700 text-white hover:bg-red-700/90 shadow-sm"
+                      : "text-red-700 border-red-700/30 hover:bg-red-700/10"
+                  }
+                  onClick={() => handleSeleccionarEstado("Ausente")}
+                >
+                  <XCircle className="w-4 h-4 mr-1.5 shrink-0" />
+                  Ausente
+                </Button>
+              </>
+            )}
 
             {/* Observación (Panel de Metadatos) */}
             <Button
@@ -487,9 +493,9 @@ export function ComercianteModal({
             {/* Permiso */}
             <Button
               type="button"
-              variant={estadoActual === "Permiso" ? "default" : "outline"}
+              variant={estadoActual === "Permiso" || panelActivo === "permiso" ? "default" : "outline"}
               className={
-                estadoActual === "Permiso"
+                estadoActual === "Permiso" || panelActivo === "permiso"
                   ? "bg-acento-morado text-white hover:bg-acento-morado/90 shadow-sm"
                   : "text-acento-morado border-acento-morado/30 hover:bg-acento-morado/10"
               }
@@ -505,11 +511,11 @@ export function ComercianteModal({
             <div className="rounded-xl bg-blue-50/60 p-4 space-y-3 ring-1 ring-blue-200 animate-in fade-in-50 duration-150">
               <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
                 <AlertTriangle size={16} className="text-blue-600" />
-                Registrar Observación
+                {soloLectura ? "Observaciones Registradas" : "Registrar Observación"}
               </h3>
 
               {/* Listado Histórico de Observaciones */}
-              {registroActual?.observaciones && registroActual.observaciones.length > 0 && (
+              {registroActual?.observaciones && registroActual.observaciones.length > 0 ? (
                 <div className="space-y-1.5 pb-2">
                   <span className="text-xs font-semibold text-blue-900 block">
                     Observaciones registradas ({registroActual.observaciones.length}):
@@ -526,37 +532,47 @@ export function ComercianteModal({
                           </span>
                           <span className="text-gray-800 break-words">- {obs.texto}</span>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setItemAEliminar({ id: obs.id, tipo: "observacion" })}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                          title="Eliminar observación"
-                          aria-label="Eliminar observación"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        {!soloLectura && (
+                          <button
+                            type="button"
+                            onClick={() => setItemAEliminar({ id: obs.id, tipo: "observacion" })}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                            title="Eliminar observación"
+                            aria-label="Eliminar observación"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 </div>
-              )}
+              ) : soloLectura ? (
+                <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-blue-100">
+                  Sin observaciones registradas en esta jornada.
+                </p>
+              ) : null}
 
-              <Textarea
-                placeholder="Escriba la nueva observación o situación a reportar..."
-                value={novedadTexto}
-                onChange={(e) => setNovedadTexto(e.target.value)}
-                rows={3}
-                className="resize-none text-sm bg-base-white"
-              />
-              <Button
-                type="button"
-                onClick={handleGuardarObservacion}
-                disabled={!novedadTexto.trim()}
-                size="sm"
-                className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
-              >
-                {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
-              </Button>
+              {!soloLectura && (
+                <>
+                  <Textarea
+                    placeholder="Escriba la nueva observación o situación a reportar..."
+                    value={novedadTexto}
+                    onChange={(e) => setNovedadTexto(e.target.value)}
+                    rows={3}
+                    className="resize-none text-sm bg-base-white"
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleGuardarObservacion}
+                    disabled={!novedadTexto.trim()}
+                    size="sm"
+                    className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
+                  >
+                    {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
+                  </Button>
+                </>
+              )}
 
               {observacionAnterior && (
                 <div className="mt-2 rounded-lg bg-blue-100/60 p-3 ring-1 ring-blue-200">
@@ -577,7 +593,11 @@ export function ComercianteModal({
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-base-eerieBlack flex items-center gap-2">
                   <ShieldAlert size={16} className="text-acento-morado" />
-                  {tienePermisoPrevio ? "Editar Permiso" : "Asignar Permiso"}
+                  {soloLectura
+                    ? "Permisos Registrados"
+                    : tienePermisoPrevio
+                    ? "Editar Permiso"
+                    : "Asignar Permiso"}
                 </h3>
                 {tienePermisoPrevio && (
                   <span className="text-xs font-semibold text-acento-morado bg-purple-100 rounded-full px-2.5 py-0.5">
@@ -586,131 +606,179 @@ export function ComercianteModal({
                 )}
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-xs font-medium text-gray-700 block mb-1">
-                    Fecha de Inicio
-                  </label>
-                  <Popover open={openInicio} onOpenChange={setOpenInicio}>
-                    <PopoverTrigger
-                      type="button"
-                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                    >
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                      <span className="truncate">{fechaInicioPermiso ? format(fechaInicioPermiso, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={fechaInicioPermiso}
-                        onSelect={(d) => {
-                          if (d) {
-                            setFechaInicioPermiso(d);
-                            setOpenInicio(false);
-                            setPermisoError("");
-                            if (fechaFinPermiso && d > fechaFinPermiso) {
-                              setFechaFinPermiso(d);
-                            }
-                          }
-                        }}
-                        locale={es}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div>
-                  <label className="text-xs font-medium text-gray-700 block mb-1">
-                    Fecha de Fin
-                  </label>
-                  <Popover open={openFin} onOpenChange={setOpenFin}>
-                    <PopoverTrigger
-                      type="button"
-                      className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                    >
-                      <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                      <span className="truncate">{fechaFinPermiso ? format(fechaFinPermiso, "dd/MM/yyyy") : "Seleccionar fin"}</span>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={fechaFinPermiso}
-                        onSelect={(d) => {
-                          if (d) {
-                            setFechaFinPermiso(d);
-                            setOpenFin(false);
-                            setPermisoError("");
-                          }
-                        }}
-                        disabled={(date) => (fechaInicioPermiso ? date < fechaInicioPermiso : false)}
-                        locale={es}
-                        autoFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-              </div>
-
-              {/* Alerta proactiva si la fecha ya tiene un permiso */}
-              {yaExistePermisoRango && (
-                <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
-                  <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                  <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
-                </div>
-              )}
-
-              {permisoError && (
-                <p className="text-xs text-base-red font-medium">{permisoError}</p>
-              )}
-
-              {/* Listado Histórico de Permisos (Parte Inferior) */}
-              {registroActual?.permisos && registroActual.permisos.length > 0 && (
-                <div className="space-y-1.5 pt-2 border-t border-purple-200">
-                  <span className="text-xs font-semibold text-purple-900 block">
-                    Permisos registrados ({registroActual.permisos.length}):
-                  </span>
-                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                    {registroActual.permisos.map((perm) => (
-                      <div
-                        key={perm.id}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
-                      >
-                        <div className="min-w-0 flex-1 leading-snug">
-                          <span className="font-semibold text-acento-morado mr-1.5">
-                            {perm.fecha}:
-                          </span>
-                          <span className="text-gray-800 break-words">{perm.motivo}</span>
-                          {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
-                            <span className="block text-[11px] text-gray-500">
-                              (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setItemAEliminar({ id: perm.id, tipo: "permiso" })}
-                          className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                          title="Eliminar permiso"
-                          aria-label="Eliminar permiso"
-                        >
-                          <Trash2 size={13} />
-                        </button>
+              {soloLectura ? (
+                <div className="space-y-2.5">
+                  {((registroActual?.permisos && registroActual.permisos.length > 0) || (registroActual?.permisoInicio && registroActual?.permisoFin)) ? (
+                    <div className="space-y-1.5">
+                      <span className="text-xs font-semibold text-purple-900 block">
+                        Permisos activos / registrados:
+                      </span>
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {registroActual?.permisos && registroActual.permisos.length > 0 ? (
+                          registroActual.permisos.map((perm) => (
+                            <div
+                              key={perm.id}
+                              className="rounded-lg bg-base-white p-2.5 border border-purple-200 text-xs shadow-xs space-y-1"
+                            >
+                              <div className="flex items-center justify-between text-acento-morado font-semibold">
+                                <span>Vigencia: {perm.fechaInicio || perm.fecha} al {perm.fechaFin || perm.fecha}</span>
+                                <span className="text-[11px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5">Activo</span>
+                              </div>
+                              <p className="text-gray-800 break-words font-medium">
+                                <span className="text-gray-500 font-normal">Motivo: </span>{perm.motivo || "Permiso concedido"}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="rounded-lg bg-base-white p-2.5 border border-purple-200 text-xs shadow-xs space-y-1">
+                            <div className="flex items-center justify-between text-acento-morado font-semibold">
+                              <span>Vigencia: {registroActual?.permisoInicio} al {registroActual?.permisoFin}</span>
+                              <span className="text-[11px] bg-purple-100 text-purple-800 rounded px-1.5 py-0.5">Activo</span>
+                            </div>
+                            {registroActual?.observacion && (
+                              <p className="text-gray-800 break-words font-medium">
+                                <span className="text-gray-500 font-normal">Motivo: </span>{registroActual.observacion}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-purple-100">
+                      Este comerciante no registra permisos en esta fecha.
+                    </p>
+                  )}
                 </div>
-              )}
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Fecha de Inicio
+                      </label>
+                      <Popover open={openInicio} onOpenChange={setOpenInicio}>
+                        <PopoverTrigger
+                          type="button"
+                          className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                        >
+                          <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                          <span className="truncate">{fechaInicioPermiso ? format(fechaInicioPermiso, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={fechaInicioPermiso}
+                            onSelect={(d) => {
+                              if (d) {
+                                setFechaInicioPermiso(d);
+                                setOpenInicio(false);
+                                setPermisoError("");
+                                if (fechaFinPermiso && d > fechaFinPermiso) {
+                                  setFechaFinPermiso(d);
+                                }
+                              }
+                            }}
+                            locale={es}
+                            autoFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
 
-              <Button
-                type="button"
-                onClick={handleGuardarPermiso}
-                disabled={yaExistePermisoRango || !fechaInicioSel}
-                size="sm"
-                className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
-              >
-                Confirmar Permiso
-              </Button>
+                    <div>
+                      <label className="text-xs font-medium text-gray-700 block mb-1">
+                        Fecha de Fin
+                      </label>
+                      <Popover open={openFin} onOpenChange={setOpenFin}>
+                        <PopoverTrigger
+                          type="button"
+                          className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
+                        >
+                          <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                          <span className="truncate">{fechaFinPermiso ? format(fechaFinPermiso, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={fechaFinPermiso}
+                            onSelect={(d) => {
+                              if (d) {
+                                setFechaFinPermiso(d);
+                                setOpenFin(false);
+                                setPermisoError("");
+                              }
+                            }}
+                            disabled={(date) => (fechaInicioPermiso ? date < fechaInicioPermiso : false)}
+                            locale={es}
+                            autoFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
+
+                  {/* Alerta proactiva si la fecha ya tiene un permiso */}
+                  {yaExistePermisoRango && (
+                    <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
+                      <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                      <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
+                    </div>
+                  )}
+
+                  {permisoError && (
+                    <p className="text-xs text-base-red font-medium">{permisoError}</p>
+                  )}
+
+                  {/* Listado Histórico de Permisos (Parte Inferior) */}
+                  {registroActual?.permisos && registroActual.permisos.length > 0 && (
+                    <div className="space-y-1.5 pt-2 border-t border-purple-200">
+                      <span className="text-xs font-semibold text-purple-900 block">
+                        Permisos registrados ({registroActual.permisos.length}):
+                      </span>
+                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                        {registroActual.permisos.map((perm) => (
+                          <div
+                            key={perm.id}
+                            className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
+                          >
+                            <div className="min-w-0 flex-1 leading-snug">
+                              <span className="font-semibold text-acento-morado mr-1.5">
+                                {perm.fecha}:
+                              </span>
+                              <span className="text-gray-800 break-words">{perm.motivo}</span>
+                              {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
+                                <span className="block text-[11px] text-gray-500">
+                                  (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
+                                </span>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setItemAEliminar({ id: perm.id, tipo: "permiso" })}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                              title="Eliminar permiso"
+                              aria-label="Eliminar permiso"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    type="button"
+                    onClick={handleGuardarPermiso}
+                    disabled={yaExistePermisoRango || !fechaInicioSel}
+                    size="sm"
+                    className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
+                  >
+                    Confirmar Permiso
+                  </Button>
+                </>
+              )}
             </div>
           )}
         </div>
