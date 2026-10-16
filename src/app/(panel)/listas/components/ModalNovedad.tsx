@@ -22,6 +22,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -32,7 +33,7 @@ import type {
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
-import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
+import type { RegistroAsistencia, TipoObservacion } from "@/domain/models/asistencia.model";
 import { asistenciaService } from "@/application/services/asistencia.service";
 
 export const ESTADO_CONFIG: Record<
@@ -57,12 +58,6 @@ export const ESTADO_CONFIG: Record<
     ring: "ring-purple-700/30",
     label: "Permiso",
   },
-  Pendiente: {
-    bg: "bg-slate-600",
-    text: "text-white",
-    ring: "ring-slate-600/30",
-    label: "Pendiente",
-  },
   Vacante: {
     bg: "bg-gray-700",
     text: "text-white",
@@ -70,6 +65,34 @@ export const ESTADO_CONFIG: Record<
     label: "Vacante",
   },
 };
+
+export function BadgeTipoObservacion({
+  tipo,
+  numeroDocumento,
+}: {
+  tipo?: TipoObservacion;
+  numeroDocumento?: string;
+}) {
+  if (tipo === "Citaciones") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold text-[10px]">
+        Citación{numeroDocumento ? ` - Doc: #${numeroDocumento}` : ""}
+      </span>
+    );
+  }
+  if (tipo === "Notificación") {
+    return (
+      <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 font-semibold text-[10px]">
+        Notificación{numeroDocumento ? ` - Doc: #${numeroDocumento}` : ""}
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-semibold text-[10px]">
+      General
+    </span>
+  );
+}
 
 function formatDate(date: Date) {
   const year = date.getFullYear();
@@ -102,18 +125,27 @@ export function ObservacionDialog({
   open: boolean;
   comerciante: Comerciante | null;
   onClose: () => void;
-  onSave: (texto: string) => void;
+  onSave: (texto: string, tipo?: TipoObservacion, numeroDocumento?: string) => void;
 }) {
+  const [tipo, setTipo] = useState<TipoObservacion>("ObservacionesGeneral");
+  const [numeroDocumento, setNumeroDocumento] = useState("");
   const [texto, setTexto] = useState("");
 
+  const requiereDocumento = tipo === "Citaciones" || tipo === "Notificación";
+  const puedeGuardar = texto.trim().length > 0 && (!requiereDocumento || numeroDocumento.trim().length > 0);
+
   function handleSave() {
-    if (!texto.trim()) return;
-    onSave(texto.trim());
+    if (!puedeGuardar) return;
+    onSave(texto.trim(), tipo, requiereDocumento ? numeroDocumento.trim() : undefined);
     setTexto("");
+    setNumeroDocumento("");
+    setTipo("ObservacionesGeneral");
   }
 
   function handleClose() {
     setTexto("");
+    setNumeroDocumento("");
+    setTipo("ObservacionesGeneral");
     onClose();
   }
 
@@ -131,20 +163,54 @@ export function ObservacionDialog({
               : "Ingrese el detalle de la observación."}
           </DialogDescription>
         </DialogHeader>
-        <Textarea
-          placeholder="Describa la novedad o situación observada..."
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          rows={4}
-          className="resize-none border-blue-200 focus-visible:ring-blue-500"
-        />
+
+        <div className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">Tipo de Observación</label>
+            <select
+              value={tipo}
+              onChange={(e) => setTipo(e.target.value as TipoObservacion)}
+              className="w-full h-9 rounded-lg border border-gray-300 bg-base-white px-2.5 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="ObservacionesGeneral">Observación General</option>
+              <option value="Citaciones">Citación</option>
+              <option value="Notificación">Notificación</option>
+            </select>
+          </div>
+
+          {requiereDocumento && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-700">
+                Número de Referencia / Documento <span className="text-red-500">*</span>
+              </label>
+              <Input
+                placeholder="Ingrese Nro. de referencia o documento..."
+                value={numeroDocumento}
+                onChange={(e) => setNumeroDocumento(e.target.value)}
+                className="text-xs border-blue-200 focus-visible:ring-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">Detalle / Motivo</label>
+            <Textarea
+              placeholder="Describa la novedad o situación observada..."
+              value={texto}
+              onChange={(e) => setTexto(e.target.value)}
+              rows={3}
+              className="resize-none border-blue-200 focus-visible:ring-blue-500 text-xs"
+            />
+          </div>
+        </div>
+
         <DialogFooter>
           <Button variant="outline" onClick={handleClose}>
             Cancelar
           </Button>
           <Button
             onClick={handleSave}
-            disabled={!texto.trim()}
+            disabled={!puedeGuardar}
             className="bg-blue-600 text-white hover:bg-blue-700 font-semibold"
           >
             Guardar como Novedad
@@ -174,7 +240,7 @@ export function ComercianteModal({
   fecha: string;
   onClose: () => void;
   onPermisoAsignado: (inicio: string, fin: string) => void;
-  onNovedadGuardada: (comercianteId: string, texto: string) => void;
+  onNovedadGuardada: (comercianteId: string, texto: string, tipo?: TipoObservacion, numeroDocumento?: string) => Promise<void> | void;
   onEstadoChange: (estado: EstadoAsistencia) => void;
   soloLectura?: boolean;
 }) {
@@ -182,6 +248,8 @@ export function ComercianteModal({
   const [registroAyer, setRegistroAyer] = useState<RegistroAsistencia | null>(null);
   const [estadoActual, setEstadoActual] = useState<EstadoAsistencia>(estadoInicial);
   const [novedadTexto, setNovedadTexto] = useState("");
+  const [tipoObservacion, setTipoObservacion] = useState<TipoObservacion>("ObservacionesGeneral");
+  const [numeroDocumentoObs, setNumeroDocumentoObs] = useState("");
   const [fechaInicioPermiso, setFechaInicioPermiso] = useState<Date | undefined>(
     () => new Date(fecha + "T00:00:00")
   );
@@ -240,7 +308,7 @@ export function ComercianteModal({
     return null;
   });
 
-  const estadoConfig = ESTADO_CONFIG[estadoActual] ?? ESTADO_CONFIG["Pendiente"];
+  const estadoConfig = ESTADO_CONFIG[estadoActual] ?? ESTADO_CONFIG["Presente"];
 
   const observacionAnterior =
     registroAyer?.observacionTexto || registroAyer?.observacion || null;
@@ -302,9 +370,19 @@ export function ComercianteModal({
 
   async function handleGuardarObservacion() {
     if (!novedadTexto.trim()) return;
+    const requiereDoc = tipoObservacion === "Citaciones" || tipoObservacion === "Notificación";
+    if (requiereDoc && !numeroDocumentoObs.trim()) return;
+
     // Requerimiento 1: Aditivo en el historial, NO muta el estado principal
-    await onNovedadGuardada(comerciante.idInterno, novedadTexto.trim());
+    await onNovedadGuardada(
+      comerciante.idInterno,
+      novedadTexto.trim(),
+      tipoObservacion,
+      requiereDoc ? numeroDocumentoObs.trim() : undefined
+    );
     setNovedadTexto("");
+    setNumeroDocumentoObs("");
+    setTipoObservacion("ObservacionesGeneral");
     const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
       comerciante.idInterno,
       fecha
@@ -526,11 +604,14 @@ export function ComercianteModal({
                         key={obs.id}
                         className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
                       >
-                        <div className="min-w-0 flex-1 leading-snug">
-                          <span className="font-semibold text-blue-700 mr-1.5">
-                            {obs.fechaHora}
-                          </span>
-                          <span className="text-gray-800 break-words">- {obs.texto}</span>
+                        <div className="min-w-0 flex-1 leading-snug space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-blue-700 text-xs">
+                              {obs.fechaHora}
+                            </span>
+                            <BadgeTipoObservacion tipo={obs.tipo} numeroDocumento={obs.numeroDocumento} />
+                          </div>
+                          <p className="text-gray-800 break-words text-xs">{obs.texto}</p>
                         </div>
                         {!soloLectura && (
                           <button
@@ -555,21 +636,56 @@ export function ComercianteModal({
 
               {!soloLectura && (
                 <>
-                  <Textarea
-                    placeholder="Escriba la nueva observación o situación a reportar..."
-                    value={novedadTexto}
-                    onChange={(e) => setNovedadTexto(e.target.value)}
-                    rows={3}
-                    className="resize-none text-sm bg-base-white"
-                  />
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-700">Tipo de Observación</label>
+                    <select
+                      value={tipoObservacion}
+                      onChange={(e) => setTipoObservacion(e.target.value as TipoObservacion)}
+                      className="w-full h-8 rounded-lg border border-gray-300 bg-base-white px-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="ObservacionesGeneral">Observación General</option>
+                      <option value="Citaciones">Citación</option>
+                      <option value="Notificación">Notificación</option>
+                    </select>
+                  </div>
+
+                  {(tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") && (
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-700">
+                        Número de Referencia / Documento <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        placeholder="Ingrese Nro. de referencia o documento..."
+                        value={numeroDocumentoObs}
+                        onChange={(e) => setNumeroDocumentoObs(e.target.value)}
+                        className="text-xs border-blue-200 focus-visible:ring-blue-500 bg-base-white"
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-700">Detalle de la Observación</label>
+                    <Textarea
+                      placeholder="Escriba la nueva observación o situación a reportar..."
+                      value={novedadTexto}
+                      onChange={(e) => setNovedadTexto(e.target.value)}
+                      rows={3}
+                      className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
+                    />
+                  </div>
+
                   <Button
                     type="button"
                     onClick={handleGuardarObservacion}
-                    disabled={!novedadTexto.trim()}
+                    disabled={
+                      !novedadTexto.trim() ||
+                      ((tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") &&
+                        !numeroDocumentoObs.trim())
+                    }
                     size="sm"
                     className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
                   >
-                    {tieneObservacionPrevia ? "Editar Observación" : "Registrar Observación"}
+                    {tieneObservacionPrevia ? "Registrar Novedad Adicional" : "Registrar Observación"}
                   </Button>
                 </>
               )}

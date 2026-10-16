@@ -4,11 +4,14 @@ export type EstadoAsistencia =
   | "Presente"
   | "Ausente"
   | "Permiso"
-  | "Pendiente"
   | "Vacante";
+
+export type TipoObservacion = "ObservacionesGeneral" | "Citaciones" | "Notificación";
 
 export interface ObservacionDetalle {
   id: string;
+  tipo: TipoObservacion;
+  numeroDocumento?: string;
   texto: string;
   fechaHora: string;
 }

@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export type EstadoAsistenciaKey = "Presente" | "Ausente" | "Permiso" | "Pendiente" | "Vacante";
+export type EstadoAsistenciaKey = "Presente" | "Ausente" | "Permiso" | "Vacante";
 
 export const ESTADO_COLORES_SOLIDOS: Record<
   EstadoAsistenciaKey,
@@ -43,17 +43,9 @@ export const ESTADO_COLORES_SOLIDOS: Record<
     label: "Vacante",
     ring: "ring-gray-700/30",
   },
-  Pendiente: {
-    bg: "bg-slate-600",
-    text: "text-white",
-    solidClass: "bg-slate-600 text-white",
-    hex: "#475569",
-    label: "Pendiente",
-    ring: "ring-slate-600/30",
-  },
 };
 
 export function getColorEstado(estado: string) {
-  const key = (estado in ESTADO_COLORES_SOLIDOS ? estado : "Pendiente") as EstadoAsistenciaKey;
+  const key = (estado in ESTADO_COLORES_SOLIDOS ? estado : "Presente") as EstadoAsistenciaKey;
   return ESTADO_COLORES_SOLIDOS[key];
 }

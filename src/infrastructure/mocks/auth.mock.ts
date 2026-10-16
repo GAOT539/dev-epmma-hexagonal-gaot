@@ -29,6 +29,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "admin",
     nombres: "Administrador",
     apellidos: "Sistema",
+    correo: "admin@ep-ema.gob.ec",
     rol: "SUPERADMIN",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -41,6 +42,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1802345678",
     nombres: "Patricia",
     apellidos: "Sánchez López",
+    correo: "director@ep-ema.gob.ec",
     rol: "DIRECTOR",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -53,6 +55,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1803456789",
     nombres: "Roberto",
     apellidos: "Vargas Mendoza",
+    correo: "jefe@ep-ema.gob.ec",
     rol: "JEFE_OPERATIVO",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -65,6 +68,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1804567890",
     nombres: "María",
     apellidos: "Torres Guzmán",
+    correo: "supervisor@ep-ema.gob.ec",
     rol: "SUPERVISOR",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -78,6 +82,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1805678901",
     nombres: "Jorge",
     apellidos: "Castillo Vera",
+    correo: "supervisor2@ep-ema.gob.ec",
     rol: "SUPERVISOR",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -91,6 +96,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1806789012",
     nombres: "Elena",
     apellidos: "Mora Salcedo",
+    correo: "supervisor3@ep-ema.gob.ec",
     rol: "SUPERVISOR",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -104,6 +110,7 @@ const mockUsuarios: MockUsuario[] = [
     cedula: "1801234567",
     nombres: "Carlos",
     apellidos: "Medina Ruiz",
+    correo: "tic@ep-ema.gob.ec",
     rol: "TIC",
     mustChangePassword: false,
     debeCambiarPassword: false,
@@ -248,6 +255,7 @@ export function crearUsuario(data: {
   cedula: string;
   nombres: string;
   apellidos: string;
+  correo?: string;
   rol: Rol;
   navesAsignadas?: string[];
 }): Usuario {
@@ -258,6 +266,7 @@ export function crearUsuario(data: {
     cedula: data.cedula,
     nombres: data.nombres,
     apellidos: data.apellidos,
+    correo: data.correo,
     rol: data.rol,
     mustChangePassword: true,
     passwordHash: `${data.cedula}*`,
@@ -288,6 +297,7 @@ export function editarUsuario(
     nombres?: string;
     apellidos?: string;
     cedula?: string;
+    correo?: string;
     rol?: Rol;
     navesAsignadas?: string[];
   }
@@ -304,6 +314,7 @@ export function editarUsuario(
     ...(data.nombres !== undefined && { nombres: data.nombres }),
     ...(data.apellidos !== undefined && { apellidos: data.apellidos }),
     ...(data.cedula !== undefined && { cedula: data.cedula }),
+    ...(data.correo !== undefined && { correo: data.correo }),
     ...(data.rol !== undefined && { rol: data.rol }),
     navesAsignadas:
       nuevoRol === "SUPERVISOR"
@@ -379,6 +390,7 @@ function toUsuario(m: MockUsuario): Usuario {
     cedula: m.cedula,
     nombres: m.nombres,
     apellidos: m.apellidos,
+    correo: m.correo,
     rol: m.rol,
     mustChangePassword: m.mustChangePassword,
     debeCambiarPassword: m.debeCambiarPassword ?? m.mustChangePassword,
@@ -420,4 +432,83 @@ export function sincronizarNavesSupervisorDesdeNaves(naves: { id: string; superv
       u.navesAsignadas = navesEncontradas;
     }
   }
+}
+
+/**
+ * Solicita el restablecimiento de contraseña de un usuario mediante su identificador (usuario/cédula) o correo electrónico.
+ *
+ * =========================================================================================
+ * DOCUMENTACIÓN DE INTEGRACIÓN BACKEND REAL CON RESEND:
+ * =========================================================================================
+ * En el backend en producción, esta operación llamará al endpoint:
+ *   POST /api/v1/auth/forgot-password
+ * Body: { identificador: string }
+ *
+ * Flujo en el servidor Node.js/NestJS/Next.js API:
+ * 1. Buscar al usuario en la base de datos por `cedula`, `username` o `correo`:
+ *    `const usuario = await prisma.usuario.findFirst({ where: { OR: [{ cedula: identificador }, { correo: identificador }] } });`
+ * 2. Si el usuario existe y tiene correo registrado:
+ *    - Generar una contraseña temporal aleatoria segura (o token JWT con expiración de 15 minutos).
+ *    - Encriptar y actualizar la contraseña temporal en la base de datos:
+ *      `await prisma.usuario.update({ where: { id: usuario.id }, data: { passwordHash: bcrypt.hashSync(tempPass, 10), mustChangePassword: true } });`
+ *    - Enviar correo electrónico transaccional utilizando el SDK oficial de **Resend**:
+ *      ```ts
+ *      import { Resend } from "resend";
+ *      const resend = new Resend(process.env.RESEND_API_KEY);
+ *      await resend.emails.send({
+ *        from: "EP-EMA Notificaciones <no-reply@ep-ema.gob.ec>",
+ *        to: usuario.correo,
+ *        subject: "Restablecimiento de Contraseña - EP-EMA",
+ *        html: `<p>Estimado/a ${usuario.nombres},</p>
+ *               <p>Se ha generado una contraseña temporal para su acceso al sistema EP-EMA:</p>
+ *               <p style="font-size:18px; font-weight:bold; color:#15803D;">${tempPass}</p>
+ *               <p>Al iniciar sesión con esta clave temporal, el sistema le solicitará definir una nueva contraseña personal.</p>`,
+ *      });
+ *      ```
+ * 3. En la simulación frontend actual:
+ *    - Se busca el usuario en memoria por cédula, alias ("admin", "director", "jefe", "supervisor", "tic") o correo.
+ *    - Se genera una contraseña temporal `tempPass = "TempPass2026*"`.
+ *    - Se actualiza `passwordActual` y `mustChangePassword = true` en el mock.
+ *    - Se retorna éxito y el correo al cual fue enviado.
+ */
+export async function solicitarRestablecimientoPassword(
+  identificadorOCorreo: string
+): Promise<{ success: boolean; correoEnviado?: string; error?: string }> {
+  const query = identificadorOCorreo.trim().toLowerCase();
+  if (!query) {
+    return { success: false, error: "Identificador no ingresado." };
+  }
+
+  const u = usuarios.find((user) => {
+    const cedula = user.cedula.toLowerCase();
+    const correo = (user.correo || "").toLowerCase();
+    const esAlias =
+      (query === "admin" && user.rol === "SUPERADMIN") ||
+      (query === "director" && user.rol === "DIRECTOR") ||
+      (query === "jefe" && user.rol === "JEFE_OPERATIVO") ||
+      (query === "supervisor" && user.rol === "SUPERVISOR") ||
+      (query === "tic" && user.rol === "TIC");
+
+    return cedula === query || correo === query || esAlias;
+  });
+
+  if (!u) {
+    return {
+      success: false,
+      error: "No se encontró ningún usuario con el usuario, cédula o correo especificado.",
+    };
+  }
+
+  const correoDestino = u.correo || `${u.cedula}@ep-ema.gob.ec`;
+  u.correo = correoDestino;
+  const tempPass = "TempPass2026*";
+  u.passwordActual = tempPass;
+  u.passwordHash = tempPass;
+  u.mustChangePassword = true;
+  u.debeCambiarPassword = true;
+
+  return {
+    success: true,
+    correoEnviado: correoDestino,
+  };
 }

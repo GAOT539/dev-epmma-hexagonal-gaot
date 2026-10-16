@@ -32,7 +32,6 @@ const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: string }> 
   Ausente: { bg: "bg-red-700", text: "text-white", hex: "#B91C1C" },
   Permiso: { bg: "bg-purple-700", text: "text-white", hex: "#7E22CE" },
   Vacante: { bg: "bg-gray-700", text: "text-white", hex: "#374151" },
-  Pendiente: { bg: "bg-slate-600", text: "text-white", hex: "#475569" },
 };
 
 const ESTADO_LABELS: Record<string, string> = {
@@ -40,7 +39,6 @@ const ESTADO_LABELS: Record<string, string> = {
   Ausente: "A",
   Permiso: "Pm",
   Vacante: "V",
-  Pendiente: "—",
 };
 
 // ── Normalización de texto (insensible a tildes y mayúsculas) ───────────────
@@ -76,20 +74,26 @@ function formatearNovedadesReporte(registros: RegistroAsistencia[]): string {
       }
     }
 
-    // 2. Observaciones
+    // 2. Observaciones categorizadas
     if (r.observaciones && r.observaciones.length > 0) {
       r.observaciones.forEach((obs) => {
-        obsList.push(`${r.fecha}: ${obs.texto}`);
+        if (obs.tipo === "Citaciones") {
+          obsList.push(`${r.fecha} [Citación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`);
+        } else if (obs.tipo === "Notificación") {
+          obsList.push(`${r.fecha} [Notificación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`);
+        } else {
+          obsList.push(`${r.fecha} [Obs. General]: ${obs.texto}`);
+        }
       });
     } else if (r.observacion && r.estado !== "Permiso") {
-      obsList.push(`${r.fecha}: ${r.observacion}`);
+      obsList.push(`${r.fecha} [Obs. General]: ${r.observacion}`);
     }
   });
 
-  // Estructura exacta requerida: [fechaAsignacion]: Permiso concedido (Vigencia: [fechaInicio] al [fechaFin])
+  // Estructura requerida: fechaAsignacion [Permiso]: motivo (Vigencia: inicio al fin)
   const permisosFormatted = Array.from(permisosMap.values()).map((p) => {
     const fAsign = p.fechaAsignacion || p.fechaInicio;
-    return `${fAsign}: Permiso concedido (Vigencia: ${p.fechaInicio} al ${p.fechaFin})`;
+    return `${fAsign} [Permiso]: ${p.motivo || "Permiso concedido"} (Vigencia: ${p.fechaInicio} al ${p.fechaFin})`;
   });
 
   const todas = [...permisosFormatted, ...obsList];
@@ -101,7 +105,7 @@ interface ReporteItem {
   puestoCode: string;
   naveNombre: string;
   naveId: string;
-  estados: (EstadoAsistencia | "Pendiente")[];
+  estados: EstadoAsistencia[];
   observaciones: string;
 }
 
@@ -118,6 +122,7 @@ export default function ReportesPage() {
   const [selectedNaveId, setSelectedNaveId] = useState("todas");
   const [searchQuery, setSearchQuery] = useState("");
   const [incluirObservaciones, setIncluirObservaciones] = useState(true);
+  const [soloObservaciones, setSoloObservaciones] = useState(false);
 
   // Estados para fechas independientes
   const [fechaInicioDate, setFechaInicioDate] = useState<Date | undefined>(() => subDays(new Date(), 14));
@@ -261,7 +266,7 @@ export default function ReportesPage() {
         comRegistros.forEach((r) => regFechaMap.set(r.fecha, r));
 
         const estados = fechas.map(
-          (f) => regFechaMap.get(f)?.estado ?? "Pendiente"
+          (f) => regFechaMap.get(f)?.estado ?? "Presente"
         );
         const observaciones = formatearNovedadesReporte(comRegistros);
 
@@ -276,7 +281,12 @@ export default function ReportesPage() {
       })
       .filter(Boolean) as ReporteItem[];
 
-    return filtrados.sort((a, b) =>
+    let resultado = filtrados;
+    if (soloObservaciones) {
+      resultado = resultado.filter((row) => row.observaciones.trim().length > 0);
+    }
+
+    return resultado.sort((a, b) =>
       a.puestoCode.localeCompare(b.puestoCode, undefined, {
         numeric: true,
         sensitivity: "base",
@@ -292,6 +302,7 @@ export default function ReportesPage() {
     selectedNaveId,
     searchQuery,
     fechas,
+    soloObservaciones,
   ]);
 
   const hayDatos = reporteFiltrado.length > 0;
@@ -334,7 +345,7 @@ export default function ReportesPage() {
 
     doc.setFontSize(11);
     doc.text(
-      "REPORTE DE ASISTENCIA",
+      soloObservaciones ? "REPORTE DE OBSERVACIONES Y NOVEDADES" : "REPORTE DE ASISTENCIA",
       pageWidth / 2,
       23,
       { align: "center" }
@@ -365,9 +376,9 @@ export default function ReportesPage() {
     );
 
     const baseHeaders = ["#", "CIU", "CÉDULA", "CONTRIBUYENTE", "ACTIVIDAD", "NAVE", "PUESTO"];
-    const headers = [
-      [...baseHeaders, ...fechaHeaders, ...(incluirObservaciones ? ["Obs."] : [])],
-    ];
+    const headers = soloObservaciones
+      ? [[...baseHeaders, "OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS"]]
+      : [[...baseHeaders, ...fechaHeaders, ...(incluirObservaciones ? ["Obs."] : [])]];
 
     const data = reporteFiltrado.map((row, i) => {
       const baseRow = [
@@ -379,6 +390,9 @@ export default function ReportesPage() {
         row.naveNombre,
         row.puestoCode,
       ];
+      if (soloObservaciones) {
+        return [...baseRow, row.observaciones || "—"];
+      }
       const datesRow = row.estados.map((e) => ESTADO_LABELS[e] ?? "—");
       const obsRow = incluirObservaciones ? [row.observaciones || "—"] : [];
       return [...baseRow, ...datesRow, ...obsRow];
@@ -396,17 +410,29 @@ export default function ReportesPage() {
         fontStyle: "bold",
         fontSize: 6,
       },
-      columnStyles: {
-        0: { cellWidth: 8 },
-        1: { cellWidth: 15 },
-        2: { cellWidth: 18 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 15 },
-        6: { cellWidth: 15 },
-      },
+      columnStyles: soloObservaciones
+        ? {
+            0: { cellWidth: 8 },
+            1: { cellWidth: 15 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 35 },
+            4: { cellWidth: 25 },
+            5: { cellWidth: 20 },
+            6: { cellWidth: 15 },
+            7: { cellWidth: "auto" },
+          }
+        : {
+            0: { cellWidth: 8 },
+            1: { cellWidth: 15 },
+            2: { cellWidth: 18 },
+            3: { cellWidth: 25 },
+            4: { cellWidth: 20 },
+            5: { cellWidth: 15 },
+            6: { cellWidth: 15 },
+          },
       didDrawCell: (cellData: { section: string; column: { index: number }; cell: { x: number; y: number; width: number; height: number; text: string[] } }) => {
         if (
+          !soloObservaciones &&
           cellData.section === "body" &&
           cellData.column.index >= 7 &&
           cellData.column.index < 7 + fechas.length
@@ -442,16 +468,18 @@ export default function ReportesPage() {
       },
     });
 
-    // 3. Leyenda de Estados justo debajo de la tabla
+    // 3. Leyenda de Estados justo debajo de la tabla (solo si no es solo observaciones)
     const finalY = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7.5);
-    doc.setTextColor(55, 65, 81);
-    doc.text(
-      "P = Presente | A = Ausente | Pm = Permiso | V = Vacante",
-      10,
-      finalY + 5
-    );
+    if (!soloObservaciones) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7.5);
+      doc.setTextColor(55, 65, 81);
+      doc.text(
+        "P = Presente | A = Ausente | Pm = Permiso | V = Vacante",
+        10,
+        finalY + 5
+      );
+    }
 
     // 4. Pie de Página
     const totalPages = (doc as unknown as { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
@@ -461,14 +489,14 @@ export default function ReportesPage() {
       doc.setFontSize(7);
       doc.setTextColor(150, 150, 150);
       doc.text(
-        `Página ${p} de ${totalPages} — Reporte de Asistencia`,
+        `Página ${p} de ${totalPages} — ${soloObservaciones ? "Reporte de Observaciones y Novedades" : "Reporte de Asistencia"}`,
         pageWidth / 2,
         204,
         { align: "center" }
       );
     }
 
-    doc.save(`reporte-asistencia-${fechaInicio}-a-${fechaFin}.pdf`);
+    doc.save(`${soloObservaciones ? "reporte-observaciones-novedades" : "reporte-asistencia"}-${fechaInicio}-a-${fechaFin}.pdf`);
   }
 
   const handleExportPDF = imprimirPDF;
@@ -605,14 +633,34 @@ export default function ReportesPage() {
                       type="checkbox"
                       id="toggle-obs"
                       checked={incluirObservaciones}
+                      disabled={soloObservaciones}
                       onChange={(e) => setIncluirObservaciones(e.target.checked)}
-                      className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4 cursor-pointer"
+                      className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4 cursor-pointer disabled:opacity-40"
                     />
                     <label
                       htmlFor="toggle-obs"
-                      className="text-xs font-semibold text-gray-700 uppercase tracking-wider cursor-pointer select-none"
+                      className={`text-xs font-semibold uppercase tracking-wider cursor-pointer select-none ${soloObservaciones ? "text-gray-400" : "text-gray-700"}`}
                     >
                       Incluir Observaciones
+                    </label>
+                  </div>
+                </div>
+
+                {/* Toggle Solo Observaciones */}
+                <div className="flex flex-col justify-end w-full md:w-auto shrink-0">
+                  <div className="flex items-center gap-2 h-9">
+                    <input
+                      type="checkbox"
+                      id="toggle-solo-obs"
+                      checked={soloObservaciones}
+                      onChange={(e) => setSoloObservaciones(e.target.checked)}
+                      className="rounded border-institucional-whiteSmokeBlack/30 text-institucional-green focus:ring-institucional-green w-4 h-4 cursor-pointer"
+                    />
+                    <label
+                      htmlFor="toggle-solo-obs"
+                      className="text-xs font-semibold text-institucional-green uppercase tracking-wider cursor-pointer select-none"
+                    >
+                      Solo Observaciones
                     </label>
                   </div>
                 </div>
@@ -661,24 +709,32 @@ export default function ReportesPage() {
                     <th className="px-2 py-2.5 text-center font-semibold min-w-[60px]">
                       PUESTO
                     </th>
-                    {fechas.map((f) => (
-                      <th
-                        key={f}
-                        className="px-1 py-2.5 text-center font-semibold min-w-[36px]"
-                      >
-                        {format(new Date(f + "T00:00:00"), "dd")}
-                        <br />
-                        <span className="font-normal opacity-75">
-                          {format(new Date(f + "T00:00:00"), "MMM", {
-                            locale: es,
-                          })}
-                        </span>
+                    {soloObservaciones ? (
+                      <th className="px-3 py-2.5 text-left font-semibold min-w-[320px]">
+                        OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS
                       </th>
-                    ))}
-                    {incluirObservaciones && (
-                      <th className="px-3 py-2.5 text-left font-semibold min-w-[150px]">
-                        Observaciones
-                      </th>
+                    ) : (
+                      <>
+                        {fechas.map((f) => (
+                          <th
+                            key={f}
+                            className="px-1 py-2.5 text-center font-semibold min-w-[36px]"
+                          >
+                            {format(new Date(f + "T00:00:00"), "dd")}
+                            <br />
+                            <span className="font-normal opacity-75">
+                              {format(new Date(f + "T00:00:00"), "MMM", {
+                                locale: es,
+                              })}
+                            </span>
+                          </th>
+                        ))}
+                        {incluirObservaciones && (
+                          <th className="px-3 py-2.5 text-left font-semibold min-w-[150px]">
+                            Observaciones
+                          </th>
+                        )}
+                      </>
                     )}
                   </tr>
                 </thead>
@@ -686,7 +742,7 @@ export default function ReportesPage() {
                   {cargandoReporte ? (
                     <tr>
                       <td
-                        colSpan={7 + fechas.length + (incluirObservaciones ? 1 : 0)}
+                        colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
                         className="px-4 py-12 text-center text-sm text-gray-700"
                       >
                         <div className="flex flex-col items-center justify-center gap-2">
@@ -698,7 +754,7 @@ export default function ReportesPage() {
                   ) : reporteFiltrado.length === 0 ? (
                     <tr>
                       <td
-                        colSpan={7 + fechas.length + (incluirObservaciones ? 1 : 0)}
+                        colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
                         className="px-4 py-12 text-center text-sm text-gray-500"
                       >
                         <div className="flex flex-col items-center justify-center gap-2">
@@ -736,26 +792,33 @@ export default function ReportesPage() {
                         <td className="px-2 py-2 text-center text-sm font-mono font-medium text-base-eerieBlack">
                           {row.puestoCode}
                         </td>
-                        {row.estados.map((estado, j) => {
-                          const config =
-                            ESTADO_COLORES[estado] ?? ESTADO_COLORES["Pendiente"];
-                          return (
-                            <td key={j} className="px-0.5 py-1 text-center">
-                              <span
-                                className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                              >
-                                {ESTADO_LABELS[estado]}
-                              </span>
-                            </td>
-                          );
-                        })}
-                        {/* Tarea 2: Celda limpia, sin texto "100% Asistencia" */}
-                        {incluirObservaciones && (
-                          <td className="px-3 py-2 max-w-[200px]">
-                            <span className="line-clamp-2 text-xs font-semibold text-gray-900">
-                              {row.observaciones || "—"}
-                            </span>
+                        {soloObservaciones ? (
+                          <td className="px-3 py-2 text-xs font-semibold text-gray-900 leading-relaxed">
+                            {row.observaciones || "—"}
                           </td>
+                        ) : (
+                          <>
+                            {row.estados.map((estado, j) => {
+                              const config =
+                                ESTADO_COLORES[estado] ?? ESTADO_COLORES["Presente"];
+                              return (
+                                <td key={j} className="px-0.5 py-1 text-center">
+                                  <span
+                                    className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
+                                  >
+                                    {ESTADO_LABELS[estado]}
+                                  </span>
+                                </td>
+                              );
+                            })}
+                            {incluirObservaciones && (
+                              <td className="px-3 py-2 max-w-[200px]">
+                                <span className="line-clamp-2 text-xs font-semibold text-gray-900">
+                                  {row.observaciones || "—"}
+                                </span>
+                              </td>
+                            )}
+                          </>
                         )}
                       </tr>
                     ))
@@ -765,23 +828,25 @@ export default function ReportesPage() {
             </div>
 
             {/* Leyenda */}
-            <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 px-1">
-              <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
-              {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
-                const config = ESTADO_COLORES[estado];
-                if (!config) return null;
-                return (
-                  <div key={estado} className="flex items-center gap-1.5">
-                    <span
-                      className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                    >
-                      {label}
-                    </span>
-                    <span>{estado}</span>
-                  </div>
-                );
-              })}
-            </div>
+            {!soloObservaciones && (
+              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 px-1">
+                <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
+                {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
+                  const config = ESTADO_COLORES[estado];
+                  if (!config) return null;
+                  return (
+                    <div key={estado} className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
+                      >
+                        {label}
+                      </span>
+                      <span>{estado}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -10,12 +10,10 @@ import {
   ChevronRight,
   Download,
   Loader2,
-  AlertTriangle,
   CheckCircle2,
   Clock,
   RefreshCw,
   Layers,
-  Check,
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -44,7 +42,7 @@ const ITEMS_POR_PAGINA = 10;
 
 // ── Componente de Badge / Globito de Control ─────────────────────────────────
 
-function BadgeControl({ etiqueta, faltantes }: { etiqueta: EtiquetaControlSupervisor; faltantes?: number }) {
+function BadgeControl({ etiqueta }: { etiqueta: EtiquetaControlSupervisor }) {
   switch (etiqueta) {
     case "CON_PERSISTENCIA":
       return (
@@ -74,20 +72,6 @@ function BadgeControl({ etiqueta, faltantes }: { etiqueta: EtiquetaControlSuperv
           En Fecha
         </span>
       );
-    case "COMPLETA":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2.5 py-0.5 text-xs font-semibold text-green-700 shadow-2xs">
-          <Check size={11} className="shrink-0" />
-          Completa
-        </span>
-      );
-    case "INCOMPLETA":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-yellow-300 bg-yellow-50 px-2.5 py-0.5 text-xs font-semibold text-yellow-800 shadow-2xs">
-          <AlertTriangle size={11} className="shrink-0" />
-          {faltantes && faltantes > 0 ? `Faltan ${faltantes} por tomar` : "Incompleta"}
-        </span>
-      );
     default:
       return null;
   }
@@ -112,7 +96,7 @@ export default function ControlSupervisoresPage() {
 
   // Modal de Detalle
   const [sesionSeleccionada, setSesionSeleccionada] = useState<SesionControlSupervisor | null>(null);
-  const [filtroDetalleModal, setFiltroDetalleModal] = useState<"TODOS" | "FALTANTES" | "TOMADOS" | "MODIFICADOS">("TODOS");
+  const [filtroDetalleModal, setFiltroDetalleModal] = useState<"TODOS" | "PRESENTES" | "AUSENTES" | "PERMISOS" | "MODIFICADOS">("TODOS");
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
   const fechaHastaStr = fechaFin ? format(fechaFin, "yyyy-MM-dd") : undefined;
@@ -185,10 +169,12 @@ export default function ControlSupervisoresPage() {
     if (!sesionSeleccionada) return [];
     const list = sesionSeleccionada.detallesComerciantes;
     switch (filtroDetalleModal) {
-      case "FALTANTES":
-        return list.filter((c) => c.estado === "Pendiente");
-      case "TOMADOS":
-        return list.filter((c) => c.estado !== "Pendiente");
+      case "PRESENTES":
+        return list.filter((c) => c.estado === "Presente");
+      case "AUSENTES":
+        return list.filter((c) => c.estado === "Ausente");
+      case "PERMISOS":
+        return list.filter((c) => c.estado === "Permiso");
       case "MODIFICADOS":
         return list.filter((c) => c.metodo === "MODIFICADO_TRAS_PERSISTENCIA");
       default:
@@ -227,7 +213,7 @@ export default function ControlSupervisoresPage() {
     doc.text(periodoStr, doc.internal.pageSize.width / 2, 40, { align: "center" });
 
     const headers = [
-      ["Fecha Lista", "Inicio Toma", "Supervisor", "Nave", "Acción", "Estado / Anotaciones", "Avance"],
+      ["Fecha Lista", "Inicio Toma", "Supervisor", "Nave", "Acción", "Estado / Anotaciones", "Puestos / Asistencia"],
     ];
 
     const data = sesiones.map((s) => {
@@ -237,15 +223,9 @@ export default function ControlSupervisoresPage() {
           if (e === "MODIFICADO_TRAS_PERSISTENCIA") return "Modif. tras persistencia";
           if (e === "CON_RETRASO") return "Con Retraso";
           if (e === "EN_FECHA") return "En Fecha";
-          if (e === "COMPLETA") return "Completa";
-          if (e === "INCOMPLETA") return `Faltan ${s.resumen.faltantes}`;
           return e;
         })
         .join(" • ");
-
-      const porcentaje = Math.round(
-        (s.resumen.tomados / (s.resumen.totalOcupados || 1)) * 100
-      );
 
       return [
         format(new Date(s.fechaJornada + "T00:00:00"), "dd/MM/yyyy"),
@@ -254,7 +234,7 @@ export default function ControlSupervisoresPage() {
         s.naveNombre,
         s.accion,
         anotaciones,
-        `${s.resumen.tomados}/${s.resumen.totalOcupados} (${porcentaje}%)`,
+        `Total: ${s.resumen.totalOcupados} (P: ${s.resumen.presentes}, A: ${s.resumen.ausentes}, Pm: ${s.resumen.permisos})`,
       ];
     });
 
@@ -323,7 +303,6 @@ export default function ControlSupervisoresPage() {
 
     doc.text(`Total Puestos Ocupados: ${sesion.resumen.totalOcupados}`, 115, 46);
     doc.text(`Presentes: ${sesion.resumen.presentes}  |  Ausentes: ${sesion.resumen.ausentes}  |  Permisos: ${sesion.resumen.permisos}`, 115, 51);
-    doc.text(`Faltantes (Sin tomar): ${sesion.resumen.faltantes}`, 115, 56);
 
     let startY = 66;
 
@@ -357,13 +336,11 @@ export default function ControlSupervisoresPage() {
       d.ciu,
       d.cedula,
       d.contribuyente,
-      d.estado === "Pendiente" ? "Sin tomar" : d.estado,
+      d.estado,
       d.metodo === "MODIFICADO_TRAS_PERSISTENCIA"
         ? "Modif. tras persistencia"
         : d.metodo === "PERSISTENCIA"
         ? "Persistencia"
-        : d.metodo === "FALTANTE"
-        ? "Faltante"
         : "Manual",
       d.horaRegistro || "-",
     ]);
@@ -553,17 +530,13 @@ export default function ControlSupervisoresPage() {
                     <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[200px]">
                       Estado / Anotaciones
                     </th>
-                    <th className="px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[110px]">
-                      Avance
+                    <th className="px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[130px]">
+                      Puestos / Asistencia
                     </th>
                   </tr>
                 </thead>
                 <tbody className="block md:table-row-group space-y-3 md:space-y-0">
                   {sesionesPaginadas.map((sesion) => {
-                    const porcentaje = Math.round(
-                      (sesion.resumen.tomados / (sesion.resumen.totalOcupados || 1)) * 100
-                    );
-
                     return (
                       <tr
                         key={sesion.id}
@@ -631,25 +604,24 @@ export default function ControlSupervisoresPage() {
                               <BadgeControl
                                 key={etq}
                                 etiqueta={etq}
-                                faltantes={sesion.resumen.faltantes}
                               />
                             ))}
                           </div>
                         </td>
 
-                        {/* Avance */}
+                        {/* Puestos / Asistencia */}
                         <td className="flex justify-between items-center py-1 md:px-4 md:py-3.5 text-sm md:table-cell text-right">
-                          <span className="font-semibold text-gray-700 md:hidden">Avance:</span>
+                          <span className="font-semibold text-gray-700 md:hidden">Puestos / Asistencia:</span>
                           <div className="text-right">
                             <span className="font-bold text-xs text-base-eerieBlack">
-                              {sesion.resumen.tomados} / {sesion.resumen.totalOcupados}
+                              Total: {sesion.resumen.totalOcupados}
                             </span>
-                            <span className="text-xs text-gray-600 ml-1">({porcentaje}%)</span>
-                            <div className="mt-1 h-1.5 w-20 bg-gray-200 rounded-full overflow-hidden ml-auto">
-                              <div
-                                className="h-full bg-institucional-green rounded-full transition-all"
-                                style={{ width: `${Math.min(porcentaje, 100)}%` }}
-                              />
+                            <div className="text-xs mt-0.5 flex items-center justify-end gap-1.5 font-medium">
+                              <span className="text-green-700 font-semibold">{sesion.resumen.presentes} P</span>
+                              <span>•</span>
+                              <span className="text-red-700 font-semibold">{sesion.resumen.ausentes} A</span>
+                              <span>•</span>
+                              <span className="text-purple-700 font-semibold">{sesion.resumen.permisos} Pm</span>
                             </div>
                           </div>
                         </td>
@@ -841,18 +813,12 @@ export default function ControlSupervisoresPage() {
 
               {/* Cuerpo del Modal con Resumen y Radiografía de Comerciantes */}
               <div className="pt-4 space-y-4">
-                {/* Tarjetas de Resumen Numérico */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                {/* Tarjetas de Resumen */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="rounded-xl border border-gray-200 bg-base-white p-3.5 text-center min-w-0 shadow-2xs">
                     <span className="text-xs text-gray-700 block">Total Puestos</span>
                     <span className="text-lg font-bold text-base-eerieBlack">
                       {sesionSeleccionada.resumen.totalOcupados}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-gray-200 bg-base-white p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-gray-700 block">Tomados</span>
-                    <span className="text-lg font-bold text-institucional-green">
-                      {sesionSeleccionada.resumen.tomados}
                     </span>
                   </div>
                   <div className="rounded-xl border border-green-200 bg-green-50/50 p-3.5 text-center min-w-0 shadow-2xs">
@@ -873,12 +839,6 @@ export default function ControlSupervisoresPage() {
                       {sesionSeleccionada.resumen.permisos}
                     </span>
                   </div>
-                  <div className="rounded-xl border border-yellow-200 bg-yellow-50/50 p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-yellow-800 block">Faltantes</span>
-                    <span className="text-lg font-bold text-yellow-900">
-                      {sesionSeleccionada.resumen.faltantes}
-                    </span>
-                  </div>
                 </div>
 
                 {/* Filtros rápidos / Pestañas de comerciantes */}
@@ -897,27 +857,39 @@ export default function ControlSupervisoresPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFiltroDetalleModal("FALTANTES")}
+                    onClick={() => setFiltroDetalleModal("PRESENTES")}
                     className={[
                       "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "FALTANTES"
-                        ? "bg-yellow-500 text-base-white"
-                        : "text-yellow-800 hover:bg-yellow-50",
+                      filtroDetalleModal === "PRESENTES"
+                        ? "bg-green-700 text-base-white"
+                        : "text-green-800 hover:bg-green-50",
                     ].join(" ")}
                   >
-                    Faltantes por tomar ({sesionSeleccionada.resumen.faltantes})
+                    Presentes ({sesionSeleccionada.resumen.presentes})
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFiltroDetalleModal("TOMADOS")}
+                    onClick={() => setFiltroDetalleModal("AUSENTES")}
                     className={[
                       "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "TOMADOS"
-                        ? "bg-institucional-green text-base-white"
-                        : "text-gray-700 hover:bg-gray-100",
+                      filtroDetalleModal === "AUSENTES"
+                        ? "bg-red-700 text-base-white"
+                        : "text-red-800 hover:bg-red-50",
                     ].join(" ")}
                   >
-                    Tomados ({sesionSeleccionada.resumen.tomados})
+                    Ausentes ({sesionSeleccionada.resumen.ausentes})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFiltroDetalleModal("PERMISOS")}
+                    className={[
+                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
+                      filtroDetalleModal === "PERMISOS"
+                        ? "bg-purple-700 text-base-white"
+                        : "text-purple-800 hover:bg-purple-50",
+                    ].join(" ")}
+                  >
+                    Permisos ({sesionSeleccionada.resumen.permisos})
                   </button>
                   <button
                     type="button"
@@ -974,12 +946,6 @@ export default function ControlSupervisoresPage() {
                               Permiso
                             </span>
                           );
-                        } else {
-                          estadoBadge = (
-                            <span className="rounded-full bg-yellow-100 text-yellow-900 border border-yellow-300 px-2 py-0.5 font-bold">
-                              Sin tomar / Pendiente
-                            </span>
-                          );
                         }
 
                         let metodoBadge = null;
@@ -992,10 +958,6 @@ export default function ControlSupervisoresPage() {
                             <span className="text-amber-800 font-bold">
                               Modificado tras persistencia
                             </span>
-                          );
-                        } else if (com.metodo === "FALTANTE") {
-                          metodoBadge = (
-                            <span className="text-yellow-800 font-medium">Faltante</span>
                           );
                         } else {
                           metodoBadge = (

@@ -75,7 +75,6 @@ function generarDetallesComerciantes(
   let presentes = 0;
   let ausentes = 0;
   let permisos = 0;
-  let faltantes = 0;
 
   for (let i = 1; i <= totalPuestos; i++) {
     const puestoStr = `P-${naveLetra}${String(i).padStart(3, "0")}`;
@@ -91,27 +90,20 @@ function generarDetallesComerciantes(
       // Modificados manualmente tras persistencia
       metodo = "MODIFICADO_TRAS_PERSISTENCIA";
       estado = i % 2 === 0 ? "Presente" : "Ausente";
-    } else if (r < 0.72) {
+    } else if (r < 0.78) {
       estado = "Presente";
-    } else if (r < 0.88) {
+    } else if (r < 0.92) {
       estado = "Ausente";
-    } else if (r < 0.95) {
-      estado = "Permiso";
     } else {
-      estado = "Pendiente";
-      metodo = "FALTANTE";
+      estado = "Permiso";
     }
 
     if (estado === "Presente") presentes++;
     else if (estado === "Ausente") ausentes++;
     else if (estado === "Permiso") permisos++;
-    else faltantes++;
 
     const horaBase = new Date(fechaIso);
-    const horaRegistro =
-      estado !== "Pendiente"
-        ? format(addMinutes(horaBase, Math.floor(rand() * 45)), "hh:mm a")
-        : undefined;
+    const horaRegistro = format(addMinutes(horaBase, Math.floor(rand() * 45)), "hh:mm a");
 
     detalles.push({
       comercianteId: `com-${naveLetra.toLowerCase()}-${String(i).padStart(3, "0")}`,
@@ -132,7 +124,7 @@ function generarDetallesComerciantes(
     presentes,
     ausentes,
     permisos,
-    faltantes,
+    faltantes: 0,
   };
 
   return { detalles, resumen };
@@ -152,8 +144,6 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
 
   const { detalles: detE1, resumen: resE1 } = generarDetallesComerciantes("A", 40, "MANUAL", tsInicioE1.toISOString());
   const etiquetasE1: EtiquetaControlSupervisor[] = ["EN_FECHA"];
-  if (resE1.faltantes === 0) etiquetasE1.push("COMPLETA");
-  else etiquetasE1.push("INCOMPLETA");
 
   sesiones.push({
     id: "sesion-ctrl-001",
@@ -179,9 +169,6 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
   tsInicioE2.setHours(8, 30, 0, 0);
 
   const { detalles: detE2, resumen: resE2 } = generarDetallesComerciantes("A", 40, "PERSISTENCIA", tsInicioE2.toISOString());
-  // En persistencia pura todos quedan cubiertos
-  resE2.faltantes = 0;
-  resE2.tomados = resE2.totalOcupados;
 
   sesiones.push({
     id: "sesion-ctrl-002",
@@ -197,9 +184,9 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
     comentarioPersistencia: "Feria ciudadana / mantenimiento en nave, se mantiene asistencia del lunes",
     modificadoTrasPersistencia: false,
     tieneRetraso: false,
-    etiquetas: ["CON_PERSISTENCIA", "COMPLETA"],
+    etiquetas: ["CON_PERSISTENCIA"],
     resumen: resE2,
-    detallesComerciantes: detE2.map((d) => ({ ...d, metodo: "PERSISTENCIA", estado: d.estado === "Pendiente" ? "Presente" : d.estado })),
+    detallesComerciantes: detE2.map((d) => ({ ...d, metodo: "PERSISTENCIA" })),
   });
 
   // Escenario 3: Persistencia + Modificación manual posterior (Hace 1 día)
@@ -211,8 +198,6 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
   tsModifE3.setHours(14, 45, 0, 0);
 
   const { detalles: detE3, resumen: resE3 } = generarDetallesComerciantes("B", 35, "PERSISTENCIA", tsInicioE3.toISOString(), true);
-  resE3.faltantes = 0;
-  resE3.tomados = resE3.totalOcupados;
 
   sesiones.push({
     id: "sesion-ctrl-003",
@@ -229,12 +214,9 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
     comentarioPersistencia: "Arrastre operativo matutino. Reajuste de 3 comerciantes por ingreso vespertino.",
     modificadoTrasPersistencia: true,
     tieneRetraso: false,
-    etiquetas: ["CON_PERSISTENCIA", "MODIFICADO_TRAS_PERSISTENCIA", "COMPLETA"],
+    etiquetas: ["CON_PERSISTENCIA", "MODIFICADO_TRAS_PERSISTENCIA"],
     resumen: resE3,
-    detallesComerciantes: detE3.map((d) => ({
-      ...d,
-      estado: d.estado === "Pendiente" ? "Presente" : d.estado,
-    })),
+    detallesComerciantes: detE3,
   });
 
   // Escenario 4: Toma de Lista Manual con Retraso (Jornada de hace 5 días, registrada ayer)
@@ -258,7 +240,7 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
     modificadoTrasPersistencia: false,
     tieneRetraso: true,
     detalleRetraso: `Lista de jornada ${fechaE4JornadaStr} registrada manualmente 4 días después`,
-    etiquetas: ["CON_RETRASO", resE4.faltantes === 0 ? "COMPLETA" : "INCOMPLETA"],
+    etiquetas: ["CON_RETRASO"],
     resumen: resE4,
     detallesComerciantes: detE4,
   });
@@ -282,7 +264,7 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
     esPersistencia: false,
     modificadoTrasPersistencia: false,
     tieneRetraso: false,
-    etiquetas: ["EN_FECHA", resE5.faltantes === 0 ? "COMPLETA" : "INCOMPLETA"],
+    etiquetas: ["EN_FECHA"],
     resumen: resE5,
     detallesComerciantes: detE5,
   });
@@ -306,7 +288,7 @@ function generarSesionesIniciales(): SesionControlSupervisor[] {
     esPersistencia: false,
     modificadoTrasPersistencia: false,
     tieneRetraso: false,
-    etiquetas: ["EN_FECHA", resE6.faltantes === 0 ? "COMPLETA" : "INCOMPLETA"],
+    etiquetas: ["EN_FECHA"],
     resumen: resE6,
     detallesComerciantes: detE6,
   });
@@ -517,11 +499,11 @@ export function sincronizarControlAsistenciaManual(params: {
       etiquetas,
       resumen: {
         totalOcupados: 1,
-        tomados: params.nuevoEstado !== "Pendiente" ? 1 : 0,
+        tomados: 1,
         presentes: params.nuevoEstado === "Presente" ? 1 : 0,
         ausentes: params.nuevoEstado === "Ausente" ? 1 : 0,
         permisos: params.nuevoEstado === "Permiso" ? 1 : 0,
-        faltantes: params.nuevoEstado === "Pendiente" ? 1 : 0,
+        faltantes: 0,
       },
       detallesComerciantes: [
         {
@@ -584,13 +566,11 @@ export function sincronizarControlAsistenciaManual(params: {
   let pres = 0;
   let aus = 0;
   let perm = 0;
-  let falt = 0;
 
   for (const det of sesion.detallesComerciantes) {
     if (det.estado === "Presente") pres++;
     else if (det.estado === "Ausente") aus++;
     else if (det.estado === "Permiso") perm++;
-    else falt++;
   }
 
   sesion.resumen = {
@@ -599,18 +579,8 @@ export function sincronizarControlAsistenciaManual(params: {
     presentes: pres,
     ausentes: aus,
     permisos: perm,
-    faltantes: falt,
+    faltantes: 0,
   };
-
-  // Actualizar etiquetas de completitud
-  sesion.etiquetas = sesion.etiquetas.filter(
-    (e) => e !== "COMPLETA" && e !== "INCOMPLETA"
-  );
-  if (falt === 0) {
-    sesion.etiquetas.push("COMPLETA");
-  } else {
-    sesion.etiquetas.push("INCOMPLETA");
-  }
 }
 
 /**
@@ -665,7 +635,6 @@ export function sincronizarControlPersistencia(params: {
     let presentes = 0;
     let ausentes = 0;
     let permisos = 0;
-    let faltantes = 0;
 
     const sesionExistente = idx >= 0 ? sesionesControlMock[idx] : null;
 
@@ -673,7 +642,6 @@ export function sincronizarControlPersistencia(params: {
       if (c.estado === "Presente") presentes++;
       else if (c.estado === "Ausente") ausentes++;
       else if (c.estado === "Permiso") permisos++;
-      else faltantes++;
 
       // Si en la sesión existente ya existía registro con hora previa, preservarla si es MANUAL
       const detallePrevio = sesionExistente?.detallesComerciantes.find(
@@ -699,8 +667,6 @@ export function sincronizarControlPersistencia(params: {
 
     const tomados = presentes + ausentes + permisos;
     const etiquetas: EtiquetaControlSupervisor[] = ["CON_PERSISTENCIA"];
-    if (faltantes === 0) etiquetas.push("COMPLETA");
-    else etiquetas.push("INCOMPLETA");
 
     const nuevaSesion: SesionControlSupervisor = {
       id: sesionExistente?.id || `sesion-ctrl-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
@@ -725,7 +691,7 @@ export function sincronizarControlPersistencia(params: {
         presentes,
         ausentes,
         permisos,
-        faltantes,
+        faltantes: 0,
       },
       detallesComerciantes,
     };

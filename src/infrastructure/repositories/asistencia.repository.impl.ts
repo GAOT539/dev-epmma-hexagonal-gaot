@@ -6,6 +6,7 @@ import type {
   RegistroAsistencia,
   ObservacionDetalle,
   PermisoDetalle,
+  TipoObservacion,
 } from "@/domain/models/asistencia.model";
 import {
   getAsistenciaPorFecha,
@@ -94,10 +95,12 @@ export class AsistenciaMockRepository implements IAsistenciaRepository {
     comercianteId: string,
     fecha: string,
     texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string,
     fechaHora?: string
   ): Promise<ObservacionDetalle> {
     return Promise.resolve(
-      agregarObservacionMock(comercianteId, fecha, texto, fechaHora)
+      agregarObservacionMock(comercianteId, fecha, texto, tipo, numeroDocumento, fechaHora)
     );
   }
 

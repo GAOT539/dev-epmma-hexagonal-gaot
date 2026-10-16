@@ -39,7 +39,15 @@ function UserFormDialog({
   onSave,
 }: {
   open: boolean;
-  user: { id: string; nombres: string; apellidos: string; cedula: string; rol: Rol; navesAsignadas?: string[] } | null;
+  user: {
+    id: string;
+    nombres: string;
+    apellidos: string;
+    cedula: string;
+    rol: Rol;
+    correo?: string;
+    navesAsignadas?: string[]
+  } | null;
   naves: Nave[];
   onClose: () => void;
   onSave: () => void;
@@ -49,6 +57,7 @@ function UserFormDialog({
   const [nombres, setNombres] = useState(user?.nombres ?? "");
   const [apellidos, setApellidos] = useState(user?.apellidos ?? "");
   const [cedula, setCedula] = useState(user?.cedula ?? "");
+  const [correo, setCorreo] = useState(user?.correo ?? "");
   const [rol, setRol] = useState<Rol>(user?.rol ?? "SUPERVISOR");
   const [navesAsignadas, setNavesAsignadas] = useState<string[]>(
     user?.navesAsignadas ?? []
@@ -72,6 +81,12 @@ function UserFormDialog({
       return;
     }
 
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!correo.trim() || !emailRegex.test(correo.trim())) {
+      setError("Debe ingresar un correo electrónico válido (ej. usuario@ep-ema.gob.ec).");
+      return;
+    }
+
     setGuardando(true);
     try {
       if (isEdit && user) {
@@ -79,6 +94,7 @@ function UserFormDialog({
           nombres: nombres.trim(),
           apellidos: apellidos.trim(),
           cedula: cedula.trim(),
+          correo: correo.trim(),
           rol,
           navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
         });
@@ -90,6 +106,7 @@ function UserFormDialog({
           nombres: nombres.trim(),
           apellidos: apellidos.trim(),
           cedula: cedula.trim(),
+          correo: correo.trim(),
           rol,
           navesAsignadas: rol === "SUPERVISOR" ? navesAsignadas : undefined,
         });
@@ -161,7 +178,23 @@ function UserFormDialog({
             />
           </div>
 
-          <div className="space-y-1.5">
+          <div className="space-y-1.5 md:col-span-2">
+            <Label htmlFor="user-correo">
+              Correo Electrónico <span className="text-red-500">*</span>
+            </Label>
+            <Input
+              id="user-correo"
+              type="email"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              placeholder="usuario@ep-ema.gob.ec"
+            />
+            <p className="text-[11px] text-gray-500">
+              A este correo se enviará la contraseña temporal al restablecer credenciales.
+            </p>
+          </div>
+
+          <div className="space-y-1.5 md:col-span-2">
             <Label htmlFor="user-rol">Rol</Label>
             <select
               id="user-rol"
@@ -259,6 +292,7 @@ export default function ConfiguracionUsuariosPage() {
     apellidos: string;
     cedula: string;
     rol: Rol;
+    correo?: string;
     navesAsignadas?: string[];
   } | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
@@ -388,6 +422,9 @@ export default function ConfiguracionUsuariosPage() {
                       Cédula
                     </th>
                     <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                      Correo
+                    </th>
+                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Rol
                     </th>
                     <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
@@ -401,7 +438,7 @@ export default function ConfiguracionUsuariosPage() {
                 <tbody>
                   {usuariosGestionables.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-8 text-center text-gray-500">
+                      <td colSpan={6} className="p-8 text-center text-gray-500">
                         No se encontraron usuarios activos para gestionar.
                       </td>
                     </tr>
@@ -416,6 +453,9 @@ export default function ConfiguracionUsuariosPage() {
                         </td>
                         <td className="p-3 lg:p-4 font-normal text-gray-900 font-mono">
                           {u.cedula}
+                        </td>
+                        <td className="p-3 lg:p-4 font-normal text-gray-700 text-xs lg:text-sm font-mono">
+                          {u.correo || "—"}
                         </td>
                         <td className="p-3 lg:p-4">
                           <span className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium bg-institucional-green/10 text-institucional-green">
@@ -447,6 +487,7 @@ export default function ConfiguracionUsuariosPage() {
                                   nombres: u.nombres,
                                   apellidos: u.apellidos,
                                   cedula: u.cedula,
+                                  correo: u.correo,
                                   rol: u.rol,
                                   navesAsignadas: u.navesAsignadas,
                                 });

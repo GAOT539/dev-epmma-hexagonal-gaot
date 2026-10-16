@@ -5,6 +5,7 @@ import type {
   RegistroAsistencia,
   ObservacionDetalle,
   PermisoDetalle,
+  TipoObservacion,
 } from "@/domain/models/asistencia.model";
 
 export interface IAsistenciaRepository {
@@ -43,6 +44,8 @@ export interface IAsistenciaRepository {
     comercianteId: string,
     fecha: string,
     texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string,
     fechaHora?: string
   ): Promise<ObservacionDetalle>;
   eliminarObservacion(

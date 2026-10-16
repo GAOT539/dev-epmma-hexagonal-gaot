@@ -6,6 +6,7 @@ import type {
   RegistroAsistencia,
   ObservacionDetalle,
   PermisoDetalle,
+  TipoObservacion,
 } from "@/domain/models/asistencia.model";
 import { asistenciaRepository } from "@/infrastructure/repositories/asistencia.repository.impl";
 
@@ -82,12 +83,16 @@ export class AsistenciaService {
     comercianteId: string,
     fecha: string,
     texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string,
     fechaHora?: string
   ): Promise<ObservacionDetalle> {
     return this.repository.agregarObservacion(
       comercianteId,
       fecha,
       texto,
+      tipo,
+      numeroDocumento,
       fechaHora
     );
   }

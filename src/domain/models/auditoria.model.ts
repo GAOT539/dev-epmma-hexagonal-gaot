@@ -1,4 +1,4 @@
-// ── Dominio: Modelo de Logs, Auditoría y Control de Supervisores ─────────────
+// ── Dominio: Modelo de Control de Supervisores y Trazabilidad Operativa ───────
 
 import type { EstadoAsistencia } from "./asistencia.model";
 
@@ -19,9 +19,7 @@ export type EtiquetaControlSupervisor =
   | "EN_FECHA"
   | "CON_PERSISTENCIA"
   | "MODIFICADO_TRAS_PERSISTENCIA"
-  | "CON_RETRASO"
-  | "COMPLETA"
-  | "INCOMPLETA";
+  | "CON_RETRASO";
 
 export interface DetalleComercianteControl {
   comercianteId: string;
@@ -31,7 +29,7 @@ export interface DetalleComercianteControl {
   puesto: string;
   estado: EstadoAsistencia;
   horaRegistro?: string;
-  metodo: "MANUAL" | "PERSISTENCIA" | "MODIFICADO_TRAS_PERSISTENCIA" | "FALTANTE";
+  metodo: "MANUAL" | "PERSISTENCIA" | "MODIFICADO_TRAS_PERSISTENCIA";
 }
 
 export interface ResumenSesionControl {
@@ -40,7 +38,7 @@ export interface ResumenSesionControl {
   presentes: number;
   ausentes: number;
   permisos: number;
-  faltantes: number;
+  faltantes?: number;
 }
 
 export interface SesionControlSupervisor {

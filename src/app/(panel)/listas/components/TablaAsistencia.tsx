@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Calendar as CalendarIcon } from "lucide-react";
@@ -31,9 +32,9 @@ import type {
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
-import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
+import type { RegistroAsistencia, TipoObservacion } from "@/domain/models/asistencia.model";
 import { asistenciaService } from "@/application/services/asistencia.service";
-import { ESTADO_CONFIG } from "./ModalNovedad";
+import { ESTADO_CONFIG, BadgeTipoObservacion } from "./ModalNovedad";
 
 // ── Botón de acción de estado ────────────────────────────────────────────────
 
@@ -95,7 +96,12 @@ export function PuestoCard({
   registro?: RegistroAsistencia | null;
   onEstadoChange: (estado: EstadoAsistencia) => void;
   onDoubleClick: () => void;
-  onObservacionGuardada: (comercianteId: string, texto: string) => Promise<void> | void;
+  onObservacionGuardada: (
+    comercianteId: string,
+    texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string
+  ) => Promise<void> | void;
   onPermisoAsignado: (
     comercianteId: string,
     inicio: string,
@@ -110,6 +116,8 @@ export function PuestoCard({
 
   const [panelActivo, setPanelActivo] = useState<"observacion" | "permiso" | null>(null);
   const [obsTexto, setObsTexto] = useState("");
+  const [tipoObservacion, setTipoObservacion] = useState<TipoObservacion>("ObservacionesGeneral");
+  const [numeroDocumentoObs, setNumeroDocumentoObs] = useState("");
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
   const [fechaFin, setFechaFin] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
   const [openInicio, setOpenInicio] = useState(false);
@@ -157,9 +165,19 @@ export function PuestoCard({
   async function handleGuardarObservacion(e: React.MouseEvent) {
     e.stopPropagation();
     if (!comerciante || !obsTexto.trim()) return;
+    const reqDoc = tipoObservacion === "Citaciones" || tipoObservacion === "Notificación";
+    if (reqDoc && !numeroDocumentoObs.trim()) return;
+
     // Requerimiento 1: Aditivo en el historial, NO muta el estado principal
-    await onObservacionGuardada(comerciante.idInterno, obsTexto.trim());
+    await onObservacionGuardada(
+      comerciante.idInterno,
+      obsTexto.trim(),
+      tipoObservacion,
+      reqDoc ? numeroDocumentoObs.trim() : undefined
+    );
     setObsTexto("");
+    setNumeroDocumentoObs("");
+    setTipoObservacion("ObservacionesGeneral");
     if (onActualizarAsistencia) {
       await onActualizarAsistencia();
     }
@@ -353,11 +371,14 @@ export function PuestoCard({
                     key={obs.id}
                     className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
                   >
-                    <div className="min-w-0 flex-1 leading-snug">
-                      <span className="font-semibold text-blue-700 mr-1.5">
-                        {obs.fechaHora}
-                      </span>
-                      <span className="text-gray-800 break-words">- {obs.texto}</span>
+                    <div className="min-w-0 flex-1 leading-snug space-y-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-blue-700 text-xs mr-1">
+                          {obs.fechaHora}
+                        </span>
+                        <BadgeTipoObservacion tipo={obs.tipo} numeroDocumento={obs.numeroDocumento} />
+                      </div>
+                      <p className="text-gray-800 break-words text-xs">{obs.texto}</p>
                     </div>
                     {!soloLectura && (
                       <button
@@ -385,6 +406,33 @@ export function PuestoCard({
 
           {!soloLectura ? (
             <>
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-gray-700">Tipo de Observación</label>
+                <select
+                  value={tipoObservacion}
+                  onChange={(e) => setTipoObservacion(e.target.value as TipoObservacion)}
+                  className="w-full h-7 rounded-md border border-gray-300 bg-base-white px-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="ObservacionesGeneral">Observación General</option>
+                  <option value="Citaciones">Citación</option>
+                  <option value="Notificación">Notificación</option>
+                </select>
+              </div>
+
+              {(tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") && (
+                <div className="space-y-1">
+                  <label className="text-[11px] font-semibold text-gray-700">
+                    Número de Referencia / Documento <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    placeholder="Ingrese Nro. de referencia o documento..."
+                    value={numeroDocumentoObs}
+                    onChange={(e) => setNumeroDocumentoObs(e.target.value)}
+                    className="h-7 text-xs border-blue-200 focus-visible:ring-blue-500 bg-base-white"
+                  />
+                </div>
+              )}
+
               <Textarea
                 placeholder="Describa la observación o situación observada..."
                 value={obsTexto}
@@ -405,7 +453,11 @@ export function PuestoCard({
                 <Button
                   type="button"
                   size="sm"
-                  disabled={!obsTexto.trim()}
+                  disabled={
+                    !obsTexto.trim() ||
+                    ((tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") &&
+                      !numeroDocumentoObs.trim())
+                  }
                   className="h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white font-semibold"
                   onClick={handleGuardarObservacion}
                 >
@@ -805,7 +857,6 @@ export function TreemapView({
               Presente: "bg-green-700 text-white",
               Ausente: "bg-red-700 text-white",
               Permiso: "bg-purple-700 text-white",
-              Pendiente: "bg-slate-600 text-white",
               Vacante: "bg-gray-700 text-white",
             };
 
@@ -865,14 +916,13 @@ export function TreemapView({
       {/* Leyenda */}
       <div className="flex flex-wrap gap-3 mt-4 px-1">
         {(
-          ["Presente", "Ausente", "Permiso", "Pendiente", "Vacante"] as const
+          ["Presente", "Ausente", "Permiso", "Vacante"] as const
         ).map((key) => {
           const config = ESTADO_CONFIG[key];
           const bgMap: Record<string, string> = {
             Presente: "bg-green-700",
             Ausente: "bg-red-700",
             Permiso: "bg-purple-700",
-            Pendiente: "bg-slate-600",
             Vacante: "bg-gray-700",
           };
           return (

@@ -1,4 +1,4 @@
-// ── Puerto del Dominio: IAuditoriaRepository ─────────────────────────────────
+// ── Puerto del Dominio: IAuditoriaRepository (Control de Supervisores) ─────────
 import type { LogAuditoria, SesionControlSupervisor } from "@/domain/models/auditoria.model";
 
 export interface FiltrosAuditoria {

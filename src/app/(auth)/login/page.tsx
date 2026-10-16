@@ -2,11 +2,18 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Eye, EyeOff, Lock, Check, X } from "lucide-react";
+import { Eye, EyeOff, Lock, Check, X, Key, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useAuth, validatePassword, MENU_POR_ROL } from "@/application/services/auth.service";
+import {
+  useAuth,
+  validatePassword,
+  MENU_POR_ROL,
+  solicitarRestablecimientoPassword,
+} from "@/application/services/auth.service";
 import type { Usuario } from "@/domain/models/comerciante.model";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import {
   Dialog,
@@ -182,6 +189,151 @@ function PasswordChangeModal({
   );
 }
 
+// ── Modal de Restablecer Contraseña (Preparado para Resend) ─────────────────
+
+function RestablecerPasswordModal({
+  open,
+  initialIdentificador,
+  onClose,
+}: {
+  open: boolean;
+  initialIdentificador: string;
+  onClose: () => void;
+}) {
+  const [identificador, setIdentificador] = useState(initialIdentificador);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enviado, setEnviado] = useState<{ correo: string } | null>(null);
+  const [error, setError] = useState("");
+
+  async function handleEnviar(e: React.FormEvent) {
+    e.preventDefault();
+    if (!identificador.trim()) {
+      setError("Por favor ingrese su usuario, cédula o correo electrónico.");
+      return;
+    }
+    setError("");
+    setIsSubmitting(true);
+    try {
+      const res = await solicitarRestablecimientoPassword(identificador.trim());
+      if (res.success && res.correoEnviado) {
+        setEnviado({ correo: res.correoEnviado });
+        toast.success("Correo enviado exitosamente", {
+          description: `Se han enviado las instrucciones y su contraseña temporal a ${res.correoEnviado}.`,
+        });
+      } else {
+        setError(res.error || "No se encontró un usuario con los datos ingresados.");
+      }
+    } catch {
+      setError("Ocurrió un error al procesar la solicitud.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} disablePointerDismissal={true} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-2xl bg-base-white border-0 shadow-2xl">
+        <div className="bg-institucional-green px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white">
+              <Key size={20} />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-bold text-base-white">
+                Restablecer Contraseña
+              </DialogTitle>
+              <DialogDescription className="text-xs text-base-white/80 mt-0.5">
+                Recuperación de credenciales por correo registrado
+              </DialogDescription>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-base-white/80 hover:text-base-white hover:bg-base-white/20 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {enviado ? (
+          <div className="p-6 text-center space-y-4">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700">
+              <Check size={28} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-base-eerieBlack">
+                ¡Correo enviado exitosamente!
+              </h3>
+              <p className="text-xs text-gray-600 leading-relaxed max-w-sm mx-auto">
+                Se ha generado una contraseña temporal de acceso y fue enviada a:{" "}
+                <strong className="text-institucional-green font-semibold">{enviado.correo}</strong>.
+              </p>
+              <p className="text-[11px] text-gray-500 pt-2">
+                Revise su bandeja de entrada (y la carpeta de spam). Al ingresar con su contraseña temporal se le solicitará definir una nueva contraseña de su preferencia.
+              </p>
+            </div>
+            <div className="pt-2">
+              <Button
+                type="button"
+                onClick={onClose}
+                className="w-full bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
+              >
+                Volver al Inicio de Sesión
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleEnviar} className="p-6 space-y-4">
+            <div className="space-y-2">
+              <label htmlFor="reset-identificador" className="text-xs font-semibold text-gray-700">
+                Usuario, Cédula o Correo Electrónico
+              </label>
+              <Input
+                id="reset-identificador"
+                type="text"
+                value={identificador}
+                onChange={(e) => setIdentificador(e.target.value)}
+                placeholder="Ej. admin, 1801234567 o usuario@ep-ema.gob.ec"
+                className="text-xs"
+                autoFocus
+              />
+            </div>
+
+            <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3.5 text-xs text-blue-900 leading-relaxed">
+              ¿Está de acuerdo con restablecer su contraseña? Se generará una contraseña temporal y será enviada a su correo electrónico registrado.
+            </div>
+
+            {error && (
+              <p className="text-xs text-base-red font-medium">{error}</p>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting || !identificador.trim()}
+                className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 size={14} className="mr-1.5 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  "Sí, enviar contraseña temporal"
+                )}
+              </Button>
+            </div>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ── Página de Login ──────────────────────────────────────────────────────────
 
 export default function LoginPage() {
@@ -192,6 +344,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
   const [usuarioAutenticado, setUsuarioAutenticado] = useState<Usuario | null>(null);
 
   function handleLogin(e: React.FormEvent<HTMLFormElement>) {
@@ -337,10 +490,21 @@ export default function LoginPage() {
               id="login-submit"
               type="submit"
               disabled={isLoading}
-              className="w-full h-12 mt-1 bg-institucional-green hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-base-white text-lg font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-institucional-green/40"
+              className="w-full h-12 mt-1 bg-institucional-green hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 disabled:opacity-60 disabled:cursor-not-allowed transition-colors text-base-white text-lg font-semibold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-institucional-green/40 cursor-pointer"
             >
               {isLoading ? "Ingresando..." : "Ingresar"}
             </button>
+
+            {/* Enlace ¿Olvidó su contraseña? */}
+            <div className="text-center pt-2">
+              <button
+                type="button"
+                onClick={() => setResetModalOpen(true)}
+                className="text-xs font-semibold text-institucional-green hover:underline cursor-pointer transition-colors"
+              >
+                ¿Olvidó su contraseña? Restablecer contraseña
+              </button>
+            </div>
           </form>
 
           {/* Footer */}
@@ -354,6 +518,15 @@ export default function LoginPage() {
       {/* Modal de cambio de contraseña obligatorio */}
       {showPasswordChange && (
         <PasswordChangeModal onSuccess={handlePasswordChanged} />
+      )}
+
+      {/* Modal de restablecimiento de contraseña */}
+      {resetModalOpen && (
+        <RestablecerPasswordModal
+          open={resetModalOpen}
+          initialIdentificador={usuario}
+          onClose={() => setResetModalOpen(false)}
+        />
       )}
     </main>
   );

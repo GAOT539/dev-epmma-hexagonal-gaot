@@ -7,6 +7,7 @@ export interface Usuario {
   cedula: string;
   nombres: string;
   apellidos: string;
+  correo?: string;
   rol: Rol;
   mustChangePassword: boolean;
   debeCambiarPassword?: boolean;

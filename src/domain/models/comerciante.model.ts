@@ -77,6 +77,7 @@ export type {
   RegistroAsistencia,
   ConfiguracionSupervisor,
   ObservacionDetalle,
+  TipoObservacion,
   PermisoDetalle,
 } from "./asistencia.model";
 export type { LogAuditoria, SesionControlSupervisor, DetalleComercianteControl, EtiquetaControlSupervisor, ResumenSesionControl } from "./auditoria.model";

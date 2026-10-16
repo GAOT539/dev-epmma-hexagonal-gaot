@@ -11,7 +11,7 @@ import type {
   Puesto,
   Comerciante,
 } from "@/domain/models/comerciante.model";
-import type { RegistroAsistencia } from "@/domain/models/asistencia.model";
+import type { RegistroAsistencia, TipoObservacion } from "@/domain/models/asistencia.model";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -88,6 +88,9 @@ export default function ListasPage() {
 
   const { user } = useAuth();
   const esModoConsultaLista = user?.rol === "JEFE_OPERATIVO" || user?.rol === "DIRECTOR";
+  const esFechaPasada = !isToday(selectedDate);
+  const esSoloLectura = esModoConsultaLista || esFechaPasada;
+
   const [modalPersistenciaOpen, setModalPersistenciaOpen] = useState(false);
   const [comentarioPersistencia, setComentarioPersistencia] = useState("");
   const [guardandoPersistencia, setGuardandoPersistencia] = useState(false);
@@ -211,7 +214,7 @@ export default function ListasPage() {
             if (overrides[overrideKey]) {
               estado = overrides[overrideKey];
             } else {
-              estado = registro?.estado ?? "Pendiente";
+              estado = registro?.estado ?? "Presente";
             }
           }
           return { puesto, comerciante, estado, registro };
@@ -346,10 +349,21 @@ export default function ListasPage() {
     }
   }
 
-  async function handleObservacionSaveDirecto(comercianteId: string, texto: string) {
+  async function handleObservacionSaveDirecto(
+    comercianteId: string,
+    texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string
+  ) {
     try {
       // Requerimiento 1: "Observación" es un metadato aditivo (NO muta el estado principal)
-      await asistenciaService.agregarObservacion(comercianteId, fechaStr, texto);
+      await asistenciaService.agregarObservacion(
+        comercianteId,
+        fechaStr,
+        texto,
+        tipo,
+        numeroDocumento
+      );
       await recargarAsistencias();
       toast.success("Observación registrada exitosamente", {
         description: "Se ha agregado al historial del comerciante.",
@@ -365,15 +379,20 @@ export default function ListasPage() {
     setModalData(null);
   }
 
-  function handleObservacionSave(texto: string) {
+  function handleObservacionSave(texto: string, tipo?: TipoObservacion, numeroDocumento?: string) {
     if (!obsCommerciante) return;
-    handleObservacionSaveDirecto(obsCommerciante.idInterno, texto);
+    handleObservacionSaveDirecto(obsCommerciante.idInterno, texto, tipo, numeroDocumento);
     setObsDialogOpen(false);
     setObsCommerciante(null);
   }
 
-  function handleNovedadDesdeModal(comercianteId: string, texto: string) {
-    handleObservacionSaveDirecto(comercianteId, texto);
+  function handleNovedadDesdeModal(
+    comercianteId: string,
+    texto: string,
+    tipo?: TipoObservacion,
+    numeroDocumento?: string
+  ) {
+    handleObservacionSaveDirecto(comercianteId, texto, tipo, numeroDocumento);
   }
 
   return (
@@ -481,7 +500,7 @@ export default function ListasPage() {
             </div>
 
             {/* Botón Registrar con Persistencia */}
-            {!esModoConsultaLista && (
+            {!esSoloLectura && (
               <Button
                 type="button"
                 variant="outline"
@@ -568,6 +587,16 @@ export default function ListasPage() {
               </div>
             </div>
 
+            {/* Aviso informativo cuando es fecha pasada */}
+            {esFechaPasada && (
+              <div className="mb-3 flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50/80 px-4 py-3 text-xs text-blue-900 shadow-2xs">
+                <AlertTriangle size={16} className="text-blue-600 shrink-0" />
+                <span>
+                  <strong>Vista de consulta histórica:</strong> Solo se permite registrar o modificar asistencias en la fecha de hoy.
+                </span>
+              </div>
+            )}
+
             {viewMode === "lista" ? (
               <div className="flex flex-col gap-3">
                 <PuestosList
@@ -578,7 +607,7 @@ export default function ListasPage() {
                   onObservacionGuardada={handleObservacionSaveDirecto}
                   onPermisoAsignado={handleAsignarPermisoDirecto}
                   onActualizarAsistencia={recargarAsistencias}
-                  soloLectura={esModoConsultaLista}
+                  soloLectura={esSoloLectura}
                 />
               </div>
             ) : (
@@ -605,7 +634,7 @@ export default function ListasPage() {
             handleEstadoChange(modalData.comerciante.idInterno, e);
             setModalData((prev) => (prev ? { ...prev, estado: e } : null));
           }}
-          soloLectura={esModoConsultaLista}
+          soloLectura={esSoloLectura}
         />
       )}
 
