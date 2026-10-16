@@ -30,6 +30,9 @@ import {
   obtenerSupervisoresDisponibles,
   registrarNaveConComerciantes,
   navesConComerciantes,
+  obtenerPlanoNave,
+  guardarPlanoNave,
+  generarPlanoAutomatico,
 } from "./naves.mock";
 
 export {
@@ -41,6 +44,9 @@ export {
   obtenerSupervisoresDisponibles,
   registrarNaveConComerciantes,
   navesConComerciantes,
+  obtenerPlanoNave,
+  guardarPlanoNave,
+  generarPlanoAutomatico,
 };
 
 // ── Pools de datos ───────────────────────────────────────────────────────────

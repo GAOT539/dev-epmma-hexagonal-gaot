@@ -24,7 +24,13 @@ export interface Puesto {
   comercianteId: string | null;
 }
 
-export type { Nave, EstadoRegistroNave } from "./nave.model";
+export type {
+  Nave,
+  EstadoRegistroNave,
+  TipoCeldaPlano,
+  CeldaPlanoNave,
+  PlanoEspacialNave,
+} from "./nave.model";
 
 // ── Importación XML/CSV de Catastro ──────────────────────────────────────────
 

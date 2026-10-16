@@ -1,6 +1,6 @@
 // ── Capa de Aplicación: Servicio de Naves ─────────────────────────────────────
 import type { INaveRepository } from "@/domain/ports/nave.repository";
-import type { Nave } from "@/domain/models/nave.model";
+import type { Nave, PlanoEspacialNave } from "@/domain/models/nave.model";
 import { naveRepository } from "@/infrastructure/repositories/nave.repository.impl";
 
 export class NaveService {
@@ -39,6 +39,21 @@ export class NaveService {
 
   async obtenerSupervisoresDisponibles(): Promise<string[]> {
     return this.repository.obtenerSupervisoresDisponibles();
+  }
+
+  async obtenerPlanoNave(naveId: string): Promise<PlanoEspacialNave> {
+    return this.repository.obtenerPlanoNave(naveId);
+  }
+
+  async guardarPlanoNave(
+    naveId: string,
+    plano: PlanoEspacialNave
+  ): Promise<PlanoEspacialNave> {
+    return this.repository.guardarPlanoNave(naveId, plano);
+  }
+
+  async generarPlanoAutomatico(naveId: string): Promise<PlanoEspacialNave> {
+    return this.repository.generarPlanoAutomatico(naveId);
   }
 }
 

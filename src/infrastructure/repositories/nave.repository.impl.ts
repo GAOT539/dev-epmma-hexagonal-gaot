@@ -1,9 +1,12 @@
 // ── Adaptador de Infraestructura: NaveRepository (Mock Asíncrono) ─────────────
 import type { INaveRepository } from "@/domain/ports/nave.repository";
-import type { Nave } from "@/domain/models/nave.model";
+import type { Nave, PlanoEspacialNave } from "@/domain/models/nave.model";
 import {
   eliminarNave,
   obtenerSupervisoresDisponibles,
+  obtenerPlanoNave,
+  guardarPlanoNave,
+  generarPlanoAutomatico,
 } from "@/infrastructure/mocks/naves.mock";
 import {
   getNaves,
@@ -49,6 +52,21 @@ export class NaveMockRepository implements INaveRepository {
 
   async obtenerSupervisoresDisponibles(): Promise<string[]> {
     return Promise.resolve([...obtenerSupervisoresDisponibles()]);
+  }
+
+  async obtenerPlanoNave(naveId: string): Promise<PlanoEspacialNave> {
+    return Promise.resolve(obtenerPlanoNave(naveId));
+  }
+
+  async guardarPlanoNave(
+    naveId: string,
+    plano: PlanoEspacialNave
+  ): Promise<PlanoEspacialNave> {
+    return Promise.resolve(guardarPlanoNave(naveId, plano));
+  }
+
+  async generarPlanoAutomatico(naveId: string): Promise<PlanoEspacialNave> {
+    return Promise.resolve(generarPlanoAutomatico(naveId));
   }
 }
 
