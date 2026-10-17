@@ -10,72 +10,26 @@ import {
   ChevronRight,
   Download,
   Loader2,
-  CheckCircle2,
-  Clock,
-  RefreshCw,
-  Layers,
 } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { format, subDays, isBefore } from "date-fns";
 import { toast } from "sonner";
 import { auditoriaService } from "@/application/services/auditoria.service";
 import { usuarioService } from "@/application/services/usuario.service";
-import type {
-  SesionControlSupervisor,
-  EtiquetaControlSupervisor,
-} from "@/domain/models/auditoria.model";
+import type { SesionControlSupervisor } from "@/domain/models/auditoria.model";
 import type { Usuario } from "@/domain/models/usuario.model";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
+  exportarControlSupervisoresGeneralPDF,
+  exportarControlSupervisorIndividualPDF,
+} from "./components/control-pdf.utils";
+import {
+  BadgeControl,
+  ModalDetalleControl,
+} from "./components/ModalDetalleControl";
 
 const ITEMS_POR_PAGINA = 10;
-
-// ── Componente de Badge / Globito de Control ─────────────────────────────────
-
-function BadgeControl({ etiqueta }: { etiqueta: EtiquetaControlSupervisor }) {
-  switch (etiqueta) {
-    case "CON_PERSISTENCIA":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 shadow-2xs">
-          <RefreshCw size={11} className="shrink-0" />
-          Con Persistencia
-        </span>
-      );
-    case "MODIFICADO_TRAS_PERSISTENCIA":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800 shadow-2xs">
-          <Layers size={11} className="shrink-0" />
-          Modificado tras Persistencia
-        </span>
-      );
-    case "CON_RETRASO":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-orange-200 bg-orange-50 px-2.5 py-0.5 text-xs font-semibold text-orange-700 shadow-2xs">
-          <Clock size={11} className="shrink-0" />
-          Con Retraso
-        </span>
-      );
-    case "EN_FECHA":
-      return (
-        <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 shadow-2xs">
-          <CheckCircle2 size={11} className="shrink-0" />
-          En Fecha
-        </span>
-      );
-    default:
-      return null;
-  }
-}
 
 // ── Página de Control de Supervisores ────────────────────────────────────────
 
@@ -96,7 +50,6 @@ export default function ControlSupervisoresPage() {
 
   // Modal de Detalle
   const [sesionSeleccionada, setSesionSeleccionada] = useState<SesionControlSupervisor | null>(null);
-  const [filtroDetalleModal, setFiltroDetalleModal] = useState<"TODOS" | "PRESENTES" | "AUSENTES" | "PERMISOS" | "MODIFICADOS">("TODOS");
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
   const fechaHastaStr = fechaFin ? format(fechaFin, "yyyy-MM-dd") : undefined;
@@ -164,205 +117,20 @@ export default function ControlSupervisoresPage() {
     return sesiones.slice(inicio, inicio + ITEMS_POR_PAGINA);
   }, [sesiones, pagina]);
 
-  // Filtrado interno dentro del modal
-  const comerciantesFiltradosEnModal = useMemo(() => {
-    if (!sesionSeleccionada) return [];
-    const list = sesionSeleccionada.detallesComerciantes;
-    switch (filtroDetalleModal) {
-      case "PRESENTES":
-        return list.filter((c) => c.estado === "Presente");
-      case "AUSENTES":
-        return list.filter((c) => c.estado === "Ausente");
-      case "PERMISOS":
-        return list.filter((c) => c.estado === "Permiso");
-      case "MODIFICADOS":
-        return list.filter((c) => c.metodo === "MODIFICADO_TRAS_PERSISTENCIA");
-      default:
-        return list;
-    }
-  }, [sesionSeleccionada, filtroDetalleModal]);
-
   // ── Generación de PDF General ──────────────────────────────────────────────
 
   function handleExportPDFGeneral() {
-    const doc = new jsPDF({ orientation: "landscape" });
-
-    try {
-      doc.addImage("/logopdf.png", "PNG", 10, 10, 30, 30);
-    } catch {
-      // Continúa si no está disponible la imagen en el entorno
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(14);
-    doc.text(
-      "EMPRESA PÚBLICA – EMPRESA MUNICIPAL\nMERCADO MAYORISTA AMBATO",
-      doc.internal.pageSize.width / 2,
-      18,
-      { align: "center" }
-    );
-
-    doc.setFontSize(12);
-    doc.text("Reporte de Control de Supervisores", doc.internal.pageSize.width / 2, 33, {
-      align: "center",
+    exportarControlSupervisoresGeneralPDF({
+      sesiones,
+      fechaDesdeStr: fechaDesdeStr || "",
+      fechaHastaStr: fechaHastaStr || "",
     });
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    const periodoStr = `Período: ${fechaDesdeStr || "Inicio"} al ${fechaHastaStr || "Hoy"}  |  Fecha de exportación: ${format(new Date(), "dd/MM/yyyy HH:mm")}`;
-    doc.text(periodoStr, doc.internal.pageSize.width / 2, 40, { align: "center" });
-
-    const headers = [
-      ["Fecha Lista", "Inicio Toma", "Supervisor", "Nave", "Acción", "Estado / Anotaciones", "Puestos / Asistencia"],
-    ];
-
-    const data = sesiones.map((s) => {
-      const anotaciones = s.etiquetas
-        .map((e) => {
-          if (e === "CON_PERSISTENCIA") return "Con Persistencia";
-          if (e === "MODIFICADO_TRAS_PERSISTENCIA") return "Modif. tras persistencia";
-          if (e === "CON_RETRASO") return "Con Retraso";
-          if (e === "EN_FECHA") return "En Fecha";
-          return e;
-        })
-        .join(" • ");
-
-      return [
-        format(new Date(s.fechaJornada + "T00:00:00"), "dd/MM/yyyy"),
-        format(new Date(s.timestampInicio), "dd/MM/yyyy HH:mm"),
-        s.supervisorNombre,
-        s.naveNombre,
-        s.accion,
-        anotaciones,
-        `Total: ${s.resumen.totalOcupados} (P: ${s.resumen.presentes}, A: ${s.resumen.ausentes}, Pm: ${s.resumen.permisos})`,
-      ];
-    });
-
-    autoTable(doc, {
-      head: headers,
-      body: data,
-      startY: 46,
-      styles: { fontSize: 8, cellPadding: 2.5 },
-      headStyles: { fillColor: [69, 116, 59], textColor: [255, 255, 255], fontStyle: "bold" },
-      columnStyles: {
-        0: { cellWidth: 24 },
-        1: { cellWidth: 32 },
-        2: { cellWidth: 42 },
-        3: { cellWidth: 25 },
-        4: { cellWidth: 42 },
-        5: { cellWidth: 72 },
-        6: { cellWidth: 30 },
-      },
-    });
-
-    doc.save(`control-supervisores-${format(new Date(), "yyyyMMdd-HHmm")}.pdf`);
   }
 
   // ── Generación de PDF Individual ───────────────────────────────────────────
 
   function handleExportPDFIndividual(sesion: SesionControlSupervisor) {
-    const doc = new jsPDF({ orientation: "portrait" });
-
-    try {
-      doc.addImage("/logopdf.png", "PNG", 10, 10, 30, 30);
-    } catch {
-      // Continúa
-    }
-
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
-    doc.text(
-      "EMPRESA PÚBLICA – EMPRESA MUNICIPAL\nMERCADO MAYORISTA AMBATO",
-      doc.internal.pageSize.width / 2,
-      18,
-      { align: "center" }
-    );
-
-    doc.setFontSize(11);
-    doc.text("Reporte de Control de Supervisores", doc.internal.pageSize.width / 2, 31, {
-      align: "center",
-    });
-
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "normal");
-    doc.text(
-      `Detalle Individual de Toma de Lista - Jornada: ${format(new Date(sesion.fechaJornada + "T00:00:00"), "dd/MM/yyyy")}`,
-      doc.internal.pageSize.width / 2,
-      37,
-      { align: "center" }
-    );
-
-    // Bloque descriptivo
-    doc.setFontSize(8.5);
-    doc.text(`Supervisor: ${sesion.supervisorNombre}`, 14, 46);
-    doc.text(`Nave: ${sesion.naveNombre}`, 14, 51);
-    doc.text(`Inicio de Toma: ${format(new Date(sesion.timestampInicio), "dd/MM/yyyy HH:mm")}`, 14, 56);
-    if (sesion.timestampUltimaModificacion) {
-      doc.text(`Última Modificación: ${format(new Date(sesion.timestampUltimaModificacion), "dd/MM/yyyy HH:mm")}`, 14, 61);
-    }
-
-    doc.text(`Total Puestos Ocupados: ${sesion.resumen.totalOcupados}`, 115, 46);
-    doc.text(`Presentes: ${sesion.resumen.presentes}  |  Ausentes: ${sesion.resumen.ausentes}  |  Permisos: ${sesion.resumen.permisos}`, 115, 51);
-
-    let startY = 66;
-
-    if (sesion.esPersistencia) {
-      doc.setFont("helvetica", "bold");
-      doc.text("Registro con Persistencia:", 14, startY);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        `Datos arrastrados desde ${sesion.fechaOrigenPersistencia || "jornada previa"}. Justificación: ${sesion.comentarioPersistencia || "Sin justificación registrada"}`,
-        14,
-        startY + 4
-      );
-      startY += 10;
-    }
-
-    if (sesion.tieneRetraso) {
-      doc.setFont("helvetica", "bold");
-      doc.text("Registro con Retraso:", 14, startY);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        sesion.detalleRetraso || "La lista fue registrada manualmente con posterioridad a la jornada.",
-        14,
-        startY + 4
-      );
-      startY += 10;
-    }
-
-    const headers = [["Puesto", "CIU", "Cédula", "Contribuyente", "Estado", "Método", "Hora"]];
-    const data = sesion.detallesComerciantes.map((d) => [
-      d.puesto,
-      d.ciu,
-      d.cedula,
-      d.contribuyente,
-      d.estado,
-      d.metodo === "MODIFICADO_TRAS_PERSISTENCIA"
-        ? "Modif. tras persistencia"
-        : d.metodo === "PERSISTENCIA"
-        ? "Persistencia"
-        : "Manual",
-      d.horaRegistro || "-",
-    ]);
-
-    autoTable(doc, {
-      head: headers,
-      body: data,
-      startY: startY + 2,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [69, 116, 59], textColor: [255, 255, 255], fontStyle: "bold" },
-      columnStyles: {
-        0: { cellWidth: 18 },
-        1: { cellWidth: 24 },
-        2: { cellWidth: 24 },
-        3: { cellWidth: 48 },
-        4: { cellWidth: 22 },
-        5: { cellWidth: 36 },
-        6: { cellWidth: 18 },
-      },
-    });
-
-    doc.save(`control-${sesion.naveNombre.replace(/\s+/g, "_")}-${sesion.fechaJornada}.pdf`);
+    exportarControlSupervisorIndividualPDF(sesion);
   }
 
   return (
@@ -542,7 +310,6 @@ export default function ControlSupervisoresPage() {
                         key={sesion.id}
                         onClick={() => {
                           setSesionSeleccionada(sesion);
-                          setFiltroDetalleModal("TODOS");
                         }}
                         className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none cursor-pointer hover:bg-institucional-green/5 transition-colors"
                       >
@@ -692,325 +459,11 @@ export default function ControlSupervisoresPage() {
       </div>
 
       {/* ── Modal de Detalle de Toma de Lista (Radiografía Completa) ── */}
-      <Dialog
-        open={Boolean(sesionSeleccionada)}
-        disablePointerDismissal={true}
-        onOpenChange={(open) => {
-          if (!open) setSesionSeleccionada(null);
-        }}
-      >
-        <DialogContent
-          className="w-[95vw] max-w-4xl sm:max-w-4xl lg:max-w-5xl max-h-[90vh] overflow-y-auto p-6 bg-base-white rounded-2xl shadow-2xl"
-        >
-          {sesionSeleccionada && (
-            <>
-              {/* Header Modal */}
-              <DialogHeader className="p-0 pb-5 border-b border-gray-200 text-left">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pr-8">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2.5">
-                      <span className="rounded-lg bg-institucional-green/15 text-institucional-green font-bold text-xs px-2.5 py-1 uppercase tracking-wider shrink-0">
-                        {sesionSeleccionada.naveNombre}
-                      </span>
-                      <DialogTitle className="text-lg sm:text-xl font-bold text-base-eerieBlack">
-                        Control de Toma de Lista
-                      </DialogTitle>
-                    </div>
-                    <DialogDescription className="text-xs text-gray-700 mt-1">
-                      Jornada correspondiente al:{" "}
-                      <strong className="text-base-eerieBlack font-semibold">
-                        {format(new Date(sesionSeleccionada.fechaJornada + "T00:00:00"), "dd/MM/yyyy")}
-                      </strong>
-                    </DialogDescription>
-                  </div>
-
-                  {/* Botón Imprimir Detalle PDF */}
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => handleExportPDFIndividual(sesionSeleccionada)}
-                    className="flex shrink-0 items-center gap-2 bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold text-xs h-9 px-4 rounded-lg shadow-sm"
-                  >
-                    <Download size={14} />
-                    <span>Imprimir / Descargar PDF</span>
-                  </Button>
-                </div>
-
-                {/* Metadatos rápidos */}
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-200 min-w-0">
-                    <span className="text-gray-700 block">Supervisor</span>
-                    <strong className="text-base-eerieBlack block truncate">
-                      {sesionSeleccionada.supervisorNombre}
-                    </strong>
-                  </div>
-                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-200 min-w-0">
-                    <span className="text-gray-700 block">Inicio de toma</span>
-                    <strong className="text-base-eerieBlack block">
-                      {format(new Date(sesionSeleccionada.timestampInicio), "dd/MM/yy hh:mm a")}
-                    </strong>
-                  </div>
-                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-200 min-w-0">
-                    <span className="text-gray-700 block">Última modif.</span>
-                    <strong className="text-base-eerieBlack block">
-                      {sesionSeleccionada.timestampUltimaModificacion
-                        ? format(new Date(sesionSeleccionada.timestampUltimaModificacion), "dd/MM/yy hh:mm a")
-                        : "Sin modificaciones"}
-                    </strong>
-                  </div>
-                  <div className="bg-gray-50/80 p-3 rounded-xl border border-gray-200 min-w-0">
-                    <span className="text-gray-700 block">Acción</span>
-                    <strong className="text-base-eerieBlack block truncate">
-                      {sesionSeleccionada.accion}
-                    </strong>
-                  </div>
-                </div>
-
-                {/* Bloque de Persistencia (si aplica) */}
-                {sesionSeleccionada.esPersistencia && (
-                  <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/70 p-3 text-xs text-blue-900">
-                    <div className="flex items-center gap-1.5 font-bold text-blue-800">
-                      <RefreshCw size={13} />
-                      <span>Registro ejecutado con Persistencia</span>
-                    </div>
-                    <p className="mt-1">
-                      Asistencia arrastrada desde la jornada del{" "}
-                      <strong>
-                        {sesionSeleccionada.fechaOrigenPersistencia
-                          ? format(new Date(sesionSeleccionada.fechaOrigenPersistencia + "T00:00:00"), "dd/MM/yyyy")
-                          : "día hábil anterior"}
-                      </strong>
-                      .
-                      {sesionSeleccionada.comentarioPersistencia && (
-                        <span className="block mt-1 italic text-blue-800">
-                          Justificación: &ldquo;{sesionSeleccionada.comentarioPersistencia}&rdquo;
-                        </span>
-                      )}
-                    </p>
-                    {sesionSeleccionada.modificadoTrasPersistencia && (
-                      <p className="mt-1 text-amber-800 font-semibold flex items-center gap-1">
-                        <Layers size={12} />
-                        Se registraron modificaciones manuales posteriores en comerciantes individuales.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Bloque de Retraso (si aplica) */}
-                {sesionSeleccionada.tieneRetraso && (
-                  <div className="mt-3 rounded-lg border border-orange-200 bg-orange-50/70 p-3 text-xs text-orange-900">
-                    <div className="flex items-center gap-1.5 font-bold text-orange-800">
-                      <Clock size={13} />
-                      <span>Toma de Lista con Retraso (Retroactiva)</span>
-                    </div>
-                    <p className="mt-1">
-                      {sesionSeleccionada.detalleRetraso ||
-                        `La jornada corresponde al ${format(new Date(sesionSeleccionada.fechaJornada + "T00:00:00"), "dd/MM/yyyy")} pero fue registrada manualmente en fecha ${format(new Date(sesionSeleccionada.timestampInicio), "dd/MM/yyyy HH:mm")}.`}
-                    </p>
-                  </div>
-                )}
-              </DialogHeader>
-
-              {/* Cuerpo del Modal con Resumen y Radiografía de Comerciantes */}
-              <div className="pt-4 space-y-4">
-                {/* Tarjetas de Resumen */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-xl border border-gray-200 bg-base-white p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-gray-700 block">Total Puestos</span>
-                    <span className="text-lg font-bold text-base-eerieBlack">
-                      {sesionSeleccionada.resumen.totalOcupados}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-green-200 bg-green-50/50 p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-green-700 block">Presentes</span>
-                    <span className="text-lg font-bold text-green-800">
-                      {sesionSeleccionada.resumen.presentes}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-red-200 bg-red-50/50 p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-red-700 block">Ausentes</span>
-                    <span className="text-lg font-bold text-red-800">
-                      {sesionSeleccionada.resumen.ausentes}
-                    </span>
-                  </div>
-                  <div className="rounded-xl border border-purple-200 bg-purple-50/50 p-3.5 text-center min-w-0 shadow-2xs">
-                    <span className="text-xs text-purple-700 block">Permisos</span>
-                    <span className="text-lg font-bold text-purple-800">
-                      {sesionSeleccionada.resumen.permisos}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Filtros rápidos / Pestañas de comerciantes */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-2 border-b border-gray-200">
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDetalleModal("TODOS")}
-                    className={[
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "TODOS"
-                        ? "bg-institucional-green text-base-white"
-                        : "text-gray-700 hover:bg-gray-100",
-                    ].join(" ")}
-                  >
-                    Todos ({sesionSeleccionada.detallesComerciantes.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDetalleModal("PRESENTES")}
-                    className={[
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "PRESENTES"
-                        ? "bg-green-700 text-base-white"
-                        : "text-green-800 hover:bg-green-50",
-                    ].join(" ")}
-                  >
-                    Presentes ({sesionSeleccionada.resumen.presentes})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDetalleModal("AUSENTES")}
-                    className={[
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "AUSENTES"
-                        ? "bg-red-700 text-base-white"
-                        : "text-red-800 hover:bg-red-50",
-                    ].join(" ")}
-                  >
-                    Ausentes ({sesionSeleccionada.resumen.ausentes})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDetalleModal("PERMISOS")}
-                    className={[
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "PERMISOS"
-                        ? "bg-purple-700 text-base-white"
-                        : "text-purple-800 hover:bg-purple-50",
-                    ].join(" ")}
-                  >
-                    Permisos ({sesionSeleccionada.resumen.permisos})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFiltroDetalleModal("MODIFICADOS")}
-                    className={[
-                      "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                      filtroDetalleModal === "MODIFICADOS"
-                        ? "bg-amber-600 text-base-white"
-                        : "text-amber-800 hover:bg-amber-50",
-                    ].join(" ")}
-                  >
-                    Modificados tras Persistencia (
-                    {
-                      sesionSeleccionada.detallesComerciantes.filter(
-                        (c) => c.metodo === "MODIFICADO_TRAS_PERSISTENCIA"
-                      ).length
-                    }
-                    )
-                  </button>
-                </div>
-
-                {/* Tabla de Comerciantes de la Sesión */}
-                <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[400px] overflow-y-auto">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 z-20 bg-[#e6efe9] text-base-eerieBlack font-semibold">
-                      <tr className="bg-[#e6efe9]">
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Puesto</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">CIU</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Cédula</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Contribuyente</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Estado</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Origen / Método</th>
-                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-right">Hora</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {comerciantesFiltradosEnModal.map((com) => {
-                        let estadoBadge = null;
-                        if (com.estado === "Presente") {
-                          estadoBadge = (
-                            <span className="rounded-full bg-green-100 text-green-800 px-2 py-0.5 font-bold">
-                              Presente
-                            </span>
-                          );
-                        } else if (com.estado === "Ausente") {
-                          estadoBadge = (
-                            <span className="rounded-full bg-red-100 text-red-800 px-2 py-0.5 font-bold">
-                              Ausente
-                            </span>
-                          );
-                        } else if (com.estado === "Permiso") {
-                          estadoBadge = (
-                            <span className="rounded-full bg-purple-100 text-purple-800 px-2 py-0.5 font-bold">
-                              Permiso
-                            </span>
-                          );
-                        }
-
-                        let metodoBadge = null;
-                        if (com.metodo === "PERSISTENCIA") {
-                          metodoBadge = (
-                            <span className="text-blue-700 font-medium">Persistencia</span>
-                          );
-                        } else if (com.metodo === "MODIFICADO_TRAS_PERSISTENCIA") {
-                          metodoBadge = (
-                            <span className="text-amber-800 font-bold">
-                              Modificado tras persistencia
-                            </span>
-                          );
-                        } else {
-                          metodoBadge = (
-                            <span className="text-gray-700 font-medium">Manual</span>
-                          );
-                        }
-
-                        return (
-                          <tr key={com.comercianteId} className="hover:bg-gray-50/70">
-                            <td className="px-3 py-2 font-bold text-base-eerieBlack">
-                              {com.puesto}
-                            </td>
-                            <td className="px-3 py-2 text-gray-700">{com.ciu}</td>
-                            <td className="px-3 py-2 text-gray-700">{com.cedula}</td>
-                            <td className="px-3 py-2 font-medium text-base-eerieBlack">
-                              {com.contribuyente}
-                            </td>
-                            <td className="px-3 py-2">{estadoBadge}</td>
-                            <td className="px-3 py-2">{metodoBadge}</td>
-                            <td className="px-3 py-2 text-right text-gray-700 font-medium">
-                              {com.horaRegistro || "-"}
-                            </td>
-                          </tr>
-                        );
-                      })}
-
-                      {comerciantesFiltradosEnModal.length === 0 && (
-                        <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-gray-600">
-                            No hay comerciantes que coincidan con la pestaña seleccionada.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Footer Modal */}
-              <DialogFooter className="pt-4 border-t border-gray-200 flex justify-end">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setSesionSeleccionada(null)}
-                  className="px-5 font-semibold text-xs"
-                >
-                  Cerrar
-                </Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <ModalDetalleControl
+        sesion={sesionSeleccionada}
+        onCerrar={() => setSesionSeleccionada(null)}
+        onExportarPDF={handleExportPDFIndividual}
+      />
     </div>
   );
 }

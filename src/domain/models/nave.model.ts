@@ -1,6 +1,9 @@
 // ── Dominio: Modelo de Nave del Mercado EP-EMA ────────────────────────────────
 
 import type { Puesto } from "./comerciante.model";
+export type { Puesto } from "./comerciante.model";
+
+export type CeldaPlano = CeldaPlanoNave;
 
 export type EstadoRegistroNave = "Habilitado" | "Deshabilitado";
 
