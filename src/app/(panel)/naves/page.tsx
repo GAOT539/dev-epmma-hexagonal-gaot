@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   Building2,
   Search,
@@ -77,6 +77,28 @@ export default function NavesPage() {
       Boolean(matchSupervisores)
     );
   });
+
+  // Cálculo de puestos actualmente ocupados por nave
+  const puestosOcupadosPorNave = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const n of naves) {
+      const puestosOcupadosEnNave = new Set(
+        (n.puestos ?? [])
+          .filter((p) => p.estado === "Ocupado" && p.comercianteId)
+          .map((p) => p.comercianteId)
+      );
+      const comerciantesEnNave = comerciantes.filter(
+        (c) =>
+          c.estadoRegistro !== "Deshabilitado" &&
+          ((c.nave && c.nave.trim().toUpperCase() === n.nombre.trim().toUpperCase()) ||
+            puestosOcupadosEnNave.has(c.idInterno))
+      );
+      const puestosOcupadosNave = (n.puestos ?? []).filter((p) => p.estado === "Ocupado").length;
+      const ocupados = Math.max(comerciantesEnNave.length, puestosOcupadosNave);
+      map.set(n.id, ocupados);
+    }
+    return map;
+  }, [naves, comerciantes]);
 
   // ── Manejadores de Creación ───────────────────────────────────────────────
 
@@ -316,9 +338,44 @@ export default function NavesPage() {
                       </td>
 
                       {/* CANTIDAD DE PUESTOS */}
-                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 font-mono text-sm md:text-center md:table-cell">
-                        <span className="font-semibold text-gray-700 md:hidden">Cantidad de Puestos:</span>
-                        <span>{nave.cantidadPuestos}</span>
+                      <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 text-gray-900 text-sm md:text-center md:table-cell">
+                        <span className="font-semibold text-gray-700 md:hidden">Puestos Ocupados / Capacidad:</span>
+                        {(() => {
+                          const ocupados = puestosOcupadosPorNave.get(nave.id) ?? 0;
+                          const porcentaje = Math.min(100, Math.round((ocupados / (nave.cantidadPuestos || 1)) * 100));
+                          return (
+                            <div className="flex flex-col md:items-center items-end gap-1">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold font-mono text-sm text-base-eerieBlack">
+                                  {ocupados}
+                                </span>
+                                <span className="text-gray-400 font-mono text-xs">/</span>
+                                <span className="font-mono text-xs text-gray-600 font-medium">
+                                  {nave.cantidadPuestos}
+                                </span>
+                                <span className="ml-1 inline-flex items-center rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 ring-1 ring-inset ring-emerald-600/20">
+                                  {porcentaje}%
+                                </span>
+                              </div>
+                              {/* Mini barra de ocupación */}
+                              <div className="w-24 bg-gray-100 rounded-full h-1.5 overflow-hidden ring-1 ring-black/5">
+                                <div
+                                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    porcentaje >= 100
+                                      ? "bg-amber-600"
+                                      : porcentaje >= 75
+                                      ? "bg-institucional-green"
+                                      : "bg-acento-azul1"
+                                  }`}
+                                  style={{ width: `${porcentaje}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] text-gray-500 hidden md:inline">
+                                {ocupados} ocupados de {nave.cantidadPuestos}
+                              </span>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* SUPERVISOR(ES) */}

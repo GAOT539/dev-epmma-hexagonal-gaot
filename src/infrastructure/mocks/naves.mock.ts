@@ -287,7 +287,7 @@ export function sincronizarSupervisorEnNaves(
  * Clave oficial versión 2: "ep_ema_planos_naves_v2"
  * (Garantiza que NAVE A inicie con su plantilla preconfigurada y NAVE B, C, D, E en blanco).
  */
-const STORAGE_KEY_PLANOS = "ep_ema_planos_naves_v2";
+const STORAGE_KEY_PLANOS = "ep_ema_planos_naves_v3";
 const planosCache: Record<string, PlanoEspacialNave> = {};
 
 function cargarPlanosDesdeStorage(): Record<string, PlanoEspacialNave> {
@@ -377,7 +377,7 @@ function persistirPlanosEnStorage(planos: Record<string, PlanoEspacialNave>): vo
 
 /**
  * Genera el plano inicial de una nave:
- * - Para "nave-a": genera la plantilla física detallada de EP-EMA (14 filas × 12 columnas).
+ * - Para "nave-a": genera la plantilla física detallada de EP-EMA (16 filas × 12 columnas).
  * - Para el resto de naves ("nave-b", "nave-c", etc.): genera un lienzo 100% en blanco
  *   (12 filas × 12 columnas de tipo "VACIO"), permitiendo diseñar cada nave desde cero.
  */
@@ -423,7 +423,7 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
 
   // ── Si es NAVE A: plantilla arquitectónica estructurada ────────────────────
   const totalPuestos = nave?.cantidadPuestos ?? 100;
-  const filas = 14;
+  const filas = 16;
   const columnas = 12;
   const celdas: CeldaPlanoNave[] = [];
 

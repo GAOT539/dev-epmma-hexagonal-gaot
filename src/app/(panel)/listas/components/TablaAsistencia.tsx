@@ -830,7 +830,7 @@ export function PuestosList({
   );
 }
 
-// ── Vista Treemap (Mapa de Árbol) ────────────────────────────────────────────
+// ── Vista Treemap (Vista Cuadrícula) ─────────────────────────────────────────
 
 export function TreemapView({
   items,

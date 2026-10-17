@@ -28,6 +28,7 @@ export const normalizeText = (text: string): string => {
 export function formatearNovedadesReporte(registros: RegistroAsistencia[]): string {
   const permisosMap = new Map<string, PermisoDetalle>();
   const obsList: string[] = [];
+  const seenObs = new Set<string>();
 
   registros.forEach((r) => {
     // 1. Permisos estructurados (agrupados para evitar repetición día a día)
@@ -54,16 +55,25 @@ export function formatearNovedadesReporte(registros: RegistroAsistencia[]): stri
     // 2. Observaciones categorizadas
     if (r.observaciones && r.observaciones.length > 0) {
       r.observaciones.forEach((obs) => {
+        let entry = "";
         if (obs.tipo === "Citaciones") {
-          obsList.push(`${r.fecha} [Citación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`);
+          entry = `${r.fecha} [Citación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`;
         } else if (obs.tipo === "Notificación") {
-          obsList.push(`${r.fecha} [Notificación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`);
+          entry = `${r.fecha} [Notificación - Ref/Doc: ${obs.numeroDocumento || "S/N"}]: ${obs.texto}`;
         } else {
-          obsList.push(`${r.fecha} [Obs. General]: ${obs.texto}`);
+          entry = `${r.fecha} [Obs. General]: ${obs.texto}`;
+        }
+        if (!seenObs.has(entry)) {
+          seenObs.add(entry);
+          obsList.push(entry);
         }
       });
     } else if (r.observacion && r.estado !== "Permiso") {
-      obsList.push(`${r.fecha} [Obs. General]: ${r.observacion}`);
+      const entry = `${r.fecha} [Obs. General]: ${r.observacion}`;
+      if (!seenObs.has(entry)) {
+        seenObs.add(entry);
+        obsList.push(entry);
+      }
     }
   });
 
@@ -74,7 +84,7 @@ export function formatearNovedadesReporte(registros: RegistroAsistencia[]): stri
   });
 
   const todas = [...permisosFormatted, ...obsList];
-  return todas.join(" | ");
+  return todas.join("\n");
 }
 
 export interface ReporteItem {

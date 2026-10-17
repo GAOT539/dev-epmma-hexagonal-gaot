@@ -797,7 +797,7 @@ export function PlanificadorEspacial({
                 }`}
               >
                 <Eye size={14} />
-                Modo Ver
+                Ver
               </button>
               <button
                 type="button"
@@ -809,7 +809,7 @@ export function PlanificadorEspacial({
                 }`}
               >
                 <Pencil size={14} />
-                Modo Editar
+                Editar
               </button>
             </div>
 

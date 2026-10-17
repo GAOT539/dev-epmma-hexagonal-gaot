@@ -539,8 +539,18 @@ export default function ReportesPage() {
                             {row.puestoCode}
                           </td>
                           {soloObservaciones ? (
-                            <td className="px-3 py-2 text-xs font-semibold text-gray-900 leading-relaxed">
-                              {row.observaciones || "—"}
+                            <td className="px-3 py-2 text-xs font-semibold text-gray-900">
+                              {row.observaciones ? (
+                                <div className="space-y-1.5 whitespace-pre-line leading-relaxed">
+                                  {row.observaciones.split("\n").map((line, idx) => (
+                                    <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
+                                      {line}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 font-normal">—</span>
+                              )}
                             </td>
                           ) : (
                             <>
@@ -559,7 +569,7 @@ export default function ReportesPage() {
                               })}
                               {incluirObservaciones && (
                                 <td className="px-3 py-2 max-w-[200px]">
-                                  <span className="line-clamp-2 text-xs font-semibold text-gray-900">
+                                  <span className="line-clamp-2 text-xs font-semibold text-gray-900 whitespace-pre-line">
                                     {row.observaciones || "—"}
                                   </span>
                                 </td>

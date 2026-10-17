@@ -21,8 +21,9 @@ import {
   ChevronDown,
   CopyCheck,
   Search,
-  ToggleLeft,
-  ToggleRight,
+  LayoutGrid,
+  List,
+  Map as MapIcon,
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/application/services/auth.service";
@@ -40,6 +41,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { eachDayOfInterval, format, isToday, isFuture, subDays } from "date-fns";
 import { es } from "date-fns/locale";
+import type { PlanoEspacialNave } from "@/domain/models/nave.model";
 import {
   ObservacionDialog,
   ComercianteModal,
@@ -48,6 +50,7 @@ import {
   PuestosList,
   TreemapView,
 } from "./components/TablaAsistencia";
+import { CroquisAsistenciaView } from "./components/CroquisAsistenciaView";
 
 // ── Helper: formatear fecha ──────────────────────────────────────────────────
 
@@ -73,17 +76,18 @@ export default function ListasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"lista" | "treemap">(() => {
+  const [viewMode, setViewMode] = useState<"lista" | "treemap" | "croquis">(() => {
     if (typeof window !== "undefined") {
       try {
         const saved = localStorage.getItem("epmma_last_view_mode");
-        if (saved === "lista" || saved === "treemap") return saved;
+        if (saved === "lista" || saved === "treemap" || saved === "croquis") return saved;
       } catch {
         // Ignorar en entornos sin acceso a storage
       }
     }
     return "lista";
   });
+  const [planoNave, setPlanoNave] = useState<PlanoEspacialNave | null>(null);
   const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
 
   const { user } = useAuth();
@@ -126,6 +130,84 @@ export default function ListasPage() {
 
   const nave = navesPermitidas.find((n) => n.id === selectedNaveId) ?? null;
   const fechaStr = formatDate(selectedDate);
+
+  // Carga asíncrona del plano espacial de la nave seleccionada
+  useEffect(() => {
+    let activo = true;
+    if (!selectedNaveId) {
+      queueMicrotask(() => {
+        if (activo) setPlanoNave(null);
+      });
+      return () => {
+        activo = false;
+      };
+    }
+    naveService
+      .obtenerPlanoNave(selectedNaveId)
+      .then((plano) => {
+        if (activo) {
+          setPlanoNave(plano);
+        }
+      })
+      .catch((err) => {
+        if (activo) {
+          console.error("Error al obtener plano de nave en listas:", err);
+        }
+      });
+    return () => {
+      activo = false;
+    };
+  }, [selectedNaveId]);
+
+  // Regla Estricta: Vista Croquis solo disponible si el 100% de los puestos están ubicados
+  const croquisCompleto = useMemo(() => {
+    if (!nave || !planoNave) return false;
+    const codigosUbicados = new Set(
+      planoNave.celdas
+        .filter((c) => c.tipo === "PUESTO" && c.codigoPuesto)
+        .map((c) => c.codigoPuesto!.trim().toUpperCase())
+    );
+    return codigosUbicados.size >= nave.cantidadPuestos && nave.cantidadPuestos > 0;
+  }, [nave, planoNave]);
+
+  // Vista efectiva derivada (preserva la preferencia del usuario si la nave actual no tiene croquis completo)
+  const vistaEfectiva = viewMode === "croquis" && !croquisCompleto ? "lista" : viewMode;
+
+  // Persistencia de la preferencia de vista por usuario
+  useEffect(() => {
+    if (typeof window === "undefined" || !user?.id) return;
+    try {
+      const userKey = `ep_ema_view_mode_${user.id}`;
+      const saved = localStorage.getItem(userKey) || localStorage.getItem("epmma_last_view_mode");
+      if (saved === "lista" || saved === "treemap" || saved === "croquis") {
+        queueMicrotask(() => setViewMode(saved));
+      }
+    } catch {
+      // Ignorar en entornos sin acceso a storage
+    }
+  }, [user?.id]);
+
+  function toggleViewMode() {
+    let siguiente: "lista" | "treemap" | "croquis";
+    if (croquisCompleto) {
+      if (vistaEfectiva === "lista") siguiente = "treemap";
+      else if (vistaEfectiva === "treemap") siguiente = "croquis";
+      else siguiente = "lista";
+    } else {
+      if (vistaEfectiva === "lista") siguiente = "treemap";
+      else siguiente = "lista";
+    }
+    setViewMode(siguiente);
+    if (typeof window !== "undefined") {
+      const userKey = user?.id ? `ep_ema_view_mode_${user.id}` : "epmma_last_view_mode";
+      try {
+        localStorage.setItem(userKey, siguiente);
+        localStorage.setItem("epmma_last_view_mode", siguiente);
+      } catch (err) {
+        console.warn("Error al guardar preferencia de vista:", err);
+      }
+    }
+  }
 
   // Carga asíncrona de asistencias por fecha
   useEffect(() => {
@@ -513,22 +595,27 @@ export default function ListasPage() {
               </Button>
             )}
 
-            {/* Toggle vista */}
+            {/* Botón único conmutador cíclico de vista con persistencia por usuario */}
             <button
               type="button"
-              onClick={() => {
-                const nuevoModo = viewMode === "lista" ? "treemap" : "lista";
-                setViewMode(nuevoModo);
-                localStorage.setItem("epmma_last_view_mode", nuevoModo);
-              }}
-              className="flex shrink-0 whitespace-nowrap items-center gap-2 rounded-lg bg-base-white px-3 sm:px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40"
+              onClick={toggleViewMode}
+              className="flex shrink-0 whitespace-nowrap items-center gap-2 rounded-lg bg-base-white px-3 sm:px-4 py-2.5 text-xs font-semibold text-base-eerieBlack ring-1 ring-institucional-whiteSmokeBlack/20 transition-colors hover:ring-institucional-green/40 shadow-2xs"
+              title="Alternar modo de vista"
             >
-              {viewMode === "lista" ? (
-                <ToggleLeft size={18} className="text-institucional-green shrink-0" />
+              {vistaEfectiva === "lista" ? (
+                <List size={16} className="text-institucional-green shrink-0" />
+              ) : vistaEfectiva === "treemap" ? (
+                <LayoutGrid size={16} className="text-institucional-green shrink-0" />
               ) : (
-                <ToggleRight size={18} className="text-institucional-green shrink-0" />
+                <MapIcon size={16} className="text-institucional-green shrink-0" />
               )}
-              <span>{viewMode === "lista" ? "Vista Lista" : "Mapa de Árbol"}</span>
+              <span>
+                {vistaEfectiva === "lista"
+                  ? "Vista Lista"
+                  : vistaEfectiva === "treemap"
+                  ? "Vista Cuadrícula"
+                  : "Vista Croquis"}
+              </span>
             </button>
           </div>
         )}
@@ -597,7 +684,7 @@ export default function ListasPage() {
               </div>
             )}
 
-            {viewMode === "lista" ? (
+            {vistaEfectiva === "lista" ? (
               <div className="flex flex-col gap-3">
                 <PuestosList
                   items={comerciantesFiltrados}
@@ -610,11 +697,23 @@ export default function ListasPage() {
                   soloLectura={esSoloLectura}
                 />
               </div>
-            ) : (
+            ) : vistaEfectiva === "treemap" ? (
               <TreemapView
                 items={comerciantesFiltrados}
                 onOpenModal={handleOpenModal}
               />
+            ) : planoNave ? (
+              <CroquisAsistenciaView
+                plano={planoNave}
+                items={puestosConEstado}
+                searchQuery={searchQuery}
+                onOpenModal={handleOpenModal}
+              />
+            ) : (
+              <div className="flex items-center justify-center py-12 text-sm text-gray-600 bg-base-white rounded-xl ring-1 ring-institucional-whiteSmokeBlack/10">
+                <Loader2 className="h-6 w-6 animate-spin text-institucional-green mr-2" />
+                Cargando croquis de la nave...
+              </div>
             )}
           </section>
         )}
