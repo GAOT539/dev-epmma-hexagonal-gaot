@@ -284,9 +284,10 @@ export function sincronizarSupervisorEnNaves(
 
 /**
  * Persistencia en Memoria y LocalStorage para Planos de Naves.
- * Clave oficial: "ep_ema_planos_naves"
+ * Clave oficial versión 2: "ep_ema_planos_naves_v2"
+ * (Garantiza que NAVE A inicie con su plantilla preconfigurada y NAVE B, C, D, E en blanco).
  */
-const STORAGE_KEY_PLANOS = "ep_ema_planos_naves";
+const STORAGE_KEY_PLANOS = "ep_ema_planos_naves_v2";
 const planosCache: Record<string, PlanoEspacialNave> = {};
 
 function cargarPlanosDesdeStorage(): Record<string, PlanoEspacialNave> {
@@ -313,65 +314,115 @@ function persistirPlanosEnStorage(planos: Record<string, PlanoEspacialNave>): vo
 /**
  * ─────────────────────────────────────────────────────────────────────────────
  * DOCUMENTACIÓN DE INTEGRACIÓN BACKEND REAL (PostgreSQL / Supabase / Prisma)
+ * REQUISITOS TÉCNICOS PARA PLANOS MODULARES Y PERSISTENCIA ATÓMICA
  * ─────────────────────────────────────────────────────────────────────────────
- * En la arquitectura definitiva de EP-EMA, la matriz espacial de cada nave
- * puede modelarse bajo dos estrategias principales según el motor relacional:
  *
- * Estrategia 1 (Enfoque Documental JSONB - Rápido y Flexible):
- * -------------------------------------------------------------
- * Se añade una columna `plano_json JSONB` a la tabla `naves`:
- * ```sql
- * ALTER TABLE naves ADD COLUMN plano_json JSONB;
- * COMMENT ON COLUMN naves.plano_json IS 'Representación matricial completa de celdas, filas y columnas';
- * ```
- * Ventajas: Escritura atómica del croquis completo en una sola transacción,
- * serialización directa con TypeScript (`PlanoEspacialNave`).
+ * 1. Endpoints de la API REST / GraphQL:
+ *    - `GET /api/v1/naves/:id/plano`:
+ *      Retorna el objeto `PlanoEspacialNave`. Si la nave no posee aún un croquis
+ *      persistido en base de datos:
+ *      * Para "nave-a": retorna la plantilla arquitectónica predeterminada.
+ *      * Para cualquier otra nave ("nave-b", "nave-c", etc.): retorna un lienzo
+ *        100% en blanco (matriz con celdas de tipo "VACIO").
  *
- * Estrategia 2 (Enfoque Relacional Normalizado con Índices Espaciales):
- * ---------------------------------------------------------------------
- * Se crea una tabla específica `nave_celdas_plano` para auditoría celda por celda:
- * ```sql
- * CREATE TABLE nave_celdas_plano (
- *   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
- *   nave_id VARCHAR(50) NOT NULL REFERENCES naves(id) ON DELETE CASCADE,
- *   fila INT NOT NULL,
- *   columna INT NOT NULL,
- *   tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('PUESTO', 'VACIO', 'PARQUEADERO', 'DELIMITACION', 'ANOTACION')),
- *   codigo_puesto VARCHAR(50),
- *   texto TEXT,
- *   subtexto TEXT,
- *   color_zona VARCHAR(20),
- *   creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
- *   actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
- *   CONSTRAINT uq_nave_celda UNIQUE (nave_id, fila, columna)
- * );
- * CREATE INDEX idx_nave_celdas_puesto ON nave_celdas_plano(nave_id, codigo_puesto);
- * CREATE INDEX idx_nave_celdas_coords ON nave_celdas_plano(nave_id, fila, columna);
- * ```
- * En el backend Nest.js / Node.js, `guardarPlanoNave` ejecutará una transacción SQL:
- * `DELETE FROM nave_celdas_plano WHERE nave_id = $1` seguido de un `INSERT INTO nave_celdas_plano (...) VALUES (...)`
- * validando que `COUNT(*) FILTER (WHERE tipo = 'PUESTO') <= naves.cantidad_puestos`.
+ *    - `PUT /api/v1/naves/:id/plano`:
+ *      Recibe `{ filas, columnas, celdas }` y ejecuta un guardado transaccional
+ *      atómico. Si se agregan, mueven o eliminan filas/columnas, o se reubican
+ *      puestos con Drag & Drop, el estado completo de la nave se sobreescribe.
+ *
+ * 2. Estrategias de Almacenamiento en PostgreSQL:
+ *
+ *    Estrategia A (Columna Documental JSONB - Recomendada para Alta Agilidad):
+ *    ```sql
+ *    ALTER TABLE naves ADD COLUMN IF NOT EXISTS plano_json JSONB;
+ *    COMMENT ON COLUMN naves.plano_json IS 'Matriz espacial completa: { filas, columnas, celdas: [{ fila, columna, tipo, codigoPuesto, rowSpan, colSpan, texto, subtexto, colorZona }] }';
+ *    ```
+ *    Ventaja: Permite almacenar módulos con `rowSpan` y `colSpan`, notas y pasillos
+ *    en una sola columna atómica sin bloqueos relacionales entre tablas.
+ *
+ *    Estrategia B (Tabla Relacional Normalizada para Auditoría Celda por Celda):
+ *    ```sql
+ *    CREATE TABLE IF NOT EXISTS nave_celdas_plano (
+ *      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ *      nave_id VARCHAR(50) NOT NULL REFERENCES naves(id) ON DELETE CASCADE,
+ *      fila INT NOT NULL,
+ *      columna INT NOT NULL,
+ *      tipo VARCHAR(20) NOT NULL CHECK (tipo IN ('PUESTO', 'VACIO', 'PARQUEADERO', 'DELIMITACION', 'ANOTACION', 'BANO')),
+ *      codigo_puesto VARCHAR(50),
+ *      texto TEXT,
+ *      subtexto TEXT,
+ *      color_zona VARCHAR(20),
+ *      row_span INT NOT NULL DEFAULT 1,
+ *      col_span INT NOT NULL DEFAULT 1,
+ *      creado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+ *      actualizado_en TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+ *      CONSTRAINT uq_nave_celda UNIQUE (nave_id, fila, columna)
+ *    );
+ *    CREATE INDEX IF NOT EXISTS idx_nave_celdas_puesto ON nave_celdas_plano(nave_id, codigo_puesto);
+ *    CREATE INDEX IF NOT EXISTS idx_nave_celdas_coords ON nave_celdas_plano(nave_id, fila, columna);
+ *    ```
+ *
+ * 3. Regla Estricta de Negocio y Validación de Capacidad Modular:
+ *    - Un mismo comerciante o puesto puede ocupar múltiples celdas (ej. A2 y A3) mediante
+ *      `rowSpan` / `colSpan` o compartiendo el mismo `codigo_puesto`.
+ *    - En el backend, la validación de cupo debe contar códigos de puesto ÚNICOS:
+ *      ```sql
+ *      SELECT COUNT(DISTINCT codigo_puesto) FROM nave_celdas_plano
+ *      WHERE nave_id = $1 AND tipo = 'PUESTO' AND codigo_puesto IS NOT NULL;
+ *      ```
+ *      Si `COUNT(DISTINCT codigo_puesto) > naves.cantidad_puestos`, la transacción
+ *      debe ser rechazada con código HTTP 400 (Bad Request).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
 /**
- * Genera automáticamente un plano estructurado realista inspirado en las
- * naves físicas de EP-EMA cuando una nave no cuenta aún con un plano personalizado.
- *
- * Estructura predeterminada:
- * - Matriz de 14 filas x 12 columnas.
- * - Fila 0: Delimitaciones espaciales ("NORTE", cabecera de sección, "SUR").
- * - Bloques de 2 filas de puestos (tipo: "PUESTO") numerados secuencialmente
- *   según la capacidad de la nave, separados cada 2 filas por 1 fila de "VACIO"
- *   (pasillo horizontal) y una columna central (columna 5) de "VACIO" (pasillo vertical).
- * - Perímetro inferior: Muestra áreas de parqueadero ("PARQUEADERO DE CARGA") y anotación ("PUERTA LANFORT").
+ * Genera el plano inicial de una nave:
+ * - Para "nave-a": genera la plantilla física detallada de EP-EMA (14 filas × 12 columnas).
+ * - Para el resto de naves ("nave-b", "nave-c", etc.): genera un lienzo 100% en blanco
+ *   (12 filas × 12 columnas de tipo "VACIO"), permitiendo diseñar cada nave desde cero.
  */
 export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
   const nave = obtenerNavePorId(naveId);
-  const totalPuestos = nave?.cantidadPuestos ?? 100;
-  const nombreNave = nave?.nombre ?? "NAVE";
-  const seccion = nombreNave.replace(/^NAVE\s*/i, "").trim();
+  const esNaveA =
+    naveId === "nave-a" ||
+    (nave?.nombre && nave.nombre.trim().toUpperCase() === "NAVE A");
 
+  // ── Si NO es NAVE A: generar lienzo 100% en blanco ────────────────────────
+  if (!esNaveA) {
+    const filas = 12;
+    const columnas = 12;
+    const celdas: CeldaPlanoNave[] = [];
+
+    for (let r = 0; r < filas; r++) {
+      for (let c = 0; c < columnas; c++) {
+        celdas.push({
+          fila: r,
+          columna: c,
+          tipo: "VACIO",
+          rowSpan: 1,
+          colSpan: 1,
+        });
+      }
+    }
+
+    const planoBlanco: PlanoEspacialNave = {
+      naveId,
+      filas,
+      columnas,
+      celdas,
+      actualizadoEn: new Date().toISOString(),
+    };
+
+    planosCache[naveId] = planoBlanco;
+    const persisted = cargarPlanosDesdeStorage();
+    persisted[naveId] = planoBlanco;
+    persistirPlanosEnStorage(persisted);
+
+    return { ...planoBlanco };
+  }
+
+  // ── Si es NAVE A: plantilla arquitectónica estructurada ────────────────────
+  const totalPuestos = nave?.cantidadPuestos ?? 100;
   const filas = 14;
   const columnas = 12;
   const celdas: CeldaPlanoNave[] = [];
@@ -390,15 +441,19 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
             texto: "NORTE",
             subtexto: "ACCESO PRINCIPAL",
             colorZona: "azul",
+            rowSpan: 1,
+            colSpan: 1,
           });
         } else if (c >= 3 && c <= 8) {
           celdas.push({
             fila: r,
             columna: c,
             tipo: "DELIMITACION",
-            texto: `SECCIÓN ${seccion || "COMERCIAL"}`,
+            texto: "SECCIÓN A",
             subtexto: "ZONA MAYORISTA",
             colorZona: "azul",
+            rowSpan: 1,
+            colSpan: 1,
           });
         } else {
           celdas.push({
@@ -408,6 +463,8 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
             texto: "SUR",
             subtexto: "SALIDA VEHICULAR",
             colorZona: "azul",
+            rowSpan: 1,
+            colSpan: 1,
           });
         }
         continue;
@@ -423,6 +480,8 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
             texto: "PARQUEADERO DE CARGA",
             subtexto: "CAMIONES / DESCARGA",
             colorZona: "rosado",
+            rowSpan: 1,
+            colSpan: 1,
           });
         } else if (c >= 9 && c <= 11) {
           celdas.push({
@@ -432,24 +491,29 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
             texto: "PUERTA LANFORT",
             subtexto: "BATERÍA SANITARIA",
             colorZona: "naranja",
+            rowSpan: 1,
+            colSpan: 1,
           });
         } else {
           celdas.push({
             fila: r,
             columna: c,
             tipo: "VACIO",
+            rowSpan: 1,
+            colSpan: 1,
           });
         }
         continue;
       }
 
       // 3. Pasillos Horizontales de Circulación (cada 2 filas de puestos)
-      // Filas 3, 6, 9 y 12 actúan como corredores horizontales
       if (r === 3 || r === 6 || r === 9 || r === 12) {
         celdas.push({
           fila: r,
           columna: c,
           tipo: "VACIO",
+          rowSpan: 1,
+          colSpan: 1,
         });
         continue;
       }
@@ -460,6 +524,8 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
           fila: r,
           columna: c,
           tipo: "VACIO",
+          rowSpan: 1,
+          colSpan: 1,
         });
         continue;
       }
@@ -472,14 +538,17 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
           tipo: "PUESTO",
           codigoPuesto: String(puestoActual),
           subtexto: "MÓDULO ESTÁNDAR",
+          rowSpan: 1,
+          colSpan: 1,
         });
         puestoActual++;
       } else {
-        // Si ya se cubrió el cupo de la nave, el resto queda como pasillo o espacio libre
         celdas.push({
           fila: r,
           columna: c,
           tipo: "VACIO",
+          rowSpan: 1,
+          colSpan: 1,
         });
       }
     }
@@ -493,7 +562,6 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
     actualizadoEn: new Date().toISOString(),
   };
 
-  // Guardar en caché y sincronizar con localStorage
   planosCache[naveId] = plano;
   const persisted = cargarPlanosDesdeStorage();
   persisted[naveId] = plano;
@@ -505,7 +573,7 @@ export function generarPlanoAutomatico(naveId: string): PlanoEspacialNave {
 /**
  * Obtiene el plano espacial de una nave.
  * Consulta primero la caché en memoria, luego `localStorage` y, si aún no existe,
- * genera el plano predeterminado automáticamente.
+ * genera el plano correspondiente (plantilla para Nave A o lienzo en blanco para otras).
  */
 export function obtenerPlanoNave(naveId: string): PlanoEspacialNave {
   if (planosCache[naveId]) {
@@ -524,11 +592,10 @@ export function obtenerPlanoNave(naveId: string): PlanoEspacialNave {
 /**
  * Guarda o actualiza la distribución del plano espacial de una nave.
  *
- * Validación Estricta de Capacidad:
- * - Cuenta cuántas celdas tienen `tipo === "PUESTO"`.
- * - Si supera `nave.cantidadPuestos`, lanza un error impidiendo el guardado.
- * - Las celdas de tipo "VACIO", "PARQUEADERO", "DELIMITACION" y "ANOTACION"
- *   NO consumen cupo del límite de puestos de la nave.
+ * Validación Inteligente de Capacidad (Soporte Modular):
+ * - Cuenta códigos de puestos ÚNICOS en la matriz (`Set` de `codigoPuesto`).
+ * - Un puesto que ocupa varias celdas (mediante `rowSpan` o repetición) cuenta como 1 cupo.
+ * - Si supera `nave.cantidadPuestos`, lanza un error descriptivo impidiendo el guardado.
  */
 export function guardarPlanoNave(
   naveId: string,
@@ -537,12 +604,18 @@ export function guardarPlanoNave(
   const nave = obtenerNavePorId(naveId);
   const limiteMaximo = nave ? nave.cantidadPuestos : 100;
 
-  // Conteo de puestos físicos en la matriz
-  const puestosEnPlano = plano.celdas.filter((c) => c.tipo === "PUESTO").length;
+  // Conteo de puestos únicos en la matriz
+  const codigosPuestosUnicos = new Set(
+    plano.celdas
+      .filter((c) => c.tipo === "PUESTO" && c.codigoPuesto?.trim())
+      .map((c) => c.codigoPuesto!.trim().toUpperCase())
+  );
 
-  if (puestosEnPlano > limiteMaximo) {
+  const totalPuestosUnicos = codigosPuestosUnicos.size;
+
+  if (totalPuestosUnicos > limiteMaximo) {
     throw new Error(
-      `No se puede guardar el plano: la cantidad de puestos ubicados (${puestosEnPlano}) excede la capacidad máxima registrada de la nave (${limiteMaximo} puestos).`
+      `No se puede guardar el plano: la cantidad de puestos únicos ubicados (${totalPuestosUnicos}) excede la capacidad máxima registrada de la nave (${limiteMaximo} puestos).`
     );
   }
 

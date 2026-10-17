@@ -172,10 +172,10 @@ export default function IngresoCatastroPage() {
   }
 
   return (
-    <div className="w-full h-full flex flex-col min-h-[100dvh] bg-institucional-whiteSmoke">
-      <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col gap-6 px-4 sm:px-6 lg:px-8 py-8">
+    <div className="w-full h-full flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke">
+      <div className="w-full max-w-none flex-1 flex flex-col min-h-0 gap-6 px-4 sm:px-6 lg:px-10 py-6">
         {/* ── Encabezado Institucional ── */}
-        <header className="flex flex-col gap-1">
+        <header className="flex flex-col gap-1 shrink-0">
           <div className="flex items-center gap-2">
             <FileSpreadsheet size={24} className="text-institucional-green" aria-hidden="true" />
             <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
@@ -387,18 +387,18 @@ export default function IngresoCatastroPage() {
               </div>
             )}
 
-            {/* Tabla con scroll horizontal */}
-            <div className="flex-1 overflow-x-auto overflow-y-auto max-h-[520px]">
+            {/* Tabla con scroll interno */}
+            <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
               <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-institucional-green/10 sticky top-0 z-10 border-b border-institucional-whiteSmokeBlack/20">
-                    <th className="px-3 py-2.5 text-center font-semibold text-base-eerieBlack w-12">#</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">CIU</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">CÉDULA</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">NOMBRES</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">ACTIVIDAD</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">NAVE</th>
-                    <th className="px-4 py-2.5 text-left font-semibold text-base-eerieBlack">PUESTO</th>
+                <thead className="sticky top-0 z-20 shadow-2xs">
+                  <tr className="bg-[#e6efe9] border-b border-institucional-whiteSmokeBlack/20">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2.5 text-center font-semibold text-base-eerieBlack w-12">#</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">CIU</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">CÉDULA</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">NOMBRES</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">ACTIVIDAD</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">NAVE</th>
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-2.5 text-left font-semibold text-base-eerieBlack">PUESTO</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-institucional-whiteSmokeBlack/10">
@@ -421,7 +421,7 @@ export default function IngresoCatastroPage() {
             </div>
 
             {/* Barra de Acciones Inferior */}
-            <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-institucional-whiteSmokeBlack/15 bg-base-white">
+            <div className="p-4 flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-institucional-whiteSmokeBlack/15 bg-base-white shrink-0">
               <span className="text-xs text-gray-500 order-2 sm:order-1">
                 Revise la correspondencia de puestos y nombres antes de confirmar.
               </span>

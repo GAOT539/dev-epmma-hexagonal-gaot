@@ -366,9 +366,9 @@ export default function ControlSupervisoresPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
+    <div className="flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
       {/* ── Encabezado Institucional ── */}
-      <header className="mb-6 w-full max-w-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <header className="mb-4 shrink-0 w-full max-w-none flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <ScrollText size={24} className="text-institucional-green" aria-hidden="true" />
@@ -397,9 +397,9 @@ export default function ControlSupervisoresPage() {
         </Button>
       </header>
 
-      <div className="w-full max-w-none space-y-4">
+      <div className="flex-1 flex flex-col min-h-0 space-y-4">
         {/* ── Filtros Quirúrgicos ── */}
-        <div className="rounded-2xl bg-base-white p-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
+        <div className="shrink-0 rounded-2xl bg-base-white p-4 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 items-end">
             {/* Buscador de texto */}
             <div className="w-full">
@@ -490,8 +490,8 @@ export default function ControlSupervisoresPage() {
         </div>
 
         {/* ── Tabla Principal con Globitos e Interacción al Clic ── */}
-        <div className="rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
-          <div className="px-5 py-3 border-b border-institucional-whiteSmokeBlack/15 flex items-center justify-between">
+        <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
+          <div className="shrink-0 px-5 py-3 border-b border-institucional-whiteSmokeBlack/15 flex items-center justify-between">
             <p className="text-xs font-semibold text-gray-700">
               {sesiones.length} sesiones de control registradas
             </p>
@@ -500,7 +500,7 @@ export default function ControlSupervisoresPage() {
             </p>
           </div>
 
-          <div className="p-3 md:p-0">
+          <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0 p-3 md:p-0">
             {cargando ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -510,27 +510,27 @@ export default function ControlSupervisoresPage() {
               </div>
             ) : (
               <table className="w-full text-sm block md:table">
-                <thead className="hidden md:table-header-group">
-                  <tr className="bg-institucional-green/5 border-b border-institucional-whiteSmokeBlack/15">
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[110px]">
+                <thead className="hidden md:table-header-group sticky top-0 z-20">
+                  <tr className="bg-[#e6efe9] border-b border-institucional-whiteSmokeBlack/15">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[110px]">
                       Fecha de Lista
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[140px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[140px]">
                       Inicio Toma (Real)
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[150px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[150px]">
                       Supervisor
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[100px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[100px]">
                       Nave
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[140px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[140px]">
                       Acción
                     </th>
-                    <th className="px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[200px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[200px]">
                       Estado / Anotaciones
                     </th>
-                    <th className="px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[130px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[130px]">
                       Puestos / Asistencia
                     </th>
                   </tr>
@@ -646,7 +646,7 @@ export default function ControlSupervisoresPage() {
 
           {/* Paginación */}
           {totalPaginas > 1 && (
-            <div className="px-5 py-3 border-t border-institucional-whiteSmokeBlack/15 flex items-center justify-between">
+            <div className="shrink-0 px-5 py-3 border-t border-institucional-whiteSmokeBlack/15 flex items-center justify-between bg-base-white">
               <p className="text-xs text-gray-700 font-medium">
                 Página {pagina} de {totalPaginas}
               </p>
@@ -912,17 +912,17 @@ export default function ControlSupervisoresPage() {
                 </div>
 
                 {/* Tabla de Comerciantes de la Sesión */}
-                <div className="rounded-xl border border-gray-200 overflow-hidden">
+                <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[400px] overflow-y-auto">
                   <table className="w-full text-xs">
-                    <thead className="bg-gray-100 text-base-eerieBlack font-semibold">
-                      <tr>
-                        <th className="px-3 py-2 text-left">Puesto</th>
-                        <th className="px-3 py-2 text-left">CIU</th>
-                        <th className="px-3 py-2 text-left">Cédula</th>
-                        <th className="px-3 py-2 text-left">Contribuyente</th>
-                        <th className="px-3 py-2 text-left">Estado</th>
-                        <th className="px-3 py-2 text-left">Origen / Método</th>
-                        <th className="px-3 py-2 text-right">Hora</th>
+                    <thead className="sticky top-0 z-20 bg-[#e6efe9] text-base-eerieBlack font-semibold">
+                      <tr className="bg-[#e6efe9]">
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Puesto</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">CIU</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Cédula</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Contribuyente</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Estado</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Origen / Método</th>
+                        <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-right">Hora</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">

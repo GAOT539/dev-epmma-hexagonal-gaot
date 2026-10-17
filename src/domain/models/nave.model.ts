@@ -9,7 +9,8 @@ export type TipoCeldaPlano =
   | "VACIO"         // Espacio en blanco / Pasillo / Corredor de circulación
   | "PARQUEADERO"   // Delimitación de parqueadero o zona vehicular (ej. PARQUEADERO DE GRANOS)
   | "DELIMITACION"  // Referencias espaciales o cabeceras (ej. NORTE, SUR, SECCIÓN PAPAS, PUERTA LANFORT)
-  | "ANOTACION";    // Notas administrativas o técnicas (ej. Memorandos, observaciones de espacio)
+  | "ANOTACION"     // Notas administrativas o técnicas (ej. Memorandos, observaciones de espacio)
+  | "BANO";         // Servicios higiénicos, baños o baterías sanitarias
 
 export interface CeldaPlanoNave {
   fila: number;
@@ -23,6 +24,10 @@ export interface CeldaPlanoNave {
   subtexto?: string;
   /** Color visual opcional para distinguir secciones o estados */
   colorZona?: "amarillo" | "rosado" | "naranja" | "azul" | "verde" | "gris";
+  /** Alto en celdas para puestos modulares (por defecto 1) */
+  rowSpan?: number;
+  /** Ancho en celdas para puestos modulares (por defecto 1) */
+  colSpan?: number;
 }
 
 export interface PlanoEspacialNave {

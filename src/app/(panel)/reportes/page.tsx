@@ -502,8 +502,8 @@ export default function ReportesPage() {
   const handleExportPDF = imprimirPDF;
 
   return (
-    <div className="min-h-[100dvh] bg-institucional-whiteSmoke px-4 py-8 sm:px-6 lg:px-10">
-      <header className="mb-6 max-w-full mx-auto">
+    <div className="flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
+      <header className="mb-4 shrink-0">
         <div className="flex items-center gap-2">
           <BarChart3 size={22} className="text-institucional-green" aria-hidden="true" />
           <h1 className="text-2xl font-bold leading-tight text-institucional-green sm:text-3xl">
@@ -512,7 +512,7 @@ export default function ReportesPage() {
         </div>
       </header>
 
-      <div className="mx-auto max-w-full space-y-6">
+      <div className="flex-1 flex flex-col min-h-0 space-y-4">
         {cargandoInicial ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
             <Loader2 className="h-8 w-8 animate-spin" />
@@ -521,7 +521,7 @@ export default function ReportesPage() {
         ) : (
           <>
             {/* ── Controles Unificados ── */}
-            <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20">
+            <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 shrink-0">
               <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 w-full">
                 {/* Buscador de Comerciantes */}
                 <div className="flex flex-col gap-1.5 w-full md:flex-1 md:min-w-[240px]">
@@ -684,169 +684,171 @@ export default function ReportesPage() {
             </div>
 
             {/* ── Tabla de resultados ── */}
-            <div className="rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-x-auto">
-              <table className="w-full text-xs" id="tabla-reporte">
-                <thead>
-                  <tr className="bg-institucional-green text-base-white">
-                    <th className="sticky left-0 bg-institucional-green px-3 py-2.5 text-left font-semibold z-10">
-                      #
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold min-w-[80px]">
-                      CIU
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold min-w-[90px]">
-                      CÉDULA
-                    </th>
-                    <th className="sticky left-8 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[160px] z-10">
-                      CONTRIBUYENTE
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold min-w-[120px]">
-                      ACTIVIDAD
-                    </th>
-                    <th className="px-3 py-2.5 text-left font-semibold min-w-[100px]">
-                      NAVE
-                    </th>
-                    <th className="px-2 py-2.5 text-center font-semibold min-w-[60px]">
-                      PUESTO
-                    </th>
-                    {soloObservaciones ? (
-                      <th className="px-3 py-2.5 text-left font-semibold min-w-[320px]">
-                        OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS
+            <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
+              <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
+                <table className="w-full text-xs" id="tabla-reporte">
+                  <thead className="sticky top-0 z-20 bg-institucional-green text-base-white">
+                    <tr className="bg-institucional-green text-base-white">
+                      <th className="sticky left-0 top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold z-30">
+                        #
                       </th>
-                    ) : (
-                      <>
-                        {fechas.map((f) => (
-                          <th
-                            key={f}
-                            className="px-1 py-2.5 text-center font-semibold min-w-[36px]"
-                          >
-                            {format(new Date(f + "T00:00:00"), "dd")}
-                            <br />
-                            <span className="font-normal opacity-75">
-                              {format(new Date(f + "T00:00:00"), "MMM", {
-                                locale: es,
-                              })}
-                            </span>
-                          </th>
-                        ))}
-                        {incluirObservaciones && (
-                          <th className="px-3 py-2.5 text-left font-semibold min-w-[150px]">
-                            Observaciones
-                          </th>
-                        )}
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {cargandoReporte ? (
-                    <tr>
-                      <td
-                        colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
-                        className="px-4 py-12 text-center text-sm text-gray-700"
-                      >
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <div className="h-6 w-6 rounded-full border-2 border-institucional-green/30 border-t-institucional-green animate-spin" />
-                          <span>Generando reporte de asistencia...</span>
-                        </div>
-                      </td>
+                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[80px] z-20">
+                        CIU
+                      </th>
+                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[90px] z-20">
+                        CÉDULA
+                      </th>
+                      <th className="sticky left-8 top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[160px] z-30">
+                        CONTRIBUYENTE
+                      </th>
+                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[120px] z-20">
+                        ACTIVIDAD
+                      </th>
+                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[100px] z-20">
+                        NAVE
+                      </th>
+                      <th className="sticky top-0 bg-institucional-green px-2 py-2.5 text-center font-semibold min-w-[60px] z-20">
+                        PUESTO
+                      </th>
+                      {soloObservaciones ? (
+                        <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[320px] z-20">
+                          OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS
+                        </th>
+                      ) : (
+                        <>
+                          {fechas.map((f) => (
+                            <th
+                              key={f}
+                              className="sticky top-0 bg-institucional-green px-1 py-2.5 text-center font-semibold min-w-[36px] z-20"
+                            >
+                              {format(new Date(f + "T00:00:00"), "dd")}
+                              <br />
+                              <span className="font-normal opacity-75">
+                                {format(new Date(f + "T00:00:00"), "MMM", {
+                                  locale: es,
+                                })}
+                              </span>
+                            </th>
+                          ))}
+                          {incluirObservaciones && (
+                            <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[150px] z-20">
+                              Observaciones
+                            </th>
+                          )}
+                        </>
+                      )}
                     </tr>
-                  ) : reporteFiltrado.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
-                        className="px-4 py-12 text-center text-sm text-gray-500"
-                      >
-                        <div className="flex flex-col items-center justify-center gap-2">
-                          <Search size={24} className="text-gray-400" />
-                          <span>No se encontraron comerciantes que coincidan con los criterios de búsqueda.</span>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : (
-                    reporteFiltrado.map((row, i) => (
-                      <tr
-                        key={row.comerciante.idInterno}
-                        className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
-                      >
-                        <td className="sticky left-0 bg-base-white px-3 py-2 text-gray-700 font-medium z-10">
-                          {i + 1}
-                        </td>
-                        <td className="px-3 py-2 text-sm font-mono font-medium text-acento-azul1">
-                          {row.comerciante.ciu}
-                        </td>
-                        <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
-                          {row.comerciante.cedula}
-                        </td>
-                        <td className="sticky left-8 bg-base-white px-3 py-2 text-sm font-semibold text-base-eerieBlack z-10">
-                          <div className="truncate max-w-[200px]">
-                            {row.comerciante.contribuyente}
+                  </thead>
+                  <tbody>
+                    {cargandoReporte ? (
+                      <tr>
+                        <td
+                          colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
+                          className="px-4 py-12 text-center text-sm text-gray-700"
+                        >
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <div className="h-6 w-6 rounded-full border-2 border-institucional-green/30 border-t-institucional-green animate-spin" />
+                            <span>Generando reporte de asistencia...</span>
                           </div>
                         </td>
-                        <td className="px-3 py-2 text-sm font-semibold text-gray-900">
-                          {row.comerciante.actividad}
+                      </tr>
+                    ) : reporteFiltrado.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
+                          className="px-4 py-12 text-center text-sm text-gray-500"
+                        >
+                          <div className="flex flex-col items-center justify-center gap-2">
+                            <Search size={24} className="text-gray-400" />
+                            <span>No se encontraron comerciantes que coincidan con los criterios de búsqueda.</span>
+                          </div>
                         </td>
-                        <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
-                          {row.naveNombre}
-                        </td>
-                        <td className="px-2 py-2 text-center text-sm font-mono font-medium text-base-eerieBlack">
-                          {row.puestoCode}
-                        </td>
-                        {soloObservaciones ? (
-                          <td className="px-3 py-2 text-xs font-semibold text-gray-900 leading-relaxed">
-                            {row.observaciones || "—"}
+                      </tr>
+                    ) : (
+                      reporteFiltrado.map((row, i) => (
+                        <tr
+                          key={row.comerciante.idInterno}
+                          className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
+                        >
+                          <td className="sticky left-0 bg-base-white px-3 py-2 text-gray-700 font-medium z-10">
+                            {i + 1}
                           </td>
-                        ) : (
-                          <>
-                            {row.estados.map((estado, j) => {
-                              const config =
-                                ESTADO_COLORES[estado] ?? ESTADO_COLORES["Presente"];
-                              return (
-                                <td key={j} className="px-0.5 py-1 text-center">
-                                  <span
-                                    className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                                  >
-                                    {ESTADO_LABELS[estado]}
+                          <td className="px-3 py-2 text-sm font-mono font-medium text-acento-azul1">
+                            {row.comerciante.ciu}
+                          </td>
+                          <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
+                            {row.comerciante.cedula}
+                          </td>
+                          <td className="sticky left-8 bg-base-white px-3 py-2 text-sm font-semibold text-base-eerieBlack z-10">
+                            <div className="truncate max-w-[200px]">
+                              {row.comerciante.contribuyente}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-sm font-semibold text-gray-900">
+                            {row.comerciante.actividad}
+                          </td>
+                          <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
+                            {row.naveNombre}
+                          </td>
+                          <td className="px-2 py-2 text-center text-sm font-mono font-medium text-base-eerieBlack">
+                            {row.puestoCode}
+                          </td>
+                          {soloObservaciones ? (
+                            <td className="px-3 py-2 text-xs font-semibold text-gray-900 leading-relaxed">
+                              {row.observaciones || "—"}
+                            </td>
+                          ) : (
+                            <>
+                              {row.estados.map((estado, j) => {
+                                const config =
+                                  ESTADO_COLORES[estado] ?? ESTADO_COLORES["Presente"];
+                                return (
+                                  <td key={j} className="px-0.5 py-1 text-center">
+                                    <span
+                                      className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
+                                    >
+                                      {ESTADO_LABELS[estado]}
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                              {incluirObservaciones && (
+                                <td className="px-3 py-2 max-w-[200px]">
+                                  <span className="line-clamp-2 text-xs font-semibold text-gray-900">
+                                    {row.observaciones || "—"}
                                   </span>
                                 </td>
-                              );
-                            })}
-                            {incluirObservaciones && (
-                              <td className="px-3 py-2 max-w-[200px]">
-                                <span className="line-clamp-2 text-xs font-semibold text-gray-900">
-                                  {row.observaciones || "—"}
-                                </span>
-                              </td>
-                            )}
-                          </>
-                        )}
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Leyenda */}
-            {!soloObservaciones && (
-              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-700 px-1">
-                <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
-                {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
-                  const config = ESTADO_COLORES[estado];
-                  if (!config) return null;
-                  return (
-                    <div key={estado} className="flex items-center gap-1.5">
-                      <span
-                        className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                      >
-                        {label}
-                      </span>
-                      <span>{estado}</span>
-                    </div>
-                  );
-                })}
+                              )}
+                            </>
+                          )}
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
-            )}
+
+              {/* Leyenda en el pie de la tarjeta */}
+              {!soloObservaciones && (
+                <div className="shrink-0 border-t border-institucional-whiteSmokeBlack/15 px-4 py-2.5 bg-base-white flex flex-wrap items-center gap-4 text-xs text-gray-700">
+                  <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
+                  {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
+                    const config = ESTADO_COLORES[estado];
+                    if (!config) return null;
+                    return (
+                      <div key={estado} className="flex items-center gap-1.5">
+                        <span
+                          className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
+                        >
+                          {label}
+                        </span>
+                        <span>{estado}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </>
         )}
       </div>

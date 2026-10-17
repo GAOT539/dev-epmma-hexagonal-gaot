@@ -374,9 +374,9 @@ export default function ConfiguracionUsuariosPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-institucional-whiteSmoke flex flex-col">
-      <div className="w-full max-w-7xl mx-auto flex-1 flex flex-col gap-6 px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+    <div className="flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke">
+      <div className="w-full max-w-none flex-1 flex flex-col min-h-0 gap-6 px-4 sm:px-6 lg:px-10 py-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2 shrink-0">
           <div className="flex flex-col gap-2">
             <Link
               href="/configuracion"
@@ -404,8 +404,8 @@ export default function ConfiguracionUsuariosPage() {
           </div>
         </div>
 
-        <div className="flex-1 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden flex flex-col">
-          <div className="flex-1 overflow-x-auto overflow-y-auto">
+        <div className="flex-1 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden flex flex-col min-h-0">
+          <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
             {cargando ? (
               <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
                 <Loader2 className="h-8 w-8 animate-spin" />
@@ -413,24 +413,24 @@ export default function ConfiguracionUsuariosPage() {
               </div>
             ) : (
               <table className="w-full text-base lg:text-lg">
-                <thead>
-                  <tr className="bg-institucional-green/10">
-                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                <thead className="sticky top-0 z-20">
+                  <tr className="bg-[#e6efe9]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Nombre
                     </th>
-                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Cédula
                     </th>
-                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Correo
                     </th>
-                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Rol
                     </th>
-                    <th className="p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-left font-semibold text-base-eerieBlack">
                       Naves
                     </th>
-                    <th className="p-3 lg:p-4 text-center font-semibold text-base-eerieBlack">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] p-3 lg:p-4 text-center font-semibold text-base-eerieBlack">
                       Acciones
                     </th>
                   </tr>
