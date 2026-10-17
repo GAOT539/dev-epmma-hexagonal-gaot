@@ -38,3 +38,8 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 - El sistema debe ser 100% adaptable en todo momento.
 - El diseño debe construirse para que se vea y funcione perfecto primero en dispositivos móviles.
 - Las interfaces deben escalar a ancho completo (`w-full`) y reorganizarse de forma fluida en monitores de escritorio aprovechando los breakpoints de Tailwind (`md:`, `lg:`, `xl:`).
+
+## 6. REGLA DE PROTECCIÓN DEL FRONTEND
+
+- Quedan estrictamente prohibidas las modificaciones, refactorizaciones, cambios de estilo o alteraciones en cualquier archivo dentro de `src/app/(panel)/`, `src/app/(auth)/`, `src/components/` o páginas generales del frontend.
+- Toda la energía del asistente debe concentrarse exclusivamente en la capa de infraestructura backend, base de datos, migraciones Prisma, repositorios adaptadores y API Routes (`src/app/api/v1/`).

@@ -1,0 +1,207 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Rol {
+  SUPERADMIN
+  TIC
+  DIRECTOR
+  JEFE_OPERATIVO
+  SUPERVISOR
+}
+
+enum EstadoUsuario {
+  Habilitado
+  Deshabilitado
+}
+
+enum EstadoNave {
+  Habilitado
+  Deshabilitado
+}
+
+enum EstadoPuesto {
+  Ocupado
+  Vacante
+}
+
+enum EstadoComerciante {
+  Habilitado
+  Deshabilitado
+}
+
+enum EstadoAsistencia {
+  Presente
+  Ausente
+  Permiso
+  Vacante
+}
+
+enum TipoObservacion {
+  ObservacionesGeneral
+  Citaciones
+  Notificacion
+}
+
+enum EtiquetaControl {
+  EN_FECHA
+  CON_PERSISTENCIA
+  MODIFICADO_TRAS_PERSISTENCIA
+  CON_RETRASO
+}
+
+model Usuario {
+  id                 String        @id @default(uuid())
+  cedula             String        @unique @db.VarChar(20)
+  nombres            String        @db.VarChar(100)
+  apellidos          String        @db.VarChar(100)
+  correo             String?       @unique @db.VarChar(150)
+  rol                Rol           @default(SUPERVISOR)
+  mustChangePassword Boolean       @default(false)
+  passwordHash       String        @db.VarChar(255)
+  navesAsignadas     Json?         // Array de IDs de naves asignadas: ["nave-a", "nave-b"]
+  estado             EstadoUsuario @default(Habilitado)
+  creadoEn           DateTime      @default(now())
+  actualizadoEn      DateTime      @updatedAt
+
+  // Relaciones
+  sesionesControl    SesionControlSupervisor[]
+
+  @@map("usuarios")
+}
+
+model Nave {
+  id              String       @id @default(uuid())
+  nombre          String       @unique @db.VarChar(100)
+  cantidadPuestos Int          @default(100)
+  limitePuestos   Int          @default(100)
+  supervisores    Json?        // Nombres de supervisores asignados: ["María Torres Guzmán"]
+  estadoRegistro  EstadoNave   @default(Habilitado)
+  creadoEn        DateTime     @default(now())
+  actualizadoEn   DateTime     @updatedAt
+
+  // Relaciones
+  plano           PlanoNave?
+  puestos         Puesto[]
+  sesionesControl SesionControlSupervisor[]
+
+  @@map("naves")
+}
+
+model PlanoNave {
+  id            String   @id @default(uuid())
+  naveId        String   @unique
+  filas         Int      @default(12)
+  columnas      Int      @default(12)
+  planoJson     Json     // Matriz completa de celdas con soporte rowSpan, colSpan, tipo, etc.
+  actualizadoEn DateTime @updatedAt
+
+  // Relación con Nave
+  nave          Nave     @relation(fields: [naveId], references: [id], onDelete: Cascade)
+
+  @@map("planos_naves")
+}
+
+model Puesto {
+  id            String       @id @default(uuid())
+  codigo        String       @db.VarChar(50)
+  naveId        String
+  estado        EstadoPuesto @default(Vacante)
+  comercianteId String?      @unique
+
+  creadoEn      DateTime     @default(now())
+  actualizadoEn DateTime     @updatedAt
+
+  // Relaciones
+  nave          Nave         @relation(fields: [naveId], references: [id], onDelete: Cascade)
+  comerciante   Comerciante? @relation(fields: [comercianteId], references: [idInterno], onDelete: SetNull)
+  asistencias   RegistroAsistencia[]
+
+  @@unique([naveId, codigo])
+  @@index([naveId])
+  @@map("puestos")
+}
+
+model Comerciante {
+  idInterno        String            @id @default(uuid())
+  ciu              String            @default("-") @db.VarChar(50)
+  cedula           String            @unique @db.VarChar(20)
+  contribuyente    String            @db.VarChar(200)
+  actividad        String            @default("General") @db.VarChar(200)
+  puestoId         String?           @db.VarChar(50)
+  nave             String?           @db.VarChar(100)
+  estadoRegistro   EstadoComerciante @default(Habilitado)
+  creadoPor        String?           @db.VarChar(100)
+  modificadoPor    String?           @db.VarChar(100)
+  deshabilitadoPor String?           @db.VarChar(100)
+  creadoEn         DateTime          @default(now())
+  actualizadoEn    DateTime          @updatedAt
+
+  // Relaciones
+  puesto           Puesto?
+  asistencias      RegistroAsistencia[]
+
+  @@index([cedula])
+  @@index([ciu])
+  @@map("comerciantes")
+}
+
+model RegistroAsistencia {
+  id               String           @id @default(uuid())
+  comercianteId    String
+  puestoId         String
+  fecha            String           @db.VarChar(10) // Formato YYYY-MM-DD
+  estado           EstadoAsistencia @default(Presente)
+  observacion      String?          @db.Text
+  observacionTexto String?          @db.Text
+  permisoInicio    String?          @db.VarChar(10) // YYYY-MM-DD
+  permisoFin       String?          @db.VarChar(10) // YYYY-MM-DD
+  observaciones    Json?            // Array estructurado: [{ id, tipo, numeroDocumento, texto, fechaHora }]
+  permisos         Json?            // Array estructurado: [{ id, motivo, fechaAsignacion, fechaInicio, fechaFin }]
+  creadoEn         DateTime         @default(now())
+  actualizadoEn    DateTime         @updatedAt
+
+  // Relaciones
+  comerciante      Comerciante      @relation(fields: [comercianteId], references: [idInterno], onDelete: Cascade)
+  puesto           Puesto           @relation(fields: [puestoId], references: [id], onDelete: Cascade)
+
+  @@unique([comercianteId, fecha])
+  @@index([fecha])
+  @@index([puestoId])
+  @@map("registros_asistencia")
+}
+
+model SesionControlSupervisor {
+  id                          String   @id @default(uuid())
+  supervisorId                String
+  supervisorNombre            String   @db.VarChar(200)
+  naveId                      String
+  naveNombre                  String   @db.VarChar(100)
+  fechaJornada                String   @db.VarChar(10) // YYYY-MM-DD
+  timestampInicio             DateTime @default(now())
+  timestampUltimaModificacion DateTime @updatedAt
+  accion                      String   @db.VarChar(150)
+  esPersistencia              Boolean  @default(false)
+  fechaOrigenPersistencia     String?  @db.VarChar(10)
+  comentarioPersistencia      String?  @db.Text
+  modificadoTrasPersistencia  Boolean  @default(false)
+  tieneRetraso                Boolean  @default(false)
+  detalleRetraso              String?  @db.VarChar(255)
+  etiquetas                   Json     // Array: ["EN_FECHA", "CON_PERSISTENCIA", ...]
+  resumen                     Json     // Objeto: { totalOcupados, tomados, presentes, ausentes, permisos }
+  detallesComerciantes        Json     // Array detallado: [{ comercianteId, ciu, cedula, contribuyente, puesto, estado, metodo, horaRegistro }]
+
+  // Relaciones
+  supervisor                  Usuario  @relation(fields: [supervisorId], references: [id], onDelete: Cascade)
+  nave                        Nave     @relation(fields: [naveId], references: [id], onDelete: Cascade)
+
+  @@index([supervisorId])
+  @@index([naveId])
+  @@index([fechaJornada])
+  @@map("sesiones_control_supervisor")
+}
