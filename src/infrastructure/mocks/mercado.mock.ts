@@ -686,6 +686,15 @@ export function agregarObservacionMock(
   numeroDocumento?: string,
   fechaHora?: string
 ): ObservacionDetalle {
+  if (
+    (tipo === "Citaciones" || tipo === "Notificación") &&
+    !numeroDocumento?.trim()
+  ) {
+    throw new Error(
+      "El número de referencia o documento es obligatorio para Citaciones y Notificaciones."
+    );
+  }
+
   let registros = asistenciaHistorica.get(fecha);
   if (!registros) {
     registros = [];

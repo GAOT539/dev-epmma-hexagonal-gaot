@@ -432,31 +432,31 @@ export default function ReportesPage() {
             <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
               <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
                 <table className="w-full text-xs" id="tabla-reporte">
-                  <thead className="sticky top-0 z-20 bg-institucional-green text-base-white">
-                    <tr className="bg-institucional-green text-base-white">
-                      <th className="sticky left-0 top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold z-30">
+                  <thead className="sticky top-0 z-20 bg-[#e6efe9] text-base-eerieBlack">
+                    <tr className="bg-[#e6efe9] text-base-eerieBlack border-b border-institucional-whiteSmokeBlack/15">
+                      <th className="sticky left-0 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold z-30">
                         #
                       </th>
-                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[80px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[80px] z-20">
                         CIU
                       </th>
-                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[90px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[90px] z-20">
                         CÉDULA
                       </th>
-                      <th className="sticky left-8 top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[160px] z-30">
+                      <th className="sticky left-8 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[160px] z-30">
                         CONTRIBUYENTE
                       </th>
-                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[120px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[120px] z-20">
                         ACTIVIDAD
                       </th>
-                      <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[100px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[100px] z-20">
                         NAVE
                       </th>
-                      <th className="sticky top-0 bg-institucional-green px-2 py-2.5 text-center font-semibold min-w-[60px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-2 py-2.5 text-center font-semibold min-w-[60px] z-20">
                         PUESTO
                       </th>
                       {soloObservaciones ? (
-                        <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[320px] z-20">
+                        <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[320px] z-20">
                           OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS
                         </th>
                       ) : (
@@ -464,11 +464,11 @@ export default function ReportesPage() {
                           {fechas.map((f) => (
                             <th
                               key={f}
-                              className="sticky top-0 bg-institucional-green px-1 py-2.5 text-center font-semibold min-w-[36px] z-20"
+                              className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-1 py-2.5 text-center font-semibold min-w-[36px] z-20"
                             >
                               {format(new Date(f + "T00:00:00"), "dd")}
                               <br />
-                              <span className="font-normal opacity-75">
+                              <span className="font-normal text-gray-700">
                                 {format(new Date(f + "T00:00:00"), "MMM", {
                                   locale: es,
                                 })}
@@ -476,7 +476,7 @@ export default function ReportesPage() {
                             </th>
                           ))}
                           {incluirObservaciones && (
-                            <th className="sticky top-0 bg-institucional-green px-3 py-2.5 text-left font-semibold min-w-[150px] z-20">
+                            <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[150px] z-20">
                               Observaciones
                             </th>
                           )}

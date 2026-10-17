@@ -76,17 +76,7 @@ export default function ListasPage() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [viewMode, setViewMode] = useState<"lista" | "treemap" | "croquis">(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const saved = localStorage.getItem("epmma_last_view_mode");
-        if (saved === "lista" || saved === "treemap" || saved === "croquis") return saved;
-      } catch {
-        // Ignorar en entornos sin acceso a storage
-      }
-    }
-    return "lista";
-  });
+  const [viewMode, setViewMode] = useState<"lista" | "treemap" | "croquis">("lista");
   const [planoNave, setPlanoNave] = useState<PlanoEspacialNave | null>(null);
   const [overrides, setOverrides] = useState<Record<string, EstadoAsistencia>>({});
 
@@ -173,14 +163,16 @@ export default function ListasPage() {
   // Vista efectiva derivada (preserva la preferencia del usuario si la nave actual no tiene croquis completo)
   const vistaEfectiva = viewMode === "croquis" && !croquisCompleto ? "lista" : viewMode;
 
-  // Persistencia de la preferencia de vista por usuario
+  // Persistencia de la preferencia de vista exclusivamente por usuario
   useEffect(() => {
     if (typeof window === "undefined" || !user?.id) return;
     try {
       const userKey = `ep_ema_view_mode_${user.id}`;
-      const saved = localStorage.getItem(userKey) || localStorage.getItem("epmma_last_view_mode");
+      const saved = localStorage.getItem(userKey);
       if (saved === "lista" || saved === "treemap" || saved === "croquis") {
         queueMicrotask(() => setViewMode(saved));
+      } else {
+        queueMicrotask(() => setViewMode("lista"));
       }
     } catch {
       // Ignorar en entornos sin acceso a storage
@@ -198,11 +190,10 @@ export default function ListasPage() {
       else siguiente = "lista";
     }
     setViewMode(siguiente);
-    if (typeof window !== "undefined") {
-      const userKey = user?.id ? `ep_ema_view_mode_${user.id}` : "epmma_last_view_mode";
+    if (typeof window !== "undefined" && user?.id) {
+      const userKey = `ep_ema_view_mode_${user.id}`;
       try {
         localStorage.setItem(userKey, siguiente);
-        localStorage.setItem("epmma_last_view_mode", siguiente);
       } catch (err) {
         console.warn("Error al guardar preferencia de vista:", err);
       }

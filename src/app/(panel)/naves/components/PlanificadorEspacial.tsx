@@ -361,34 +361,65 @@ export function PlanificadorEspacial({
     const celdaOrigen = celdasMap.get(`${sFila}-${sCol}`);
     if (!celdaOrigen || celdaOrigen.tipo === "VACIO") return;
 
+    const origRSpan = celdaOrigen.rowSpan || 1;
+    const origCSpan = celdaOrigen.colSpan || 1;
+    const esModular = origRSpan > 1 || origCSpan > 1;
+
+    const rSpanEfectivo = Math.min(origRSpan, planoActual.filas - targetFila);
+    const cSpanEfectivo = Math.min(origCSpan, planoActual.columnas - targetColumna);
+
     const celdaDestino = celdasMap.get(`${targetFila}-${targetColumna}`);
 
-    const nuevasCeldas = planoActual.celdas.filter(
-      (c) =>
-        !(c.fila === sFila && c.columna === sCol) &&
-        !(c.fila === targetFila && c.columna === targetColumna)
-    );
+    // Filtrar celdas eliminadas/absorbidas (origen y celdas cubiertas por el rectángulo destino)
+    const nuevasCeldas = planoActual.celdas.filter((c) => {
+      // Excluir celda de origen
+      if (c.fila === sFila && c.columna === sCol) return false;
 
-    // Mover origen a posición destino
+      // Excluir cualquier celda dentro del rectángulo destino ocupado por el bloque
+      if (
+        c.fila >= targetFila &&
+        c.fila < targetFila + rSpanEfectivo &&
+        c.columna >= targetColumna &&
+        c.columna < targetColumna + cSpanEfectivo
+      ) {
+        return false;
+      }
+
+      return true;
+    });
+
+    // Mover origen a posición destino con spans efectivos
     nuevasCeldas.push({
       ...celdaOrigen,
       fila: targetFila,
       columna: targetColumna,
+      rowSpan: rSpanEfectivo > 1 ? rSpanEfectivo : undefined,
+      colSpan: cSpanEfectivo > 1 ? cSpanEfectivo : undefined,
     });
 
-    // Si destino tenía contenido, lo intercambiamos; de lo contrario queda como VACIO
-    if (celdaDestino && celdaDestino.tipo !== "VACIO") {
-      nuevasCeldas.push({
-        ...celdaDestino,
-        fila: sFila,
-        columna: sCol,
-      });
-    } else {
+    // Origen queda como VACIO o intercambia si era 1x1 con celda no vacía
+    if (esModular) {
       nuevasCeldas.push({
         fila: sFila,
         columna: sCol,
         tipo: "VACIO",
+        rowSpan: 1,
+        colSpan: 1,
       });
+    } else {
+      if (celdaDestino && celdaDestino.tipo !== "VACIO") {
+        nuevasCeldas.push({
+          ...celdaDestino,
+          fila: sFila,
+          columna: sCol,
+        });
+      } else {
+        nuevasCeldas.push({
+          fila: sFila,
+          columna: sCol,
+          tipo: "VACIO",
+        });
+      }
     }
 
     const nuevoPlano: PlanoEspacialNave = {
