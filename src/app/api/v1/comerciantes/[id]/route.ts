@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante } from "@prisma/client";
+import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -111,6 +112,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
       return com;
     });
+
+    if (puestoNuevo) {
+      await asegurarAsistenciaInicialDelDia();
+    }
 
     return NextResponse.json(actualizado);
   } catch (error) {

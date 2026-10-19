@@ -2,6 +2,7 @@
 
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
+import crypto from "crypto";
 
 declare global {
   var __epmma_cron_2am_initialized: boolean | undefined;
@@ -23,6 +24,18 @@ export function obtenerFechaHoyEcuador(): string {
 }
 
 /**
+ * Obtiene la hora actual (0-23) en la zona horaria oficial de Ecuador (America/Guayaquil).
+ */
+export function obtenerHoraEcuador(): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Guayaquil",
+    hour: "numeric",
+    hour12: false,
+  }).formatToParts(new Date());
+  return parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+}
+
+/**
  * Asegura que todos los comerciantes con puesto ocupado y estado habilitado tengan
  * su registro de asistencia para el día de hoy inicializado en "Presente" (o "Permiso"
  * si tienen un permiso vigente registrado).
@@ -35,7 +48,9 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
   totalInicializados: number;
   fecha: string;
 }> {
-  const hoyStr = fechaHoyStr || obtenerFechaHoyEcuador();
+  // Blindaje estricto: solo se generan registros para hoy en Ecuador (nunca días pasados ni futuros)
+  const hoyReal = obtenerFechaHoyEcuador();
+  const hoyStr = fechaHoyStr && fechaHoyStr === hoyReal ? fechaHoyStr : hoyReal;
 
   // 1. Obtener todos los puestos ocupados con comerciantes habilitados
   const puestosOcupados = await prisma.puesto.findMany({
@@ -52,7 +67,10 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
   });
 
   if (puestosOcupados.length === 0) {
-    globalThis.__epmma_last_2am_run_date = hoyStr;
+    const hour = obtenerHoraEcuador();
+    if (hour >= 2) {
+      globalThis.__epmma_last_2am_run_date = hoyStr;
+    }
     globalThis.__epmma_last_occupied_count = 0;
     return { totalInicializados: 0, fecha: hoyStr };
   }
@@ -71,57 +89,99 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
 
   // Si todos los puestos ocupados ya tienen su registro hoy, finalizar en silencio sin escrituras innecesarias
   if (faltantes.length === 0) {
-    globalThis.__epmma_last_2am_run_date = hoyStr;
+    const hour = obtenerHoraEcuador();
+    if (hour >= 2) {
+      globalThis.__epmma_last_2am_run_date = hoyStr;
+    }
     globalThis.__epmma_last_occupied_count = puestosOcupados.length;
     return { totalInicializados: 0, fecha: hoyStr };
   }
 
-  let totalInicializados = 0;
+  // 4. Identificar permisos vigentes para los comerciantes faltantes
+  const faltantesComercianteIds = faltantes
+    .map((p) => p.comerciante?.idInterno)
+    .filter((id): id is string => Boolean(id));
+
+  const permisosVigentes = await prisma.registroAsistencia.findMany({
+    where: {
+      comercianteId: { in: faltantesComercianteIds },
+      permisoInicio: { lte: hoyStr },
+      permisoFin: { gte: hoyStr },
+    },
+    orderBy: { creadoEn: "desc" },
+  });
+
+  const permisosMap = new Map<string, (typeof permisosVigentes)[0]>();
+  for (const reg of permisosVigentes) {
+    if (!permisosMap.has(reg.comercianteId)) {
+      permisosMap.set(reg.comercianteId, reg);
+    }
+  }
+
+  // 5. Preparar registros para inserción segura (sin sobrescribir existentes)
+  const registrosParaCrear: Prisma.RegistroAsistenciaCreateManyInput[] = [];
 
   for (const puesto of faltantes) {
     const comerciante = puesto.comerciante;
     if (!comerciante) continue;
 
-    // Verificar si el comerciante tiene algún permiso vigente que cubra la jornada de hoy
-    const registroConPermiso = await prisma.registroAsistencia.findFirst({
-      where: {
-        comercianteId: comerciante.idInterno,
-        permisoInicio: { lte: hoyStr },
-        permisoFin: { gte: hoyStr },
-      },
-      orderBy: { creadoEn: "desc" },
-    });
+    const registroConPermiso = permisosMap.get(comerciante.idInterno);
+    const tienePermiso = Boolean(registroConPermiso);
 
-    // Upsert idempotente: si por condición de carrera ya existiera, NO alterar estado ni observaciones
-    await prisma.registroAsistencia.upsert({
-      where: {
-        comercianteId_fecha: {
-          comercianteId: comerciante.idInterno,
-          fecha: hoyStr,
-        },
-      },
-      update: {
-        // No alterar campos si ya existe
-      },
-      create: {
-        comercianteId: comerciante.idInterno,
-        puestoId: puesto.id,
-        fecha: hoyStr,
-        estado: registroConPermiso ? "Permiso" : "Presente",
-        observacion: null,
-        observacionTexto: null,
-        observaciones: [],
-        permisos: registroConPermiso?.permisos ? (registroConPermiso.permisos as Prisma.InputJsonValue) : [],
-        permisoInicio: registroConPermiso?.permisoInicio ?? null,
-        permisoFin: registroConPermiso?.permisoFin ?? null,
-      },
+    registrosParaCrear.push({
+      id: crypto.randomUUID(),
+      comercianteId: comerciante.idInterno,
+      puestoId: puesto.id,
+      fecha: hoyStr,
+      estado: tienePermiso ? "Permiso" : "Presente",
+      observacion: null,
+      observacionTexto: null,
+      observaciones: [],
+      permisos: registroConPermiso?.permisos
+        ? (registroConPermiso.permisos as Prisma.InputJsonValue)
+        : [],
+      permisoInicio: registroConPermiso?.permisoInicio ?? null,
+      permisoFin: registroConPermiso?.permisoFin ?? null,
     });
-
-    existentesSet.add(comerciante.idInterno);
-    totalInicializados++;
   }
 
-  globalThis.__epmma_last_2am_run_date = hoyStr;
+  let totalInicializados = 0;
+
+  if (registrosParaCrear.length > 0) {
+    try {
+      const resultado = await prisma.registroAsistencia.createMany({
+        data: registrosParaCrear,
+        skipDuplicates: true,
+      });
+      totalInicializados = resultado.count;
+    } catch {
+      // Fallback seguro individual por upsert si createMany tuviera algún rechazo de lote
+      for (const reg of registrosParaCrear) {
+        try {
+          await prisma.registroAsistencia.upsert({
+            where: {
+              comercianteId_fecha: {
+                comercianteId: reg.comercianteId,
+                fecha: hoyStr,
+              },
+            },
+            update: {
+              // Idempotencia absoluta: NUNCA sobreescribir registros existentes
+            },
+            create: reg,
+          });
+          totalInicializados++;
+        } catch {
+          // Registro concurrente creado con éxito
+        }
+      }
+    }
+  }
+
+  const hour = obtenerHoraEcuador();
+  if (hour >= 2) {
+    globalThis.__epmma_last_2am_run_date = hoyStr;
+  }
   globalThis.__epmma_last_occupied_count = puestosOcupados.length;
 
   return { totalInicializados, fecha: hoyStr };
@@ -129,32 +189,28 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
 
 /**
  * Inicializa un planificador resiliente en memoria que:
- * 1. Ejecuta inmediatamente la verificación de recuperación (Catch-up) al iniciar el servidor.
- * 2. Cada 60 segundos comprueba si son las 02:00 AM o más tarde en Ecuador (hora >= 2) y hoy
- *    aún no ha sido sincronizado, disparando la generación automática.
+ * 1. Ejecuta inmediatamente la verificación de recuperación (Catch-up) al iniciar el servidor
+ *    (sea la 01:00 AM, las 08:00 AM o las 03:00 PM).
+ * 2. Cada 60 segundos comprueba si la hora actual es >= 2 (02:00 AM en adelante) en Ecuador
+ *    y la fecha de hoy aún no ha sido sincronizada, disparando la generación automática.
+ *    Esto garantiza que si el servidor estuvo apagado o en hibernación a las 02:00 AM y
+ *    enciende a las 08:00 AM, la asistencia se genere inmediatamente en el primer ciclo.
  */
 export function iniciarCronAsistenciaDiaria2AM() {
   if (globalThis.__epmma_cron_2am_initialized) return;
   globalThis.__epmma_cron_2am_initialized = true;
 
-  // Verificación inmediata al arrancar el servidor (Catch-up para encendidos posteriores a las 02:00 AM)
+  // Verificación inmediata al arrancar el servidor (Catch-up para encendidos en cualquier hora)
   asegurarAsistenciaInicialDelDia().catch((err) => {
     console.error("[ARRANQUE] Error en verificación inicial de asistencia:", err);
   });
 
   setInterval(async () => {
     try {
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/Guayaquil",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: false,
-      }).formatToParts(new Date());
-
-      const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+      const hour = obtenerHoraEcuador();
       const hoyStr = obtenerFechaHoyEcuador();
 
-      // Si la hora es >= 2 (02:00 AM en adelante) y la fecha de hoy no está sincronizada
+      // Si la hora es >= 2 (02:00 AM en adelante) y la jornada de hoy no ha sido sincronizada
       if (hour >= 2 && globalThis.__epmma_last_2am_run_date !== hoyStr) {
         console.log(`[CRON ASISTENCIA] Sincronización automática de jornada (${hoyStr}) a las ${hour}h Ecuador...`);
         await asegurarAsistenciaInicialDelDia(hoyStr);
