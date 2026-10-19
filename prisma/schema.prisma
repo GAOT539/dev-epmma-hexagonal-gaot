@@ -130,7 +130,7 @@ model Puesto {
 model Comerciante {
   idInterno        String            @id @default(uuid())
   ciu              String            @default("-") @db.VarChar(50)
-  cedula           String            @unique @db.VarChar(20)
+  cedula           String            @db.VarChar(20)
   contribuyente    String            @db.VarChar(200)
   actividad        String            @default("General") @db.VarChar(200)
   puestoId         String?           @db.VarChar(50)

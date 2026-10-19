@@ -1212,77 +1212,77 @@ export function analizarReconciliacion(
   const totalVacantes = Math.max(0, capacidadNave - totalOcupados);
   const cambiosDetectados: CambioReconciliacion[] = [];
 
-  const cedulasEnArchivo = new Set(registros.map((r) => r.cedula));
-  const cedulasVistas = new Set<string>();
+  const codigosPuestosEnArchivo = new Set(
+    registros.map((r) => (r.puesto || "").trim().toUpperCase()).filter(Boolean)
+  );
 
   for (const reg of registros) {
-    if (cedulasVistas.has(reg.cedula)) continue;
-    cedulasVistas.add(reg.cedula);
-
-    const comMismaCedula = comerciantesNave.find((c) => c.cedula === reg.cedula);
+    const puestoCodigo = (reg.puesto || "-").trim().toUpperCase();
     const puestoActual = puestosNave.find(
       (p) =>
-        sonCodigosPuestoEquivalentes(p.codigo, reg.puesto) ||
-        p.id === reg.puesto ||
-        p.codigo.toUpperCase() === (reg.puesto || "").toUpperCase()
+        sonCodigosPuestoEquivalentes(p.codigo, puestoCodigo) ||
+        p.id === puestoCodigo ||
+        p.codigo.toUpperCase() === puestoCodigo
     );
     const ocupanteActualPuesto =
       puestoActual && puestoActual.comercianteId
         ? comerciantesNave.find((c) => c.idInterno === puestoActual.comercianteId)
         : null;
 
-    if (comMismaCedula) {
-      const puestoAnterior = comMismaCedula.puestoId || "-";
-      if (!sonCodigosPuestoEquivalentes(puestoAnterior, reg.puesto)) {
+    if (ocupanteActualPuesto) {
+      if (ocupanteActualPuesto.cedula === reg.cedula) {
+        if (
+          ocupanteActualPuesto.contribuyente.trim().toUpperCase() !== reg.nombre.trim().toUpperCase() ||
+          ocupanteActualPuesto.actividad.trim().toUpperCase() !== (reg.actividad || "General").trim().toUpperCase()
+        ) {
+          cambiosDetectados.push({
+            tipo: "ACTUALIZACION",
+            puesto: puestoCodigo,
+            anterior: `${ocupanteActualPuesto.contribuyente} (${ocupanteActualPuesto.actividad})`,
+            nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
+            detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${puestoCodigo}`,
+          });
+        }
+      } else {
         cambiosDetectados.push({
-          tipo: "CAMBIO_PUESTO",
-          puesto: reg.puesto,
-          anterior: puestoAnterior,
-          nuevo: reg.puesto,
-          detalle: `Puesto actualizado de ${puestoAnterior} a ${reg.puesto} para ${reg.nombre}`,
-        });
-      } else if (
-        comMismaCedula.contribuyente.trim().toUpperCase() !== reg.nombre.trim().toUpperCase() ||
-        comMismaCedula.actividad.trim().toUpperCase() !== reg.actividad.trim().toUpperCase()
-      ) {
-        cambiosDetectados.push({
-          tipo: "ACTUALIZACION",
-          puesto: reg.puesto,
-          anterior: `${comMismaCedula.contribuyente} (${comMismaCedula.actividad})`,
-          nuevo: `${reg.nombre} (${reg.actividad})`,
-          detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad})`,
+          tipo: "REEMPLAZO_OCUPANTE",
+          puesto: puestoCodigo,
+          anterior: ocupanteActualPuesto.contribuyente,
+          nuevo: reg.nombre,
+          detalle: `Puesto ${puestoCodigo}: Se reemplazó a ${ocupanteActualPuesto.contribuyente} por ${reg.nombre}`,
         });
       }
-    } else if (ocupanteActualPuesto && ocupanteActualPuesto.cedula !== reg.cedula) {
-      cambiosDetectados.push({
-        tipo: "REEMPLAZO_OCUPANTE",
-        puesto: reg.puesto,
-        anterior: ocupanteActualPuesto.contribuyente,
-        nuevo: reg.nombre,
-        detalle: `Puesto ${reg.puesto}: Se reemplazó a ${ocupanteActualPuesto.contribuyente} por ${reg.nombre}`,
-      });
     } else {
-      cambiosDetectados.push({
-        tipo: "NUEVO",
-        puesto: reg.puesto,
-        nuevo: reg.nombre,
-        detalle: `Nuevo comerciante ${reg.nombre} asignado al puesto ${reg.puesto}`,
-      });
+      const mismoComercianteOtrosPuestos = comerciantesNave.filter((c) => c.cedula === reg.cedula);
+      if (mismoComercianteOtrosPuestos.length > 0) {
+        cambiosDetectados.push({
+          tipo: "NUEVO",
+          puesto: puestoCodigo,
+          nuevo: reg.nombre,
+          detalle: `Comerciante ${reg.nombre} (${reg.cedula}) asignado a puesto adicional ${puestoCodigo}`,
+        });
+      } else {
+        cambiosDetectados.push({
+          tipo: "NUEVO",
+          puesto: puestoCodigo,
+          nuevo: reg.nombre,
+          detalle: `Nuevo comerciante ${reg.nombre} asignado al puesto ${puestoCodigo}`,
+        });
+      }
     }
   }
 
-  // Puestos que pasan a vacantes (comerciantes anteriores que no vinieron en el nuevo archivo)
-  const comerciantesSalientes = comerciantesNave.filter(
-    (c) => !cedulasEnArchivo.has(c.cedula)
-  );
-
-  for (const comSaliente of comerciantesSalientes) {
-    cambiosDetectados.push({
-      tipo: "VACANTE",
-      puesto: comSaliente.puestoId || "S/N",
-      anterior: comSaliente.contribuyente,
-      detalle: `Puesto ${comSaliente.puestoId || "S/N"} queda Vacante (anterior ocupante: ${comSaliente.contribuyente})`,
-    });
+  // Puestos que estaban ocupados y ya no vienen en el archivo
+  for (const p of puestosNave) {
+    if (p.estado === "Ocupado" && p.comercianteId && !codigosPuestosEnArchivo.has(p.codigo.toUpperCase())) {
+      const comSaliente = comerciantesNave.find((c) => c.idInterno === p.comercianteId);
+      cambiosDetectados.push({
+        tipo: "VACANTE",
+        puesto: p.codigo,
+        anterior: comSaliente ? comSaliente.contribuyente : "Ocupante anterior",
+        detalle: `Puesto ${p.codigo} queda Vacante (anterior ocupante: ${comSaliente ? comSaliente.contribuyente : "No identificado"})`,
+      });
+    }
   }
 
   return {
@@ -1363,7 +1363,6 @@ export function ejecutarReconciliacionImportacion(
     }
 
     try {
-      const comExistente = allComerciantes.find((c) => c.cedula === reg.cedula);
       const puestoCodigo = reg.puesto && reg.puesto !== "-" ? reg.puesto.trim() : null;
 
       let puestoTarget = puestoCodigo
@@ -1388,37 +1387,30 @@ export function ejecutarReconciliacionImportacion(
         allPuestos.push(puestoTarget);
       }
 
-      if (comExistente) {
-        // Liberar puesto anterior si cambió
-        if (
-          comExistente.puestoId &&
-          puestoTarget &&
-          comExistente.puestoId !== puestoTarget.codigo &&
-          comExistente.puestoId !== puestoTarget.id
-        ) {
-          const prevP = allPuestos.find(
-            (p) =>
-              p.naveId === naveIdFinal &&
-              (p.id === comExistente?.puestoId || p.codigo === comExistente?.puestoId)
+      // Buscar si ya existe un registro de comerciante para este puesto específico
+      const comExistenteEnPuesto = puestoTarget?.comercianteId
+        ? allComerciantes.find((c) => c.idInterno === puestoTarget?.comercianteId)
+        : allComerciantes.find(
+            (c) =>
+              c.cedula === reg.cedula &&
+              c.nave === naveActual.nombre &&
+              c.puestoId === puestoCodigo
           );
-          if (prevP) {
-            prevP.estado = "Vacante";
-            prevP.comercianteId = null;
-          }
-        }
 
-        comExistente.contribuyente = nombre;
-        comExistente.actividad = reg.actividad || "GENERAL";
-        comExistente.nave = naveActual.nombre;
-        comExistente.puestoId = puestoCodigo;
-        comExistente.estadoRegistro = "Habilitado";
+      if (comExistenteEnPuesto) {
+        comExistenteEnPuesto.cedula = reg.cedula;
+        comExistenteEnPuesto.contribuyente = nombre;
+        comExistenteEnPuesto.actividad = reg.actividad || "GENERAL";
+        comExistenteEnPuesto.nave = naveActual.nombre;
+        comExistenteEnPuesto.puestoId = puestoCodigo;
+        comExistenteEnPuesto.estadoRegistro = "Habilitado";
 
         if (puestoTarget) {
           puestoTarget.estado = "Ocupado";
-          puestoTarget.comercianteId = comExistente.idInterno;
+          puestoTarget.comercianteId = comExistenteEnPuesto.idInterno;
         }
       } else {
-        // Si el puesto estaba ocupado por otro, desvincular al anterior
+        // Desvincular ocupante anterior de este puesto si era otra persona
         if (puestoTarget && puestoTarget.comercianteId) {
           const ocupanteAnterior = allComerciantes.find(
             (c) => c.idInterno === puestoTarget?.comercianteId
@@ -1428,7 +1420,7 @@ export function ejecutarReconciliacionImportacion(
           }
         }
 
-        agregarComerciante({
+        const nuevoCom = agregarComerciante({
           ciu: reg.ciu || "-",
           cedula: reg.cedula,
           contribuyente: nombre,
@@ -1437,6 +1429,11 @@ export function ejecutarReconciliacionImportacion(
           puestoId: puestoCodigo,
           estadoRegistro: "Habilitado",
         });
+
+        if (puestoTarget) {
+          puestoTarget.estado = "Ocupado";
+          puestoTarget.comercianteId = nuevoCom.idInterno;
+        }
       }
 
       exitosos++;

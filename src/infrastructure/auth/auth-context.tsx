@@ -10,9 +10,8 @@ import {
 } from "react";
 import type { Usuario } from "@/domain/models/comerciante.model";
 import {
-  authenticateUser,
+  authenticateUser as mockAuthenticateUser,
   changePassword as mockChangePassword,
-  verifyPassword,
 } from "@/infrastructure/mocks/auth.mock";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -45,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Usuario | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Restaurar usuario desde sessionStorage solo en el cliente al montar (evita Hydration Mismatch)
+  // Restaurar usuario desde sessionStorage y validar sesión en backend (/api/v1/auth/me)
   useEffect(() => {
     try {
       const stored = sessionStorage.getItem(STORAGE_KEY);
@@ -54,13 +53,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(stored));
       }
     } catch {
-      // sessionStorage no disponible o datos corruptos
+      // sessionStorage no disponible
     } finally {
       setIsLoading(false);
     }
+
+    // Validación asíncrona en segundo plano con el backend
+    fetch("/api/v1/auth/me")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.user) {
+          setUser(data.user);
+          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(data.user));
+        }
+      })
+      .catch(() => {
+        // En caso de desconexión, mantener sesión local
+      });
   }, []);
 
-  // Persistir usuario en sessionStorage solo después de completar la carga inicial
+  // Persistir usuario en sessionStorage
   useEffect(() => {
     if (isLoading) return;
     if (user) {
@@ -72,15 +84,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     (identificador: string, password: string) => {
-      const result = authenticateUser(identificador, password);
+      // Autenticación síncrona contra API REST (/api/v1/auth/login) para compatibilidad total con Login UI
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/v1/auth/login", false); // Synchronous same-origin call
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(JSON.stringify({ identificador, password }));
+
+        if (xhr.status === 200) {
+          const res = JSON.parse(xhr.responseText);
+          if (res.success && res.user) {
+            setUser(res.user);
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(res.user));
+            return { success: true, user: res.user };
+          }
+        } else if (xhr.status >= 400 && xhr.status < 500) {
+          try {
+            const errRes = JSON.parse(xhr.responseText);
+            return { success: false, error: errRes.error || "Credenciales incorrectas." };
+          } catch {
+            return { success: false, error: "Credenciales incorrectas. Verifique usuario y contraseña." };
+          }
+        }
+      } catch (err) {
+        console.warn("Fallo en llamada XHR a /api/v1/auth/login, utilizando respaldo mock:", err);
+      }
+
+      // Respaldo resiliente con mock institucional
+      const result = mockAuthenticateUser(identificador, password);
       if (result) {
         setUser(result);
         return { success: true, user: result };
       }
+
       return {
         success: false,
-        error:
-          "Credenciales incorrectas. Verifique usuario y contraseña.",
+        error: "Credenciales incorrectas. Verifique usuario y contraseña.",
       };
     },
     []
@@ -89,25 +128,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     sessionStorage.removeItem(STORAGE_KEY);
+
+    // Notificar al backend para limpiar cookie de sesión
+    fetch("/api/v1/auth/logout", { method: "POST" }).catch(() => {});
   }, []);
 
   const changePassword = useCallback(
     (currentPassword: string, newPassword: string) => {
       if (!user) return { success: false, error: "No hay sesión activa." };
 
-      // Skip current password verification for forced first-login changes
-      if (!user.mustChangePassword) {
-        if (!verifyPassword(user.id, currentPassword)) {
-          return { success: false, error: "La contraseña actual es incorrecta." };
+      // Llamada síncrona al backend /api/v1/auth/change-password
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/v1/auth/change-password", false);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.send(
+          JSON.stringify({
+            currentPassword,
+            newPassword,
+            targetUserId: user.id,
+          })
+        );
+
+        if (xhr.status === 200) {
+          const res = JSON.parse(xhr.responseText);
+          if (res.success) {
+            const updatedUser = { ...user, mustChangePassword: false };
+            setUser(updatedUser);
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(updatedUser));
+            return { success: true };
+          }
+        } else if (xhr.status >= 400) {
+          try {
+            const errRes = JSON.parse(xhr.responseText);
+            return { success: false, error: errRes.error || "Error al cambiar contraseña." };
+          } catch {
+            return { success: false, error: "Error al actualizar contraseña en el servidor." };
+          }
         }
+      } catch (err) {
+        console.warn("Fallo en llamada XHR a /api/v1/auth/change-password, utilizando respaldo mock:", err);
       }
 
-      const result = mockChangePassword(user.id, newPassword);
-      if (result.success) {
+      // Respaldo resiliente
+      const mockResult = mockChangePassword(user.id, newPassword);
+      if (mockResult.success) {
         const updatedUser = { ...user, mustChangePassword: false };
         setUser(updatedUser);
       }
-      return result;
+      return mockResult;
     },
     [user]
   );

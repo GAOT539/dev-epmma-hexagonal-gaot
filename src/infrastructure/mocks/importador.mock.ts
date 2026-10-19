@@ -246,6 +246,19 @@ function seleccionarMejorPuesto(candidatos: string[]): string {
   return ordenados[0];
 }
 
+export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
+  if (!codigoPuesto) return null;
+  const upper = codigoPuesto.trim().toUpperCase();
+  if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
+    return "NAVE CF";
+  }
+  const match = upper.match(/\bN-([A-ZÑ0-9]+)-/);
+  if (match && match[1]) {
+    return `NAVE ${match[1]}`;
+  }
+  return null;
+}
+
 // ── Parser Heurístico Inteligente para Excel (.xls / .xlsx) ─────────────────
 
 export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistro[] {
@@ -265,6 +278,7 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
   let actividadActual = "GENERAL";
 
   // Mapeo dinámico de columnas desde la cabecera
+  let colCiu = -1;
   let colNombre = -1;
   let colArticulo = -1;
   let colPuesto = -1;
@@ -352,11 +366,13 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
         for (let i = 0; i < row.length; i++) {
           const val = String(row[i] ?? "").trim().toUpperCase();
           if (!val) continue;
-          if (val.includes("NOMBRES") || val.includes("OCUPANTE") || val.includes("NOMBRE")) {
+          if (val.includes("CIU") || val.includes("CUI")) {
+            colCiu = i;
+          } else if (val.includes("NOMBRES") || val.includes("OCUPANTE") || val.includes("NOMBRE")) {
             if (colNombre === -1) colNombre = i;
-          } else if (val.includes("ARTICULO") || val.includes("ARTÍCULO")) {
+          } else if (val.includes("ARTICULO") || val.includes("ARTÍCULO") || val.includes("ACTIVIDAD")) {
             colArticulo = i;
-          } else if (val.includes("PUESTO")) {
+          } else if (val.includes("PUESTO") || val.includes("BODEGA")) {
             colPuesto = i;
           } else if (val.includes("MTR") || val.includes("MTS")) {
             colMts = i;
@@ -600,13 +616,36 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
     // La zona de ARTICULO viene vacía, por lo que la actividad se toma de actividadActual
     const actividad = actividadFila || actividadActual || "GENERAL";
 
+    let ciu = "S/N";
+    if (colCiu !== -1 && row[colCiu] !== undefined && row[colCiu] !== null) {
+      const rawCiu = String(row[colCiu]).trim();
+      if (rawCiu && rawCiu !== "-" && rawCiu !== "S/N") ciu = rawCiu;
+      else ciu = "S/N";
+    } else if (cedulaIndex > 0 && row[cedulaIndex - 1] !== undefined && row[cedulaIndex - 1] !== null) {
+      const prevVal = String(row[cedulaIndex - 1]).trim();
+      if (/^\d{3,8}$/.test(prevVal)) {
+        ciu = prevVal;
+      }
+    }
+
+    let naveFila = naveActual;
+    if (!naveFila || naveFila === "NO DEFINIDA") {
+      const naveInferida = inferirNaveDesdePuesto(puesto);
+      if (naveInferida) {
+        naveFila = naveInferida;
+        naveActual = naveInferida;
+      } else {
+        naveFila = "NAVE A";
+      }
+    }
+
     registros.push({
-      ciu: "-",
+      ciu,
       cedula: cedulaEncontrada.trim(),
       nombre,
       contribuyente: nombre,
       actividad,
-      nave: naveActual,
+      nave: naveFila,
       puesto,
       numBodega: puesto,
       gen01Codi: "-",
@@ -690,24 +729,112 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
 
 export function parsearCSV(contenido: string): ImportacionRegistro[] {
   const lineas = contenido.trim().split("\n");
-  if (lineas.length < 2) return [];
+  if (lineas.length === 0) return [];
 
-  return lineas.slice(1).map((linea, idx) => {
-    const [nave, contribuyente, numBodega, gen01Codi] = linea
-      .split(",")
-      .map((s) => s.trim());
-    const nombre = contribuyente ?? "Comerciante";
-    const puesto = numBodega ?? "-";
-    return {
-      ciu: "-",
-      cedula: `18${String(10000000 + idx).padStart(8, "0")}`,
-      nombre,
-      contribuyente: nombre,
-      actividad: "General",
-      nave: nave ?? "No definida",
+  const primeraLinea = lineas[0].toUpperCase();
+  const tieneCabecera =
+    primeraLinea.includes("CEDULA") ||
+    primeraLinea.includes("CÉDULA") ||
+    primeraLinea.includes("CONTRIBUYENTE") ||
+    primeraLinea.includes("NOMBRE") ||
+    primeraLinea.includes("PUESTO") ||
+    primeraLinea.includes("NAVE");
+
+  const lineasDatos = tieneCabecera ? lineas.slice(1) : lineas;
+
+  // Si tiene cabecera, mapear columnas
+  let idxCiu = -1;
+  let idxCedula = -1;
+  let idxNombre = -1;
+  let idxActividad = -1;
+  let idxPuesto = -1;
+  let idxNave = -1;
+
+  if (tieneCabecera) {
+    const cols = lineas[0].split(",").map((c) => c.trim().toUpperCase());
+    cols.forEach((col, idx) => {
+      if (col.includes("CIU") || col.includes("CUI")) idxCiu = idx;
+      else if (col.includes("CEDULA") || col.includes("CÉDULA") || col.includes("RUC")) idxCedula = idx;
+      else if (col.includes("CONTRIBUYENTE") || col.includes("NOMBRE") || col.includes("OCUPANTE")) idxNombre = idx;
+      else if (col.includes("ACTIVIDAD") || col.includes("ARTICULO") || col.includes("ARTÍCULO")) idxActividad = idx;
+      else if (col.includes("PUESTO") || col.includes("BODEGA") || col.includes("NUMBODEGA")) idxPuesto = idx;
+      else if (col.includes("NAVE")) idxNave = idx;
+    });
+  }
+
+  const registros: ImportacionRegistro[] = [];
+  let naveDetectadaEnArchivo = "";
+
+  for (let idx = 0; idx < lineasDatos.length; idx++) {
+    const linea = lineasDatos[idx];
+    const partes = linea.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+    if (partes.length < 2 || !partes.some((p) => p.length > 0)) continue;
+
+    let ciu = "S/N";
+    let cedula = "";
+    let nombre = "";
+    let actividad = "General";
+    let puesto = "-";
+    let nave = "";
+
+    if (tieneCabecera && (idxCedula !== -1 || idxNombre !== -1)) {
+      if (idxCiu !== -1) {
+        const valCiu = (partes[idxCiu] || "").trim();
+        ciu = (!valCiu || valCiu === "-" || valCiu === "") ? "S/N" : valCiu;
+      }
+      if (idxCedula !== -1 && partes[idxCedula]) cedula = partes[idxCedula].trim();
+      if (idxNombre !== -1 && partes[idxNombre]) nombre = partes[idxNombre].trim();
+      if (idxActividad !== -1 && partes[idxActividad]) actividad = partes[idxActividad].trim() || "General";
+      if (idxPuesto !== -1 && partes[idxPuesto]) puesto = partes[idxPuesto].trim() || "-";
+      if (idxNave !== -1 && partes[idxNave]) nave = partes[idxNave].trim();
+    } else {
+      // Formato estándar institucional: CIU, Cédula, Contribuyente, Actividad/Artículo, Puesto, [Nave]
+      if (partes.length >= 5) {
+        const valCiu = (partes[0] || "").trim();
+        ciu = (!valCiu || valCiu === "-" || valCiu === "") ? "S/N" : valCiu;
+        cedula = (partes[1] || "").trim();
+        nombre = (partes[2] || "Comerciante").trim();
+        actividad = (partes[3] || "General").trim();
+        puesto = (partes[4] || "-").trim();
+        nave = (partes[5] || "").trim();
+      } else if (partes.length >= 4) {
+        // Formato legacy: Nave, Contribuyente, NumBodega, Gen01Codi
+        nave = (partes[0] || "").trim();
+        nombre = (partes[1] || "Comerciante").trim();
+        puesto = (partes[2] || "-").trim();
+        cedula = `18${String(10000000 + idx).padStart(8, "0")}`;
+      }
+    }
+
+    if (!cedula) {
+      cedula = `18${String(10000000 + idx).padStart(8, "0")}`;
+    }
+
+    let naveFinal = nave;
+    if (!naveFinal || naveFinal.toUpperCase() === "NO DEFINIDA") {
+      const naveInferida = inferirNaveDesdePuesto(puesto);
+      if (naveInferida) {
+        naveFinal = naveInferida;
+        naveDetectadaEnArchivo = naveInferida;
+      } else if (naveDetectadaEnArchivo) {
+        naveFinal = naveDetectadaEnArchivo;
+      } else {
+        naveFinal = "NAVE A";
+      }
+    }
+
+    registros.push({
+      ciu: ciu || "S/N",
+      cedula,
+      nombre: nombre || "Comerciante",
+      contribuyente: nombre || "Comerciante",
+      actividad: actividad || "General",
+      nave: naveFinal,
       puesto,
       numBodega: puesto,
-      gen01Codi: gen01Codi ?? "-",
-    };
-  });
+      gen01Codi: "-",
+    });
+  }
+
+  return registros;
 }

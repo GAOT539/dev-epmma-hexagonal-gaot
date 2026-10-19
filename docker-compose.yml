@@ -9,7 +9,7 @@ services:
       MYSQL_USER: ep_ema_user
       MYSQL_PASSWORD: ep_ema_pass
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
