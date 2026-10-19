@@ -22,6 +22,13 @@ export interface Puesto {
   naveId: string;
   estado: EstadoPuesto;
   comercianteId: string | null;
+  comerciante?: {
+    idInterno?: string;
+    ciu?: string;
+    cedula?: string;
+    contribuyente?: string;
+    actividad?: string;
+  } | null;
 }
 
 export type {

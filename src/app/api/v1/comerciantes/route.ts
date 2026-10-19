@@ -15,7 +15,26 @@ export async function GET(request: Request) {
     if (puestosNave) {
       const puestos = await prisma.puesto.findMany({
         where: { naveId: puestosNave },
-        orderBy: { codigo: "asc" },
+      });
+
+      const getCategoriaPeso = (codigo: string): number => {
+        const upper = codigo.trim().toUpperCase();
+        if (upper.startsWith("BODEGA")) return 1;
+        if (upper.startsWith("CUBICULO") || upper.startsWith("CUBÍCULO")) return 2;
+        if (upper.startsWith("NUCLEO") || upper.startsWith("NÚCLEO")) return 3;
+        if (upper.startsWith("ZCF") || upper.startsWith("ZONA")) return 4;
+        if (upper.startsWith("N-") || upper.startsWith("P-")) return 5;
+        return 6;
+      };
+
+      puestos.sort((a, b) => {
+        const pesoA = getCategoriaPeso(a.codigo);
+        const pesoB = getCategoriaPeso(b.codigo);
+        if (pesoA !== pesoB) return pesoA - pesoB;
+        return a.codigo.trim().localeCompare(b.codigo.trim(), undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
       });
 
       return NextResponse.json(

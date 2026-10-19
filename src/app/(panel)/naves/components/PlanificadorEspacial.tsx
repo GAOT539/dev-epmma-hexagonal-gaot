@@ -36,6 +36,7 @@ import {
   colIndexToLetter,
   getCoordenadasEtiqueta,
   encontrarComercianteYPuesto,
+  ordenarPuestosDeNave,
   getColorZonaClasses,
   generarPlanoEspacialPDF,
 } from "./plano-nave.utils";
@@ -69,6 +70,7 @@ export function PlanificadorEspacial({
   const [puestosNaveActual, setPuestosNaveActual] = useState<Puesto[]>([]);
   const [modoVista, setModoVista] = useState<"VER" | "EDITAR">("VER");
   const [modoHerramienta, setModoHerramienta] = useState<ModoHerramienta>("SELECCIONAR");
+  const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null);
   const [draggedCelda, setDraggedCelda] = useState<{ fila: number; columna: number } | null>(null);
   const [dragOverCelda, setDragOverCelda] = useState<{ fila: number; columna: number } | null>(null);
   const [generandoPdf, setGenerandoPdf] = useState<boolean>(false);
@@ -140,13 +142,18 @@ export function PlanificadorEspacial({
     return map;
   }, [planoActual]);
 
+  // Puestos de la nave ordenados de forma natural y determinista
+  const puestosNaveOrdenados = useMemo(() => {
+    return ordenarPuestosDeNave(puestosNaveActual, comerciantes);
+  }, [puestosNaveActual, comerciantes]);
+
   // Lista de códigos de puestos ya utilizados en el plano
   const codigosPuestosUbicados = useMemo(() => {
     const set = new Set<string>();
     if (planoActual) {
       for (const celda of planoActual.celdas) {
         if (celda.tipo === "PUESTO" && celda.codigoPuesto) {
-          set.add(celda.codigoPuesto.trim().toUpperCase());
+          set.add(celda.codigoPuesto.trim().replace(/^#/, "").trim().toUpperCase());
         }
       }
     }
@@ -155,12 +162,70 @@ export function PlanificadorEspacial({
 
   // Puestos registrados en la nave pendientes por ubicar en la cuadrícula
   const puestosNavePendientes = useMemo(() => {
-    return puestosNaveActual.filter((p) => {
+    return puestosNaveOrdenados.filter((p, idx) => {
       const cod = p.codigo.trim().toUpperCase();
       const id = p.id.trim().toUpperCase();
-      return !codigosPuestosUbicados.has(cod) && !codigosPuestosUbicados.has(id);
+      const seqStr = String(idx + 1);
+      const yaUbicado =
+        codigosPuestosUbicados.has(cod) ||
+        codigosPuestosUbicados.has(id) ||
+        codigosPuestosUbicados.has(seqStr);
+      return !yaUbicado;
     });
-  }, [puestosNaveActual, codigosPuestosUbicados]);
+  }, [puestosNaveOrdenados, codigosPuestosUbicados]);
+
+  // Determina en tiempo real el siguiente puesto que se colocará al hacer clic (para el badge flotante)
+  const proximoPuestoRapido = useMemo(() => {
+    if (!planoActual || modoVista !== "EDITAR" || modoHerramienta !== "PUESTO_RAPIDO") {
+      return null;
+    }
+
+    const puestosEnPlano = planoActual.celdas.filter(
+      (c) => c.tipo === "PUESTO" && c.codigoPuesto?.trim()
+    ).length;
+
+    if (puestosEnPlano >= limitePuestos) {
+      return { capacidadCompleta: true, codigo: "", comerciante: null };
+    }
+
+    const siguientePuesto = puestosNavePendientes[0] ?? null;
+    let codigoMostrar = "";
+
+    if (siguientePuesto) {
+      codigoMostrar = siguientePuesto.codigo;
+    } else {
+      let siguienteNum = 1;
+      while (siguienteNum <= limitePuestos) {
+        if (!codigosPuestosUbicados.has(String(siguienteNum))) break;
+        siguienteNum++;
+      }
+      codigoMostrar = siguienteNum <= limitePuestos ? `#${siguienteNum}` : "S/N";
+    }
+
+    const coincidencia = encontrarComercianteYPuesto(
+      codigoMostrar,
+      naveSeleccionada?.id ?? "",
+      naveSeleccionada?.nombre ?? "",
+      comerciantes,
+      puestosNaveActual
+    );
+
+    return {
+      capacidadCompleta: false,
+      codigo: coincidencia.codigoReal || codigoMostrar,
+      comerciante: coincidencia.comerciante,
+    };
+  }, [
+    planoActual,
+    modoVista,
+    modoHerramienta,
+    limitePuestos,
+    puestosNavePendientes,
+    codigosPuestosUbicados,
+    naveSeleccionada,
+    comerciantes,
+    puestosNaveActual,
+  ]);
 
   // Métricas y conteos en vivo
   const metricasPlano = useMemo(() => {
@@ -507,51 +572,77 @@ export function PlanificadorEspacial({
     }
 
     if (modoHerramienta === "PUESTO_RAPIDO") {
-      const codigosActuales = new Set(
-        planoActual.celdas
-          .filter(
-            (c) =>
-              c.tipo === "PUESTO" &&
-              c.codigoPuesto?.trim() &&
-              !(c.fila === fila && c.columna === columna)
-          )
-          .map((c) => c.codigoPuesto!.trim().toUpperCase())
-      );
+      const puestosEnPlano = planoActual.celdas.filter(
+        (c) =>
+          c.tipo === "PUESTO" &&
+          c.codigoPuesto?.trim() &&
+          !(c.fila === fila && c.columna === columna)
+      ).length;
 
-      if (codigosActuales.size >= limitePuestos) {
+      if (puestosEnPlano >= limitePuestos) {
         toast.error(
           `Capacidad máxima alcanzada: Esta nave tiene un límite estricto de ${limitePuestos} puestos.`
         );
         return;
       }
 
-      // Buscar el siguiente número disponible
-      let siguienteNum = 1;
-      while (siguienteNum <= limitePuestos) {
-        const strNum = String(siguienteNum);
-        if (!codigosPuestosUbicados.has(strNum)) {
-          break;
-        }
-        siguienteNum++;
-      }
+      const siguientePuesto = puestosNavePendientes[0] ?? null;
 
-      if (siguienteNum > limitePuestos) {
-        toast.error(
-          `Todos los puestos del 1 al ${limitePuestos} ya están ubicados en el plano.`
-        );
-        return;
+      let codigoAsignar = "";
+      let subtextoAsignar = "MÓDULO ESTÁNDAR";
+
+      if (siguientePuesto) {
+        codigoAsignar = siguientePuesto.codigo;
+        const com =
+          (siguientePuesto.comercianteId
+            ? comerciantes.find(
+                (c) =>
+                  c.idInterno === siguientePuesto.comercianteId &&
+                  c.estadoRegistro !== "Deshabilitado"
+              )
+            : null) ||
+          comerciantes.find(
+            (c) =>
+              c.estadoRegistro !== "Deshabilitado" &&
+              c.puestoId &&
+              (c.puestoId.trim().toUpperCase() === siguientePuesto.codigo.trim().toUpperCase() ||
+                c.puestoId.trim().toUpperCase() === siguientePuesto.id.trim().toUpperCase())
+          ) ||
+          null;
+
+        if (com?.actividad) {
+          subtextoAsignar = com.actividad;
+        }
+      } else {
+        // Fallback: siguiente número secuencial disponible 1..limitePuestos
+        let siguienteNum = 1;
+        while (siguienteNum <= limitePuestos) {
+          const strNum = String(siguienteNum);
+          if (!codigosPuestosUbicados.has(strNum)) {
+            break;
+          }
+          siguienteNum++;
+        }
+
+        if (siguienteNum > limitePuestos) {
+          toast.error(
+            `Todos los puestos ya están ubicados en el plano (${limitePuestos}/${limitePuestos}).`
+          );
+          return;
+        }
+        codigoAsignar = String(siguienteNum);
       }
 
       actualizarCeldaEnPlano(fila, columna, {
         fila,
         columna,
         tipo: "PUESTO",
-        codigoPuesto: String(siguienteNum),
-        subtexto: "MÓDULO ESTÁNDAR",
+        codigoPuesto: codigoAsignar,
+        subtexto: subtextoAsignar,
       });
 
       toast.info(
-        `Puesto #${siguienteNum} asignado en celda [${colIndexToLetter(columna)}${fila + 1}]`
+        `Puesto ${codigoAsignar} asignado en celda [${colIndexToLetter(columna)}${fila + 1}]`
       );
     }
   }
@@ -1073,8 +1164,48 @@ export function PlanificadorEspacial({
           </div>
         )}
 
+        {/* Badge flotante discreto que sigue al cursor en modo Colocar Puesto Rápido */}
+        {cursorPos && proximoPuestoRapido && (
+          <div
+            style={{ left: cursorPos.x + 16, top: cursorPos.y + 16 }}
+            className="fixed z-50 pointer-events-none select-none max-w-[240px] rounded-lg bg-slate-900/90 text-white backdrop-blur-xs px-2.5 py-1.5 shadow-md border border-white/15 text-[11px] leading-tight transition-all duration-75"
+          >
+            {proximoPuestoRapido.capacidadCompleta ? (
+              <span className="font-semibold text-amber-300">
+                Capacidad completa ({limitePuestos}/{limitePuestos})
+              </span>
+            ) : (
+              <div className="flex flex-col gap-0.5">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+                  <span className="font-mono font-bold text-emerald-300 truncate">
+                    {proximoPuestoRapido.codigo}
+                  </span>
+                </div>
+                <p className="truncate text-[10px] text-gray-200">
+                  {proximoPuestoRapido.comerciante
+                    ? proximoPuestoRapido.comerciante.contribuyente
+                    : "Puesto Vacante"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Lienzo de la Cuadrícula Adaptable (Croquis / Mapa Físico en CSS Grid) */}
-        <div className="w-full overflow-x-auto overflow-y-auto max-h-[640px] rounded-xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-3 sm:p-4 shadow-inner">
+        <div
+          onMouseMove={(e) => {
+            if (modoVista === "EDITAR" && modoHerramienta === "PUESTO_RAPIDO") {
+              setCursorPos({ x: e.clientX, y: e.clientY });
+            } else if (cursorPos !== null) {
+              setCursorPos(null);
+            }
+          }}
+          onMouseLeave={() => {
+            if (cursorPos !== null) setCursorPos(null);
+          }}
+          className="w-full overflow-x-auto overflow-y-auto max-h-[640px] rounded-xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-3 sm:p-4 shadow-inner"
+        >
           {cargandoPlano ? (
             <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-700">
               <div className="h-8 w-8 rounded-full border-3 border-institucional-green/30 border-t-institucional-green animate-spin" />
@@ -1305,7 +1436,7 @@ export function PlanificadorEspacial({
                                     : "bg-base-white/90 text-base-eerieBlack border-black/10"
                                 } ${modoVista === "VER" ? "ml-auto" : ""}`}
                               >
-                                #{celda.codigoPuesto || "S/N"}
+                                #{coincidencia?.codigoReal || celda.codigoPuesto || "S/N"}
                               </span>
                             </div>
                           </>

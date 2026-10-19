@@ -34,6 +34,50 @@ export interface CoincidenciaPuestoComerciante {
   comerciante: Comerciante | null;
   puesto: Puesto | null;
   esVacante: boolean;
+  codigoReal: string;
+}
+
+/**
+ * Ordena los puestos de una nave de forma determinista y natural:
+ * 1. Categoría o prefijo: BODEGA, CUBICULO, NUCLEO, ZCF/ZONA, N-/P-, otros.
+ * 2. Comparación alfanumérica natural (numeric: true, sensitivity: "base").
+ */
+export function ordenarPuestosDeNave(
+  puestos: Puesto[],
+  comerciantes?: Comerciante[]
+): Puesto[] {
+  const getCategoriaPeso = (codigo: string): number => {
+    const upper = codigo.trim().toUpperCase();
+    if (upper.startsWith("BODEGA")) return 1;
+    if (upper.startsWith("CUBICULO") || upper.startsWith("CUBÍCULO")) return 2;
+    if (upper.startsWith("NUCLEO") || upper.startsWith("NÚCLEO")) return 3;
+    if (upper.startsWith("ZCF") || upper.startsWith("ZONA")) return 4;
+    if (upper.startsWith("N-") || upper.startsWith("P-")) return 5;
+    return 6;
+  };
+
+  const comMap = comerciantes
+    ? new Map(comerciantes.map((c) => [c.idInterno, c]))
+    : null;
+
+  return [...puestos].sort((a, b) => {
+    const pesoA = getCategoriaPeso(a.codigo);
+    const pesoB = getCategoriaPeso(b.codigo);
+    if (pesoA !== pesoB) return pesoA - pesoB;
+
+    const diff = a.codigo.trim().localeCompare(b.codigo.trim(), undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (diff !== 0) return diff;
+
+    if (comMap && a.comercianteId && b.comercianteId) {
+      const nomA = comMap.get(a.comercianteId)?.contribuyente ?? "";
+      const nomB = comMap.get(b.comercianteId)?.contribuyente ?? "";
+      return nomA.localeCompare(nomB);
+    }
+    return 0;
+  });
 }
 
 export function encontrarComercianteYPuesto(
@@ -44,42 +88,72 @@ export function encontrarComercianteYPuesto(
   puestos: Puesto[]
 ): CoincidenciaPuestoComerciante {
   if (!codigoPuesto) {
-    return { comerciante: null, puesto: null, esVacante: true };
+    return { comerciante: null, puesto: null, esVacante: true, codigoReal: "" };
   }
 
-  const codLimpio = codigoPuesto.trim().toUpperCase();
-  const codNum = codLimpio
-    .replace(/^P-/, "")
-    .replace(/^[A-Z]-?/, "")
-    .replace(/^0+/, "");
+  const codLimpio = codigoPuesto.trim().replace(/^#/, "").trim().toUpperCase();
+  const puestosNave = puestos.filter((p) => !naveId || p.naveId === naveId);
+  const puestosOrdenados = ordenarPuestosDeNave(puestosNave, comerciantes);
 
-  // 1. Coincidencia en los puestos de la nave
-  const puestoEncontrado =
-    puestos.find((p) => {
-      if (p.naveId !== naveId) return false;
+  // Paso A: Coincidencia exacta por código o ID
+  let puestoEncontrado =
+    puestosNave.find((p) => {
       const pCod = p.codigo.trim().toUpperCase();
       const pId = p.id.trim().toUpperCase();
-      if (pCod === codLimpio || pId === codLimpio) return true;
-      const pNum = pCod
-        .replace(/^P-/, "")
-        .replace(/^[A-Z]-?/, "")
-        .replace(/^0+/, "");
-      return Boolean(pNum && codNum && pNum === codNum);
+      return pCod === codLimpio || pId === codLimpio;
     }) ?? null;
 
-  if (puestoEncontrado && puestoEncontrado.comercianteId) {
-    const comerciante =
-      comerciantes.find(
-        (c) =>
-          c.idInterno === puestoEncontrado.comercianteId &&
-          c.estadoRegistro !== "Deshabilitado"
-      ) ?? null;
-    if (comerciante) {
-      return { comerciante, puesto: puestoEncontrado, esVacante: false };
+  // Paso B: Coincidencia por índice secuencial 1..N
+  if (!puestoEncontrado && /^\d+$/.test(codLimpio)) {
+    const pIndex = parseInt(codLimpio, 10) - 1;
+    if (pIndex >= 0 && pIndex < puestosOrdenados.length) {
+      puestoEncontrado = puestosOrdenados[pIndex];
     }
   }
 
-  // 2. Coincidencia directa por datos del comerciante
+  // Paso C: Coincidencia por sufijo numérico solo cuando no hay ambigüedad
+  if (!puestoEncontrado) {
+    const sufijoMatch = codLimpio.match(/(\d+)$/);
+    if (sufijoMatch) {
+      const numSufijo = parseInt(sufijoMatch[1], 10);
+      const candidatos = puestosNave.filter((p) => {
+        const pMatch = p.codigo.trim().toUpperCase().match(/(\d+)$/);
+        return pMatch && parseInt(pMatch[1], 10) === numSufijo;
+      });
+      if (candidatos.length === 1) {
+        puestoEncontrado = candidatos[0];
+      }
+    }
+  }
+
+  // Si se encontró el puesto en la nave, buscar comerciante activo asignado
+  if (puestoEncontrado) {
+    const comerciante =
+      (puestoEncontrado.comercianteId
+        ? comerciantes.find(
+            (c) =>
+              c.idInterno === puestoEncontrado.comercianteId &&
+              c.estadoRegistro !== "Deshabilitado"
+          )
+        : null) ||
+      comerciantes.find(
+        (c) =>
+          c.estadoRegistro !== "Deshabilitado" &&
+          c.puestoId &&
+          (c.puestoId.trim().toUpperCase() === puestoEncontrado.codigo.trim().toUpperCase() ||
+            c.puestoId.trim().toUpperCase() === puestoEncontrado.id.trim().toUpperCase())
+      ) ||
+      null;
+
+    return {
+      comerciante,
+      puesto: puestoEncontrado,
+      esVacante: !comerciante,
+      codigoReal: puestoEncontrado.codigo,
+    };
+  }
+
+  // Paso D: Coincidencia directa por catálogo de comerciantes
   const comercianteDirecto =
     comerciantes.find((c) => {
       if (c.estadoRegistro === "Deshabilitado") return false;
@@ -87,16 +161,11 @@ export function encontrarComercianteYPuesto(
         c.nave &&
         (c.nave.trim().toUpperCase() === naveNombre.trim().toUpperCase() ||
           c.nave.trim().toLowerCase() === naveId.toLowerCase());
-      if (!naveMatch && puestoEncontrado?.id !== c.puestoId) return false;
+      if (!naveMatch && !c.puestoId) return false;
 
       if (c.puestoId) {
         const cPuestoId = c.puestoId.trim().toUpperCase();
-        if (cPuestoId === codLimpio) return true;
-        const cNum = cPuestoId
-          .replace(/^P-/, "")
-          .replace(/^[A-Z]-?/, "")
-          .replace(/^0+/, "");
-        if (cNum && codNum && cNum === codNum) return true;
+        return cPuestoId === codLimpio;
       }
       return false;
     }) ?? null;
@@ -104,12 +173,13 @@ export function encontrarComercianteYPuesto(
   if (comercianteDirecto) {
     return {
       comerciante: comercianteDirecto,
-      puesto: puestoEncontrado,
+      puesto: null,
       esVacante: false,
+      codigoReal: comercianteDirecto.puestoId || codigoPuesto,
     };
   }
 
-  return { comerciante: null, puesto: puestoEncontrado, esVacante: true };
+  return { comerciante: null, puesto: null, esVacante: true, codigoReal: codigoPuesto };
 }
 
 export function getColorZonaClasses(
@@ -316,7 +386,7 @@ export async function generarPlanoEspacialPDF({
         doc.setFont("helvetica", "bold");
         doc.setFontSize(Math.max(5, Math.min(8.5, h * 0.26)));
         doc.setTextColor(33, 37, 41);
-        const numText = `#${celda.codigoPuesto || "S/N"}`;
+        const numText = `#${coincidencia?.codigoReal || celda.codigoPuesto || "S/N"}`;
         doc.text(numText, x + w - 1.5, y + Math.min(h * 0.35, 4.5), {
           align: "right",
         });

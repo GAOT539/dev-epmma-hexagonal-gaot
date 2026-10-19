@@ -11,6 +11,7 @@ import type {
   CeldaPlano as CeldaPlanoNave,
 } from "@/domain/models/nave.model";
 import { ESTADO_CONFIG } from "./ModalNovedad";
+import { ordenarPuestosDeNave } from "@/app/(panel)/naves/components/plano-nave.utils";
 
 const normalizeText = (text: string) => {
   if (!text) return "";
@@ -94,6 +95,18 @@ export function CroquisAsistenciaView({
     return map;
   }, [plano]);
 
+  // Ordenar deterministamente los puestos de la nave para resolución de índices secuenciales 1..N
+  const itemsOrdenados = useMemo(() => {
+    const puestos = items.map((i) => i.puesto);
+    const puestosOrdenados = ordenarPuestosDeNave(puestos);
+    const idPosMap = new Map(puestosOrdenados.map((p, idx) => [p.id, idx]));
+    return [...items].sort((a, b) => {
+      const posA = idPosMap.get(a.puesto.id) ?? 9999;
+      const posB = idPosMap.get(b.puesto.id) ?? 9999;
+      return posA - posB;
+    });
+  }, [items]);
+
   // Índice de búsqueda rápida para vincular códigos de puestos
   const itemsMap = useMemo(() => {
     const map = new Map<
@@ -109,16 +122,42 @@ export function CroquisAsistenciaView({
       const pId = item.puesto.id.trim().toUpperCase();
       map.set(pCod, item);
       map.set(pId, item);
-      const pNum = pCod
-        .replace(/^P-/, "")
-        .replace(/^[A-Z]-?/, "")
-        .replace(/^0+/, "");
-      if (pNum) {
-        map.set(pNum, item);
-      }
     }
     return map;
   }, [items]);
+
+  const resolverItemDeCelda = (codigoPuesto: string | undefined) => {
+    if (!codigoPuesto) return undefined;
+    const codLimpio = codigoPuesto.trim().replace(/^#/, "").trim().toUpperCase();
+
+    // Paso A: Coincidencia exacta por código o ID
+    let match = itemsMap.get(codLimpio);
+
+    // Paso B: Coincidencia por índice secuencial 1..N
+    if (!match && /^\d+$/.test(codLimpio)) {
+      const pIndex = parseInt(codLimpio, 10) - 1;
+      if (pIndex >= 0 && pIndex < itemsOrdenados.length) {
+        match = itemsOrdenados[pIndex];
+      }
+    }
+
+    // Paso C: Coincidencia por sufijo numérico sin ambigüedad
+    if (!match) {
+      const sufijoMatch = codLimpio.match(/(\d+)$/);
+      if (sufijoMatch) {
+        const numSufijo = parseInt(sufijoMatch[1], 10);
+        const candidatos = items.filter((i) => {
+          const pMatch = i.puesto.codigo.trim().toUpperCase().match(/(\d+)$/);
+          return pMatch && parseInt(pMatch[1], 10) === numSufijo;
+        });
+        if (candidatos.length === 1) {
+          match = candidatos[0];
+        }
+      }
+    }
+
+    return match;
+  };
 
   const q = normalizeText(searchQuery.trim());
 
@@ -190,13 +229,7 @@ export function CroquisAsistenciaView({
 
                 // 3. Celdas de tipo PUESTO (Asistencia interactiva)
                 const codLimpio = (celda.codigoPuesto ?? "").trim().toUpperCase();
-                const codNum = codLimpio
-                  .replace(/^P-/, "")
-                  .replace(/^[A-Z]-?/, "")
-                  .replace(/^0+/, "");
-                const match =
-                  itemsMap.get(codLimpio) ??
-                  (codNum ? itemsMap.get(codNum) : undefined);
+                const match = resolverItemDeCelda(celda.codigoPuesto);
 
                 const puesto =
                   match?.puesto ?? {

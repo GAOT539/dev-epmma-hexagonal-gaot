@@ -240,6 +240,31 @@ function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
         exitosos++;
       }
 
+      // 4. Limpieza de puestos vacantes genéricos sobrantes si superan capacidadNecesaria
+      const totalPuestosEnNave = await tx.puesto.count({
+        where: { naveId: naveIdFinal },
+      });
+
+      if (totalPuestosEnNave > capacidadNecesaria) {
+        const puestosVacantes = await tx.puesto.findMany({
+          where: {
+            naveId: naveIdFinal,
+            estado: "Vacante",
+            comercianteId: null,
+          },
+          select: { id: true },
+        });
+
+        const cantidadAEliminar = totalPuestosEnNave - capacidadNecesaria;
+        const idsAEliminar = puestosVacantes.slice(0, cantidadAEliminar).map((p) => p.id);
+
+        if (idsAEliminar.length > 0) {
+          await tx.puesto.deleteMany({
+            where: { id: { in: idsAEliminar } },
+          });
+        }
+      }
+
       return { exitosos, errores };
     });
 

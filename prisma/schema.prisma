@@ -122,7 +122,7 @@ model Puesto {
   comerciante   Comerciante? @relation(fields: [comercianteId], references: [idInterno], onDelete: SetNull)
   asistencias   RegistroAsistencia[]
 
-  @@unique([naveId, codigo])
+  @@index([naveId, codigo])
   @@index([naveId])
   @@map("puestos")
 }

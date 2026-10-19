@@ -8,6 +8,7 @@ import {
   Trash2,
   Pencil,
   LayoutGrid,
+  Store,
 } from "lucide-react";
 import { toast } from "sonner";
 import { naveService } from "@/application/services/nave.service";
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ModalesCrudNave } from "./components/ModalesCrudNave";
 import { PlanificadorEspacial } from "./components/PlanificadorEspacial";
+import { ModalPuestosNave } from "./components/ModalPuestosNave";
 
 export default function NavesPage() {
   const [naves, setNaves] = useState<Nave[]>([]);
@@ -41,6 +43,32 @@ export default function NavesPage() {
   const [editSupervisores, setEditSupervisores] = useState<string[]>([]);
   const [puestosOcupados, setPuestosOcupados] = useState(0);
   const [editarError, setEditarError] = useState("");
+
+  // Estado del modal de Gestión de Puestos de Nave
+  const [navePuestosModal, setNavePuestosModal] = useState<Nave | null>(null);
+
+  const handleOpenPuestos = (nave: Nave) => {
+    setNavePuestosModal(nave);
+  };
+
+  const handleClosePuestos = () => {
+    setNavePuestosModal(null);
+  };
+
+  const handlePuestosActualizados = async () => {
+    const [navesActualizadas, commsActualizados] = await Promise.all([
+      naveService.obtenerNaves(),
+      comercianteService.obtenerComerciantes(),
+    ]);
+    setNaves(navesActualizadas);
+    setComerciantes(commsActualizados);
+    if (navePuestosModal) {
+      const encontrada = navesActualizadas.find((n) => n.id === navePuestosModal.id);
+      if (encontrada) {
+        setNavePuestosModal(encontrada);
+      }
+    }
+  };
 
   useEffect(() => {
     let activo = true;
@@ -329,12 +357,13 @@ export default function NavesPage() {
                   navesFiltradas.map((nave) => (
                     <tr
                       key={nave.id}
-                      className="flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors hover:bg-institucional-whiteSmoke/50"
+                      onClick={() => handleOpenPuestos(nave)}
+                      className="cursor-pointer flex flex-col md:table-row rounded-xl md:rounded-none border border-institucional-whiteSmokeBlack/20 md:border-0 md:border-t md:border-institucional-whiteSmokeBlack/10 p-3.5 md:p-0 bg-base-white mb-3 md:mb-0 shadow-sm md:shadow-none transition-colors hover:bg-institucional-whiteSmoke/60"
                     >
                       {/* NAVE */}
                       <td className="flex justify-between items-center py-1.5 md:px-4 md:py-2.5 font-semibold text-base-eerieBlack text-sm md:table-cell">
                         <span className="font-semibold text-gray-700 md:hidden">Nave:</span>
-                        <span>{nave.nombre}</span>
+                        <span className="hover:text-institucional-green transition-colors">{nave.nombre}</span>
                       </td>
 
                       {/* CANTIDAD DE PUESTOS */}
@@ -405,7 +434,23 @@ export default function NavesPage() {
                         <div className="flex items-center justify-end md:justify-center gap-1">
                           <button
                             type="button"
-                            onClick={() => handleSeleccionarNaveParaPlano(nave.id)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPuestos(nave);
+                            }}
+                            className="flex h-7 w-7 items-center justify-center rounded-md text-emerald-700 hover:bg-emerald-50 transition-colors"
+                            title="Ver y Editar Puestos"
+                            aria-label="Ver y Editar Puestos"
+                          >
+                            <Store size={13} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSeleccionarNaveParaPlano(nave.id);
+                            }}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-institucional-green hover:bg-institucional-green/10 transition-colors"
                             title="Planificar espacio en cuadrícula"
                             aria-label="Planificar espacio en cuadrícula"
@@ -415,7 +460,10 @@ export default function NavesPage() {
 
                           <button
                             type="button"
-                            onClick={() => handleOpenEditar(nave)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEditar(nave);
+                            }}
                             className="flex h-7 w-7 items-center justify-center rounded-md text-acento-azul1 hover:bg-acento-azul1/10 transition-colors"
                             title="Editar"
                             aria-label="Editar Nave"
@@ -425,7 +473,10 @@ export default function NavesPage() {
 
                           <button
                             type="button"
-                            onClick={() => handleEliminar(nave)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEliminar(nave);
+                            }}
                             className="flex h-7 w-7 items-center justify-center rounded-md transition-colors text-base-red hover:bg-base-red/10"
                             title="Eliminar"
                             aria-label="Eliminar Nave"
@@ -486,6 +537,14 @@ export default function NavesPage() {
         puestosOcupados={puestosOcupados}
         handleGuardarEditar={handleGuardarEditar}
         supervisoresDisponibles={supervisoresDisponibles}
+      />
+
+      {/* ── Modal de Gestión Interactiva de Puestos por Nave ── */}
+      <ModalPuestosNave
+        nave={navePuestosModal}
+        isOpen={Boolean(navePuestosModal)}
+        onClose={handleClosePuestos}
+        onPuestosActualizados={handlePuestosActualizados}
       />
     </div>
   );

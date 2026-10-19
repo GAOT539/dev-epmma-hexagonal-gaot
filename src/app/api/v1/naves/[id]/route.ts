@@ -105,6 +105,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         for (let i = 1; i <= diferencia; i++) {
           const num = naveActual.puestos.length + i;
           nuevosPuestos.push({
+            id: crypto.randomUUID(),
             codigo: `${prefix}-${String(num).padStart(2, "0")}`,
             naveId: id,
             estado: "Vacante" as const,

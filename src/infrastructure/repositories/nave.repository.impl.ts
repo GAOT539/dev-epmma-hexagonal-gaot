@@ -1,7 +1,5 @@
-// ── Adaptador de Infraestructura: NaveRepository (Consumo Directo API REST / MySQL) ──
-
 import type { INaveRepository } from "@/domain/ports/nave.repository";
-import type { Nave, PlanoEspacialNave } from "@/domain/models/nave.model";
+import type { Nave, PlanoEspacialNave, Puesto } from "@/domain/models/nave.model";
 import { generarPlanoAutomatico as mockGenerarPlanoAutomatico } from "@/infrastructure/mocks/naves.mock";
 
 export class NaveRepositoryImpl implements INaveRepository {
@@ -115,6 +113,52 @@ export class NaveRepositoryImpl implements INaveRepository {
     // Generación espacial heurística asistida
     return Promise.resolve(mockGenerarPlanoAutomatico(naveId));
   }
+
+  async obtenerPuestosNave(naveId: string): Promise<Puesto[]> {
+    const res = await fetch(`/api/v1/naves/${naveId}/puestos`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener puestos de la nave");
+    }
+    const data = await res.json();
+    return Array.isArray(data.puestos) ? data.puestos : [];
+  }
+
+  async actualizarCodigoPuesto(
+    naveId: string,
+    puestoId: string,
+    nuevoCodigo: string
+  ): Promise<Puesto> {
+    const res = await fetch(`/api/v1/naves/${naveId}/puestos`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ puestoId, nuevoCodigo }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al actualizar código de puesto");
+    }
+    const data = await res.json();
+    return data.puesto;
+  }
+
+  async actualizarCodigosPuestosNave(
+    naveId: string,
+    cambios: Array<{ puestoId: string; nuevoCodigo: string }>
+  ): Promise<Puesto[]> {
+    const res = await fetch(`/api/v1/naves/${naveId}/puestos`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cambios }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al actualizar códigos de puestos");
+    }
+    const data = await res.json();
+    return Array.isArray(data.puestos) ? data.puestos : [];
+  }
 }
 
 export const naveRepository = new NaveRepositoryImpl();
+

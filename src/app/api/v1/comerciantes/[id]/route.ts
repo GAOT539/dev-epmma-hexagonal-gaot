@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import type { EstadoComerciante } from "@prisma/client";
+import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 
 interface RouteParams {
@@ -60,46 +60,110 @@ export async function PUT(request: Request, { params }: RouteParams) {
         },
       });
 
-      // 2. Si cambió de puesto, reasignar en la tabla puestos
-      if (puestoNuevo !== puestoAnterior) {
-        // Liberar puesto anterior
-        if (puestoAnterior) {
-          await tx.puesto.updateMany({
+      // 2. Sincronización bidireccional de puesto entre /catastro y /naves
+      const puestoNuevoNormalizado = puestoNuevo ? String(puestoNuevo).trim().toUpperCase() : null;
+
+      if (puestoNuevoNormalizado !== puestoAnterior || naveNueva !== actual.nave) {
+        // Buscar el puesto que actualmente ocupa este comerciante
+        const puestoActual = await tx.puesto.findFirst({
+          where: { comercianteId: id },
+        });
+
+        // Determinar nave destino
+        let naveObj = null;
+        if (naveNueva) {
+          naveObj = await tx.nave.findFirst({
             where: {
-              OR: [{ id: puestoAnterior }, { codigo: puestoAnterior }],
-              comercianteId: id,
+              OR: [{ id: naveNueva }, { nombre: naveNueva }],
             },
-            data: {
-              estado: "Vacante",
-              comercianteId: null,
+          });
+        }
+        if (!naveObj && actual.nave) {
+          naveObj = await tx.nave.findFirst({
+            where: {
+              OR: [{ id: actual.nave }, { nombre: actual.nave }],
             },
           });
         }
 
-        // Ocupar nuevo puesto si no es nulo
-        if (puestoNuevo) {
-          const nuevoPuestoObj = await tx.puesto.findFirst({
+        if (puestoActual && naveObj && puestoActual.naveId === naveObj.id && puestoNuevoNormalizado) {
+          // Permanece en la misma nave
+          // Verificar si existe OTRO puesto en esa nave en estado Vacante con el nuevo código
+          const otroPuestoVacante = await tx.puesto.findFirst({
             where: {
-              OR: [{ id: puestoNuevo }, { codigo: puestoNuevo }],
+              naveId: naveObj.id,
+              id: { not: puestoActual.id },
+              estado: "Vacante",
+              codigo: puestoNuevoNormalizado,
             },
           });
 
-          if (nuevoPuestoObj) {
+          if (otroPuestoVacante) {
+            // Caso A: Cambio a un puesto vacante existente en la misma nave
             await tx.puesto.update({
-              where: { id: nuevoPuestoObj.id },
-              data: {
-                estado: "Ocupado",
-                comercianteId: id,
+              where: { id: puestoActual.id },
+              data: { estado: "Vacante", comercianteId: null },
+            });
+            await tx.puesto.update({
+              where: { id: otroPuestoVacante.id },
+              data: { estado: "Ocupado", comercianteId: id },
+            });
+          } else {
+            // Caso B: Renombrado/Corrección del código de su propio puesto
+            const codigoAnteriorPuesto = puestoActual.codigo;
+            await tx.puesto.update({
+              where: { id: puestoActual.id },
+              data: { codigo: puestoNuevoNormalizado, estado: "Ocupado", comercianteId: id },
+            });
+
+            // Sincronizar en planos_naves si estaba ubicado en el croquis
+            const plano = await tx.planoNave.findFirst({
+              where: { naveId: naveObj.id },
+            });
+            if (plano && Array.isArray(plano.planoJson)) {
+              let huboCambioPlano = false;
+              const celdas = (plano.planoJson as unknown as Record<string, unknown>[]).map((c) => {
+                if (c.tipo === "PUESTO" && (c.codigoPuesto === codigoAnteriorPuesto || c.codigoPuesto === `#${codigoAnteriorPuesto}`)) {
+                  huboCambioPlano = true;
+                  return { ...c, codigoPuesto: puestoNuevoNormalizado };
+                }
+                return c;
+              });
+              if (huboCambioPlano) {
+                await tx.planoNave.update({
+                  where: { id: plano.id },
+                  data: { planoJson: celdas as unknown as Prisma.InputJsonValue },
+                });
+              }
+            }
+          }
+        } else {
+          // El comerciante cambió de nave o no tenía puesto previo o se le quitó el puesto
+          if (puestoActual) {
+            await tx.puesto.update({
+              where: { id: puestoActual.id },
+              data: { estado: "Vacante", comercianteId: null },
+            });
+          }
+
+          if (puestoNuevoNormalizado && naveObj) {
+            const puestoEnNuevaNave = await tx.puesto.findFirst({
+              where: {
+                naveId: naveObj.id,
+                codigo: puestoNuevoNormalizado,
+                estado: "Vacante",
               },
             });
-          } else if (naveNueva) {
-            const naveObj = await tx.nave.findFirst({
-              where: { OR: [{ id: naveNueva }, { nombre: naveNueva }] },
-            });
-            if (naveObj) {
+
+            if (puestoEnNuevaNave) {
+              await tx.puesto.update({
+                where: { id: puestoEnNuevaNave.id },
+                data: { estado: "Ocupado", comercianteId: id },
+              });
+            } else {
               await tx.puesto.create({
                 data: {
-                  codigo: puestoNuevo,
+                  codigo: puestoNuevoNormalizado,
                   naveId: naveObj.id,
                   estado: "Ocupado",
                   comercianteId: id,
