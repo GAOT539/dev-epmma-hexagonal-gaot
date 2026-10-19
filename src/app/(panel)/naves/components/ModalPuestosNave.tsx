@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import type { Nave } from "@/domain/models/nave.model";
-import type { Puesto } from "@/domain/models/comerciante.model";
+import type { Puesto, Comerciante } from "@/domain/models/comerciante.model";
 import { naveService } from "@/application/services/nave.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,7 @@ interface ModalPuestosNaveProps {
   isOpen: boolean;
   onClose: () => void;
   onPuestosActualizados: () => Promise<void> | void;
+  comerciantes?: Comerciante[];
 }
 
 export function ModalPuestosNave({
@@ -38,6 +39,7 @@ export function ModalPuestosNave({
   isOpen,
   onClose,
   onPuestosActualizados,
+  comerciantes = [],
 }: ModalPuestosNaveProps) {
   const [puestos, setPuestos] = useState<Puesto[]>([]);
   const [cargando, setCargando] = useState(false);
@@ -56,14 +58,42 @@ export function ModalPuestosNave({
     onClose();
   }, [onClose]);
 
+  // Si puestos del fetch aún no cargaron, usar puestos de la nave como fallback inmediato
+  const puestosEfectivos = useMemo(() => {
+    if (puestos.length > 0) return puestos;
+    if (!nave?.puestos || nave.puestos.length === 0) return [];
+    return nave.puestos.map((p) => {
+      const com = comerciantes.find((c) => c.idInterno === p.comercianteId);
+      return {
+        id: p.id,
+        codigo: p.codigo,
+        naveId: p.naveId,
+        estado: p.estado,
+        comercianteId: p.comercianteId ?? null,
+        comerciante: com
+          ? {
+              idInterno: com.idInterno,
+              ciu: com.ciu,
+              cedula: com.cedula,
+              contribuyente: com.contribuyente,
+              actividad: com.actividad,
+            }
+          : p.comerciante,
+      };
+    });
+  }, [puestos, nave, comerciantes]);
+
   useEffect(() => {
     if (!isOpen || !nave) return;
+
     let activo = true;
     naveService
       .obtenerPuestosNave(nave.id)
       .then((data) => {
         if (activo) {
-          setPuestos(data);
+          if (Array.isArray(data) && data.length > 0) {
+            setPuestos(data);
+          }
           setCambiosCodigos({});
           setCargando(false);
         }
@@ -82,14 +112,14 @@ export function ModalPuestosNave({
   }, [isOpen, nave]);
 
   // Contadores en tiempo real
-  const total = puestos.length;
-  const ocupados = puestos.filter((p) => p.estado === "Ocupado").length;
-  const vacantes = puestos.filter((p) => p.estado === "Vacante").length;
+  const total = puestosEfectivos.length;
+  const ocupados = puestosEfectivos.filter((p) => p.estado === "Ocupado").length;
+  const vacantes = puestosEfectivos.filter((p) => p.estado === "Vacante").length;
 
   // Filtrado de puestos
   const puestosFiltrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    return puestos.filter((p) => {
+    return puestosEfectivos.filter((p) => {
       // Filtro por pestaña
       if (filtroEstado === "OCUPADOS" && p.estado !== "Ocupado") return false;
       if (filtroEstado === "VACANTES" && p.estado !== "Vacante") return false;
@@ -104,7 +134,7 @@ export function ModalPuestosNave({
 
       return codigoMatch || contribuyenteMatch || ciuMatch || cedulaMatch || actividadMatch;
     });
-  }, [puestos, busqueda, filtroEstado, cambiosCodigos]);
+  }, [puestosEfectivos, busqueda, filtroEstado, cambiosCodigos]);
 
   // Manejo de cambio de texto en un puesto
   const handleCodigoChange = (puestoId: string, val: string) => {
@@ -137,9 +167,10 @@ export function ModalPuestosNave({
     setGuardandoId(puesto.id);
     try {
       const pActualizado = await naveService.actualizarCodigoPuesto(nave.id, puesto.id, nuevoCodigo);
-      setPuestos((prev) =>
-        prev.map((item) => (item.id === puesto.id ? { ...item, codigo: pActualizado.codigo } : item))
-      );
+      setPuestos((prev) => {
+        const base = prev.length > 0 ? prev : puestosEfectivos;
+        return base.map((item) => (item.id === puesto.id ? { ...item, codigo: pActualizado.codigo } : item));
+      });
       setCambiosCodigos((prev) => {
         const copy = { ...prev };
         delete copy[puesto.id];
@@ -158,10 +189,10 @@ export function ModalPuestosNave({
   // Cantidad de cambios pendientes
   const cambiosPendientes = useMemo(() => {
     return Object.entries(cambiosCodigos).filter(([id, val]) => {
-      const p = puestos.find((x) => x.id === id);
+      const p = puestosEfectivos.find((x) => x.id === id);
       return p && val.trim().toUpperCase() !== p.codigo && val.trim() !== "";
     });
-  }, [cambiosCodigos, puestos]);
+  }, [cambiosCodigos, puestosEfectivos]);
 
   // Guardar todos los cambios en lote
   const handleGuardarLote = async () => {

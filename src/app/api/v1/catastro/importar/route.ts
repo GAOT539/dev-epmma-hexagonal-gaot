@@ -1,9 +1,8 @@
-// ── API Route: POST /api/v1/catastro/importar ─────────────────────────────────
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
+import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
 
 export async function POST(request: Request) {
   try {
@@ -154,6 +153,7 @@ function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
         if (!puesto) {
           puesto = await tx.puesto.create({
             data: {
+              id: crypto.randomUUID(),
               codigo: codigoPuesto,
               naveId: naveIdFinal,
               estado: "Ocupado",
@@ -265,9 +265,10 @@ function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
         }
       }
 
-      return { exitosos, errores };
+      return { exitosos, errores, naveId: naveIdFinal };
     });
 
+    await sincronizarPuestosDeNaveEnBD(resultado.naveId);
     if (resultado.exitosos > 0) {
       await asegurarAsistenciaInicialDelDia();
     }

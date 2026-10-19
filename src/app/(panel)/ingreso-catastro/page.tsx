@@ -69,14 +69,9 @@ export default function IngresoCatastroPage() {
       if (extension === "xlsx" || extension === "xls") {
         const buffer = await file.arrayBuffer();
         parsed = await importadorService.parsearExcel(buffer);
-      } else if (extension === "csv") {
-        const buffer = await file.arrayBuffer();
-        try {
-          parsed = await importadorService.parsearExcel(buffer);
-        } catch {
-          const texto = await file.text();
-          parsed = await importadorService.parsearCSV(texto);
-        }
+      } else if (extension === "csv" || extension === "txt") {
+        const texto = await file.text();
+        parsed = await importadorService.parsearCSV(texto);
       } else if (extension === "xml") {
         const texto = await file.text();
         parsed = await importadorService.parsearXML(texto);
@@ -89,6 +84,37 @@ export default function IngresoCatastroPage() {
         toast.error("No se detectaron comerciantes válidos con cédula en el archivo.");
         return;
       }
+
+      // Inferencia de nave desde código de puesto o nombre de archivo si no está definida
+      const nombreArchivoUpper = file.name.toUpperCase();
+      let naveDesdeArchivo: string | null = null;
+      if (nombreArchivoUpper.includes("ROPA")) naveDesdeArchivo = "NAVE ROPA";
+      else if (nombreArchivoUpper.includes("CF")) naveDesdeArchivo = "NAVE CF";
+      else if (nombreArchivoUpper.includes("FLORES")) naveDesdeArchivo = "NAVE FLORES";
+      else if (/\bNAVE[_\s-]*([A-Z0-9]+)\b/.test(nombreArchivoUpper)) {
+        const m = nombreArchivoUpper.match(/\bNAVE[_\s-]*([A-Z0-9]+)\b/);
+        if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
+      }
+
+      parsed = parsed.map((reg) => {
+        let naveReg = reg.nave?.trim().toUpperCase();
+        if (!naveReg || naveReg === "NO DEFINIDA") {
+          const upperPuesto = (reg.puesto || "").toUpperCase();
+          if (upperPuesto.includes("ZCF-")) naveReg = "NAVE CF";
+          else if (upperPuesto.includes("N-A-") || upperPuesto.includes("N-A")) naveReg = "NAVE A";
+          else if (upperPuesto.includes("N-E-") || upperPuesto.includes("N-E")) naveReg = "NAVE E";
+          else {
+            const match = upperPuesto.match(/\bN-([A-ZÑ0-9]+)-/);
+            if (match && match[1]) naveReg = `NAVE ${match[1]}`;
+            else if (naveDesdeArchivo) naveReg = naveDesdeArchivo;
+            else naveReg = "NAVE A";
+          }
+        }
+        return {
+          ...reg,
+          nave: naveReg,
+        };
+      });
 
       // Validación estricta de aislamiento de naves para el rol SUPERVISOR
       if (user?.rol === "SUPERVISOR") {

@@ -545,6 +545,7 @@ export default function NavesPage() {
         isOpen={Boolean(navePuestosModal)}
         onClose={handleClosePuestos}
         onPuestosActualizados={handlePuestosActualizados}
+        comerciantes={comerciantes}
       />
     </div>
   );

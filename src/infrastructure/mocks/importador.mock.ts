@@ -219,27 +219,22 @@ function seleccionarMejorPuesto(candidatos: string[]): string {
   if (candidatos.length === 0) return "-";
   if (candidatos.length === 1) return candidatos[0];
 
-  // Si tienes dos candidatos a puesto (ej. "BODEGA N-E-001" en Puesto y "N-E-01" en Descripción,
-  // o "ZCF-CUBICULO-15" y "ZCF-15", o "NUCLEO N-03B-D" y "N-D-02"),
-  // prefiere siempre el código corto estandarizado (el que hace match con /^(N-[A-ZÑ0-9-]+|ZCF-[A-Z0-9-]+)$/i
-  // sin las palabras "BODEGA", "CUBICULO" ni "NUCLEO").
+  // Si algún candidato empieza por "BODEGA ", "CUBICULO " o "NUCLEO ", consérvalo íntegro sin recortarlo ni descartarlo
+  const conPrefijoCompleto = candidatos.find(
+    (c) =>
+      c.toUpperCase().startsWith("BODEGA ") ||
+      c.toUpperCase().startsWith("CUBICULO ") ||
+      c.toUpperCase().startsWith("CUBÍCULO ") ||
+      c.toUpperCase().startsWith("NUCLEO ") ||
+      c.toUpperCase().startsWith("NÚCLEO ")
+  );
+  if (conPrefijoCompleto) {
+    return conPrefijoCompleto;
+  }
+
   const estandarizado = candidatos.find((c) => esCodigoEstandarizado(c));
   if (estandarizado) {
     return estandarizado;
-  }
-
-  // Descartar candidatos con palabras técnicas si hay otros
-  const sinTecnicas = candidatos.filter(
-    (c) =>
-      !c.includes("BODEGA") &&
-      !c.includes("CUBICULO") &&
-      !c.includes("CUBÍCULO") &&
-      !c.includes("NUCLEO") &&
-      !c.includes("NÚCLEO")
-  );
-  if (sinTecnicas.length > 0) {
-    sinTecnicas.sort((a, b) => a.length - b.length);
-    return sinTecnicas[0];
   }
 
   const ordenados = [...candidatos].sort((a, b) => a.length - b.length);
@@ -251,6 +246,12 @@ export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   const upper = codigoPuesto.trim().toUpperCase();
   if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
     return "NAVE CF";
+  }
+  if (upper.includes("N-A-") || upper.includes("N-A")) {
+    return "NAVE A";
+  }
+  if (upper.includes("N-E-") || upper.includes("N-E")) {
+    return "NAVE E";
   }
   const match = upper.match(/\bN-([A-ZÑ0-9]+)-/);
   if (match && match[1]) {
@@ -356,10 +357,14 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
 
       // A. Detección de fila de encabezados y mapeo de columnas
       const tieneCedulaHeader = celdasUpper.some(
-        (s) => s.includes("CEDULA") || s.includes("CÉDULA")
+        (s) => s.includes("CEDULA") || s.includes("CÉDULA") || s.includes("RUC")
       );
       const tieneNombreHeader = celdasUpper.some(
-        (s) => s.includes("NOMBRES") || s.includes("OCUPANTE") || s.includes("NOMBRE")
+        (s) =>
+          s.includes("NOMBRES") ||
+          s.includes("OCUPANTE") ||
+          s.includes("NOMBRE") ||
+          s.includes("CONTRIBUYENTE")
       );
 
       if (tieneCedulaHeader && tieneNombreHeader) {
@@ -368,11 +373,16 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
           if (!val) continue;
           if (val.includes("CIU") || val.includes("CUI")) {
             colCiu = i;
-          } else if (val.includes("NOMBRES") || val.includes("OCUPANTE") || val.includes("NOMBRE")) {
+          } else if (
+            val.includes("NOMBRES") ||
+            val.includes("OCUPANTE") ||
+            val.includes("NOMBRE") ||
+            val.includes("CONTRIBUYENTE")
+          ) {
             if (colNombre === -1) colNombre = i;
           } else if (val.includes("ARTICULO") || val.includes("ARTÍCULO") || val.includes("ACTIVIDAD")) {
             colArticulo = i;
-          } else if (val.includes("PUESTO") || val.includes("BODEGA")) {
+          } else if (val.includes("PUESTO") || val.includes("BODEGA") || val.includes("NUMBODEGA")) {
             colPuesto = i;
           } else if (val.includes("MTR") || val.includes("MTS")) {
             colMts = i;
@@ -445,7 +455,7 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
     }
 
     if (!nombre) {
-      const startSearch = Math.max(cedulaIndex + 1, 3);
+      const startSearch = cedulaIndex + 1;
       const endSearch = Math.min(row.length, Math.max(startSearch + 4, 7));
 
       let mejorCandidate = "";
@@ -728,21 +738,53 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
 }
 
 export function parsearCSV(contenido: string): ImportacionRegistro[] {
-  const lineas = contenido.trim().split("\n");
+  const lineas = contenido
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
   if (lineas.length === 0) return [];
 
-  const primeraLinea = lineas[0].toUpperCase();
+  // 1. Detectar delimitador (coma o punto y coma)
+  const primerLinea = lineas[0];
+  const cantComas = (primerLinea.match(/,/g) || []).length;
+  const cantPuntosComas = (primerLinea.match(/;/g) || []).length;
+  const sep = cantPuntosComas > cantComas ? ";" : ",";
+
+  const splitLinea = (linea: string): string[] => {
+    if (linea.includes('"')) {
+      const result: string[] = [];
+      let cur = "";
+      let inQuotes = false;
+      for (let i = 0; i < linea.length; i++) {
+        const char = linea[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === sep && !inQuotes) {
+          result.push(cur.trim().replace(/^"|"$/g, "").trim());
+          cur = "";
+        } else {
+          cur += char;
+        }
+      }
+      result.push(cur.trim().replace(/^"|"$/g, "").trim());
+      return result;
+    }
+    return linea.split(sep).map((s) => s.trim().replace(/^"|"$/g, "").trim());
+  };
+
+  const colsHeader = splitLinea(lineas[0]).map((c) => c.toUpperCase());
+  const primeraLineaUpper = lineas[0].toUpperCase();
   const tieneCabecera =
-    primeraLinea.includes("CEDULA") ||
-    primeraLinea.includes("CÉDULA") ||
-    primeraLinea.includes("CONTRIBUYENTE") ||
-    primeraLinea.includes("NOMBRE") ||
-    primeraLinea.includes("PUESTO") ||
-    primeraLinea.includes("NAVE");
+    primeraLineaUpper.includes("CEDULA") ||
+    primeraLineaUpper.includes("CÉDULA") ||
+    primeraLineaUpper.includes("CONTRIBUYENTE") ||
+    primeraLineaUpper.includes("NOMBRE") ||
+    primeraLineaUpper.includes("OCUPANTE") ||
+    primeraLineaUpper.includes("PUESTO") ||
+    primeraLineaUpper.includes("NAVE") ||
+    primeraLineaUpper.includes("CIU") ||
+    primeraLineaUpper.includes("CUI");
 
-  const lineasDatos = tieneCabecera ? lineas.slice(1) : lineas;
-
-  // Si tiene cabecera, mapear columnas
   let idxCiu = -1;
   let idxCedula = -1;
   let idxNombre = -1;
@@ -751,23 +793,40 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
   let idxNave = -1;
 
   if (tieneCabecera) {
-    const cols = lineas[0].split(",").map((c) => c.trim().toUpperCase());
-    cols.forEach((col, idx) => {
+    colsHeader.forEach((col, idx) => {
       if (col.includes("CIU") || col.includes("CUI")) idxCiu = idx;
       else if (col.includes("CEDULA") || col.includes("CÉDULA") || col.includes("RUC")) idxCedula = idx;
-      else if (col.includes("CONTRIBUYENTE") || col.includes("NOMBRE") || col.includes("OCUPANTE")) idxNombre = idx;
-      else if (col.includes("ACTIVIDAD") || col.includes("ARTICULO") || col.includes("ARTÍCULO")) idxActividad = idx;
-      else if (col.includes("PUESTO") || col.includes("BODEGA") || col.includes("NUMBODEGA")) idxPuesto = idx;
-      else if (col.includes("NAVE")) idxNave = idx;
+      else if (
+        col.includes("CONTRIBUYENTE") ||
+        col.includes("NOMBRE") ||
+        col.includes("OCUPANTE") ||
+        col.includes("NOMBRES")
+      ) {
+        idxNombre = idx;
+      } else if (
+        col.includes("ACTIVIDAD") ||
+        col.includes("ARTICULO") ||
+        col.includes("ARTÍCULO")
+      ) {
+        idxActividad = idx;
+      } else if (
+        col.includes("PUESTO") ||
+        col.includes("BODEGA") ||
+        col.includes("NUMBODEGA")
+      ) {
+        idxPuesto = idx;
+      } else if (col.includes("NAVE")) {
+        idxNave = idx;
+      }
     });
   }
 
+  const lineasDatos = tieneCabecera ? lineas.slice(1) : lineas;
   const registros: ImportacionRegistro[] = [];
   let naveDetectadaEnArchivo = "";
 
   for (let idx = 0; idx < lineasDatos.length; idx++) {
-    const linea = lineasDatos[idx];
-    const partes = linea.split(",").map((s) => s.trim().replace(/^"|"$/g, ""));
+    const partes = splitLinea(lineasDatos[idx]);
     if (partes.length < 2 || !partes.some((p) => p.length > 0)) continue;
 
     let ciu = "S/N";
@@ -780,7 +839,7 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
     if (tieneCabecera && (idxCedula !== -1 || idxNombre !== -1)) {
       if (idxCiu !== -1) {
         const valCiu = (partes[idxCiu] || "").trim();
-        ciu = (!valCiu || valCiu === "-" || valCiu === "") ? "S/N" : valCiu;
+        ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
       }
       if (idxCedula !== -1 && partes[idxCedula]) cedula = partes[idxCedula].trim();
       if (idxNombre !== -1 && partes[idxNombre]) nombre = partes[idxNombre].trim();
@@ -791,7 +850,7 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
       // Formato estándar institucional: CIU, Cédula, Contribuyente, Actividad/Artículo, Puesto, [Nave]
       if (partes.length >= 5) {
         const valCiu = (partes[0] || "").trim();
-        ciu = (!valCiu || valCiu === "-" || valCiu === "") ? "S/N" : valCiu;
+        ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
         cedula = (partes[1] || "").trim();
         nombre = (partes[2] || "Comerciante").trim();
         actividad = (partes[3] || "General").trim();
@@ -802,12 +861,19 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
         nave = (partes[0] || "").trim();
         nombre = (partes[1] || "Comerciante").trim();
         puesto = (partes[2] || "-").trim();
-        cedula = `18${String(10000000 + idx).padStart(8, "0")}`;
+        cedula = (partes[3] || "").trim();
       }
     }
 
-    if (!cedula) {
+    const normCedula = normalizarYCedula(cedula);
+    if (normCedula) {
+      cedula = normCedula;
+    } else if (!cedula) {
       cedula = `18${String(10000000 + idx).padStart(8, "0")}`;
+    }
+
+    if (!ciu || ciu === "-" || ciu.trim() === "") {
+      ciu = "S/N";
     }
 
     let naveFinal = nave;

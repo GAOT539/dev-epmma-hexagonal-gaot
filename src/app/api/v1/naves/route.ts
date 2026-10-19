@@ -1,10 +1,14 @@
-// ── API Route: /api/v1/naves ──────────────────────────────────────────────────
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
+import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
 
 export async function GET() {
   try {
+    const navesExistentes = await prisma.nave.findMany({ select: { id: true } });
+    for (const n of navesExistentes) {
+      await sincronizarPuestosDeNaveEnBD(n.id);
+    }
+
     const naves = await prisma.nave.findMany({
       include: {
         puestos: true,

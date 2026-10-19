@@ -1,8 +1,7 @@
-// ── API Route: /api/v1/naves/[id]/puestos ──────────────────────────────────────
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
+import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -34,8 +33,17 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const nave = await prisma.nave.findUnique({
-      where: { id },
+    // Auto-reconciliación de puestos de la nave en base de datos
+    await sincronizarPuestosDeNaveEnBD(id);
+
+    const nave = await prisma.nave.findFirst({
+      where: {
+        OR: [
+          { id },
+          { nombre: id },
+          { id: id.toLowerCase().replace(/\s+/g, "-") },
+        ],
+      },
     });
 
     if (!nave) {
@@ -43,7 +51,7 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     const puestos = await prisma.puesto.findMany({
-      where: { naveId: id },
+      where: { naveId: nave.id },
       include: {
         comerciante: {
           select: {
@@ -60,25 +68,28 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const puestosOrdenados = ordenarPuestos(puestos);
 
-    return NextResponse.json(
-      puestosOrdenados.map((p) => ({
-        id: p.id,
-        codigo: p.codigo,
-        naveId: p.naveId,
-        estado: p.estado,
-        comercianteId: p.comercianteId ?? undefined,
-        comerciante: p.comerciante
-          ? {
-              idInterno: p.comerciante.idInterno,
-              ciu: p.comerciante.ciu,
-              cedula: p.comerciante.cedula,
-              contribuyente: p.comerciante.contribuyente,
-              actividad: p.comerciante.actividad,
-              estadoRegistro: p.comerciante.estadoRegistro,
-            }
-          : null,
-      }))
-    );
+    const listaFormateada = puestosOrdenados.map((p) => ({
+      id: p.id,
+      codigo: p.codigo,
+      naveId: p.naveId,
+      estado: p.estado,
+      comercianteId: p.comercianteId ?? undefined,
+      comerciante: p.comerciante
+        ? {
+            idInterno: p.comerciante.idInterno,
+            ciu: p.comerciante.ciu,
+            cedula: p.comerciante.cedula,
+            contribuyente: p.comerciante.contribuyente,
+            actividad: p.comerciante.actividad,
+            estadoRegistro: p.comerciante.estadoRegistro,
+          }
+        : null,
+    }));
+
+    return NextResponse.json({
+      exito: true,
+      puestos: listaFormateada,
+    });
   } catch (error) {
     console.error("Error en GET /api/v1/naves/[id]/puestos:", error);
     return NextResponse.json(

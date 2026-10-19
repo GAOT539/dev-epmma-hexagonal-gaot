@@ -115,13 +115,15 @@ export class NaveRepositoryImpl implements INaveRepository {
   }
 
   async obtenerPuestosNave(naveId: string): Promise<Puesto[]> {
-    const res = await fetch(`/api/v1/naves/${naveId}/puestos`);
+    const res = await fetch(`/api/v1/naves/${encodeURIComponent(naveId)}/puestos`);
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
       throw new Error(data.error || data.mensaje || "Error al obtener puestos de la nave");
     }
     const data = await res.json();
-    return Array.isArray(data.puestos) ? data.puestos : [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.puestos)) return data.puestos;
+    return [];
   }
 
   async actualizarCodigoPuesto(
@@ -129,7 +131,7 @@ export class NaveRepositoryImpl implements INaveRepository {
     puestoId: string,
     nuevoCodigo: string
   ): Promise<Puesto> {
-    const res = await fetch(`/api/v1/naves/${naveId}/puestos`, {
+    const res = await fetch(`/api/v1/naves/${encodeURIComponent(naveId)}/puestos`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ puestoId, nuevoCodigo }),
@@ -146,7 +148,7 @@ export class NaveRepositoryImpl implements INaveRepository {
     naveId: string,
     cambios: Array<{ puestoId: string; nuevoCodigo: string }>
   ): Promise<Puesto[]> {
-    const res = await fetch(`/api/v1/naves/${naveId}/puestos`, {
+    const res = await fetch(`/api/v1/naves/${encodeURIComponent(naveId)}/puestos`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cambios }),
@@ -156,7 +158,9 @@ export class NaveRepositoryImpl implements INaveRepository {
       throw new Error(data.error || data.mensaje || "Error al actualizar códigos de puestos");
     }
     const data = await res.json();
-    return Array.isArray(data.puestos) ? data.puestos : [];
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data.puestos)) return data.puestos;
+    return [];
   }
 }
 
