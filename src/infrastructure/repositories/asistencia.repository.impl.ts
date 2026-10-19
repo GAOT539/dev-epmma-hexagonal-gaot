@@ -1,4 +1,4 @@
-// ── Adaptador de Infraestructura: AsistenciaRepository (API REST + Respaldo Mock) 
+// ── Adaptador de Infraestructura: AsistenciaRepository (Consumo Directo API REST / MySQL) ──
 
 import type { IAsistenciaRepository } from "@/domain/ports/asistencia.repository";
 import type {
@@ -8,50 +8,30 @@ import type {
   PermisoDetalle,
   TipoObservacion,
 } from "@/domain/models/asistencia.model";
-import {
-  getAsistenciaPorFecha as mockGetAsistenciaPorFecha,
-  getAsistenciaComerciantePorFecha as mockGetAsistenciaComerciantePorFecha,
-  getAsistenciaComercianteRango as mockGetAsistenciaComercianteRango,
-  getAsistenciaNaveRango as mockGetAsistenciaNaveRango,
-  getAsistenciaRango as mockGetAsistenciaRango,
-  setEstadoAsistencia as mockSetEstadoAsistencia,
-  setPermisoComercianteRango as mockSetPermisoComercianteRango,
-  agregarObservacionMock as mockAgregarObservacion,
-  eliminarObservacionMock as mockEliminarObservacion,
-  agregarPermisoMock as mockAgregarPermiso,
-  eliminarPermisoMock as mockEliminarPermiso,
-  registrarAsistenciaConPersistenciaMock as mockRegistrarPersistencia,
-} from "@/infrastructure/mocks/mercado.mock";
 
 export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
   async obtenerAsistenciaPorFecha(fecha: string): Promise<RegistroAsistencia[]> {
-    try {
-      const res = await fetch(`/api/v1/asistencia?fecha=${encodeURIComponent(fecha)}`);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/asistencia?fecha=${encodeURIComponent(fecha)}`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener asistencia por fecha");
     }
-    return Promise.resolve([...mockGetAsistenciaPorFecha(fecha)]);
+    return await res.json();
   }
 
   async obtenerAsistenciaComerciantePorFecha(
     comercianteId: string,
     fecha: string
   ): Promise<RegistroAsistencia | null> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia?comercianteId=${encodeURIComponent(comercianteId)}&fecha=${encodeURIComponent(fecha)}`
-      );
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia?comercianteId=${encodeURIComponent(comercianteId)}&fecha=${encodeURIComponent(fecha)}`
+    );
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener asistencia del comerciante");
     }
-    const reg = mockGetAsistenciaComerciantePorFecha(comercianteId, fecha);
-    return Promise.resolve(reg ? { ...reg } : null);
+    return await res.json();
   }
 
   async obtenerAsistenciaComercianteRango(
@@ -59,19 +39,14 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<RegistroAsistencia[]> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia?comercianteId=${encodeURIComponent(comercianteId)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
-      );
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia?comercianteId=${encodeURIComponent(comercianteId)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener asistencia en rango");
     }
-    return Promise.resolve([
-      ...mockGetAsistenciaComercianteRango(comercianteId, fechaInicio, fechaFin),
-    ]);
+    return await res.json();
   }
 
   async obtenerAsistenciaNaveRango(
@@ -79,38 +54,28 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<RegistroAsistencia[]> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia?naveId=${encodeURIComponent(naveId)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
-      );
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia?naveId=${encodeURIComponent(naveId)}&fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener asistencia de nave en rango");
     }
-    return Promise.resolve([
-      ...mockGetAsistenciaNaveRango(naveId, fechaInicio, fechaFin),
-    ]);
+    return await res.json();
   }
 
   async obtenerAsistenciaRango(
     fechaInicio: string,
     fechaFin: string
   ): Promise<RegistroAsistencia[]> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
-      );
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia?fechaInicio=${encodeURIComponent(fechaInicio)}&fechaFin=${encodeURIComponent(fechaFin)}`
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener asistencia en rango general");
     }
-    return Promise.resolve([
-      ...mockGetAsistenciaRango(fechaInicio, fechaFin),
-    ]);
+    return await res.json();
   }
 
   async registrarAsistencia(
@@ -120,20 +85,15 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     observacion?: string,
     observacionTexto?: string
   ): Promise<void> {
-    try {
-      const res = await fetch("/api/v1/asistencia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comercianteId, fecha, estado, observacion, observacionTexto }),
-      });
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/asistencia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comercianteId, fecha, estado, observacion, observacionTexto }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al registrar asistencia");
     }
-    mockSetEstadoAsistencia(comercianteId, fecha, estado, observacion, observacionTexto);
-    return Promise.resolve();
   }
 
   async asignarPermisoRango(
@@ -141,25 +101,20 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<void> {
-    try {
-      const res = await fetch("/api/v1/asistencia/permisos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          comercianteId,
-          motivo: "Permiso institucional",
-          fechaInicio,
-          fechaFin,
-        }),
-      });
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/asistencia/permisos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        comercianteId,
+        motivo: "Permiso institucional",
+        fechaInicio,
+        fechaFin,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al asignar permiso");
     }
-    mockSetPermisoComercianteRango(comercianteId, fechaInicio, fechaFin);
-    return Promise.resolve();
   }
 
   async agregarObservacion(
@@ -170,21 +125,16 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     numeroDocumento?: string,
     fechaHora?: string
   ): Promise<ObservacionDetalle> {
-    try {
-      const res = await fetch("/api/v1/asistencia/observaciones", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ comercianteId, fecha, texto, tipo, numeroDocumento, fechaHora }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/asistencia/observaciones", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comercianteId, fecha, texto, tipo, numeroDocumento, fechaHora }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al registrar la observación");
     }
-    return Promise.resolve(
-      mockAgregarObservacion(comercianteId, fecha, texto, tipo, numeroDocumento, fechaHora)
-    );
+    return await res.json();
   }
 
   async eliminarObservacion(
@@ -192,19 +142,14 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fecha: string,
     observacionId: string
   ): Promise<void> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia/observaciones?comercianteId=${encodeURIComponent(comercianteId)}&fecha=${encodeURIComponent(fecha)}&observacionId=${encodeURIComponent(observacionId)}`,
-        { method: "DELETE" }
-      );
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia/observaciones?comercianteId=${encodeURIComponent(comercianteId)}&fecha=${encodeURIComponent(fecha)}&observacionId=${encodeURIComponent(observacionId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al eliminar la observación");
     }
-    mockEliminarObservacion(comercianteId, fecha, observacionId);
-    return Promise.resolve();
   }
 
   async agregarPermiso(
@@ -214,27 +159,22 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fechaInicio: string,
     fechaFin: string
   ): Promise<PermisoDetalle> {
-    try {
-      const res = await fetch("/api/v1/asistencia/permisos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          comercianteId,
-          fechaAsignacion,
-          motivo,
-          fechaInicio,
-          fechaFin,
-        }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/asistencia/permisos", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        comercianteId,
+        fechaAsignacion,
+        motivo,
+        fechaInicio,
+        fechaFin,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al registrar el permiso");
     }
-    return Promise.resolve(
-      mockAgregarPermiso(comercianteId, fechaAsignacion, motivo, fechaInicio, fechaFin)
-    );
+    return await res.json();
   }
 
   async eliminarPermiso(
@@ -242,19 +182,14 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     fecha: string,
     permisoId: string
   ): Promise<void> {
-    try {
-      const res = await fetch(
-        `/api/v1/asistencia/permisos?comercianteId=${encodeURIComponent(comercianteId)}&permisoId=${encodeURIComponent(permisoId)}`,
-        { method: "DELETE" }
-      );
-      if (res.ok) {
-        return;
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(
+      `/api/v1/asistencia/permisos?comercianteId=${encodeURIComponent(comercianteId)}&permisoId=${encodeURIComponent(permisoId)}`,
+      { method: "DELETE" }
+    );
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al eliminar el permiso");
     }
-    mockEliminarPermiso(comercianteId, fecha, permisoId);
-    return Promise.resolve();
   }
 
   async registrarAsistenciaConPersistencia(
@@ -263,21 +198,16 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     supervisorNombre: string,
     comentario?: string
   ): Promise<{ fechaOrigen: string; diasCubiertos: number }> {
-    try {
-      const res = await fetch("/api/v1/asistencia/persistencia", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ naveId, fechaHasta, supervisorNombre, comentario }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/asistencia/persistencia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ naveId, fechaHasta, supervisorNombre, comentario }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al registrar asistencia con persistencia");
     }
-    return Promise.resolve(
-      mockRegistrarPersistencia(naveId, fechaHasta, supervisorNombre, comentario)
-    );
+    return await res.json();
   }
 }
 

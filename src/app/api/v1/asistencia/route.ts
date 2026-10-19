@@ -5,18 +5,51 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoAsistencia, Prisma } from "@prisma/client";
 import type { ObservacionDetalle } from "@/domain/models/asistencia.model";
 import type { DetalleComercianteControl, EtiquetaControlSupervisor } from "@/domain/models/auditoria.model";
+import {
+  obtenerFechaHoyEcuador,
+  asegurarAsistenciaInicialDelDia,
+  iniciarCronAsistenciaDiaria2AM,
+} from "@/infrastructure/database/daily-attendance.service";
 
 export async function GET(request: Request) {
   try {
+    iniciarCronAsistenciaDiaria2AM();
+    const hoyStr = obtenerFechaHoyEcuador();
+    await asegurarAsistenciaInicialDelDia(hoyStr);
+
     const { searchParams } = new URL(request.url);
+
+    // Caso Especial: Metadatos de límites para frontend
+    if (searchParams.get("meta") === "limites") {
+      const agg = await prisma.registroAsistencia.aggregate({
+        _min: { fecha: true },
+        _max: { fecha: true },
+      });
+      const minFecha = agg._min.fecha || hoyStr;
+      return NextResponse.json({
+        minFecha,
+        maxFecha: hoyStr,
+        hoy: hoyStr,
+      });
+    }
+
     const fecha = searchParams.get("fecha");
     const comercianteId = searchParams.get("comercianteId");
     const naveId = searchParams.get("naveId");
     const fechaInicio = searchParams.get("fechaInicio");
-    const fechaFin = searchParams.get("fechaFin");
+    let fechaFin = searchParams.get("fechaFin");
+
+    // Recortar fechaFin a hoyStr para jamás consultar días futuros
+    if (fechaFin && fechaFin > hoyStr) {
+      fechaFin = hoyStr;
+    }
 
     // Caso 1: Comerciante específico en una fecha
     if (comercianteId && fecha) {
+      if (fecha > hoyStr) {
+        return NextResponse.json(null);
+      }
+
       const registro = await prisma.registroAsistencia.findUnique({
         where: {
           comercianteId_fecha: { comercianteId, fecha },
@@ -41,7 +74,6 @@ export async function GET(request: Request) {
 
     // Caso 3: Nave específica en un rango de fechas
     if (naveId && fechaInicio && fechaFin) {
-      // Buscar comerciantes de esa nave
       const puestosNave = await prisma.puesto.findMany({
         where: { naveId },
         select: { comercianteId: true },
@@ -75,6 +107,10 @@ export async function GET(request: Request) {
 
     // Caso 5: Todos los registros de una fecha puntual
     if (fecha) {
+      if (fecha > hoyStr) {
+        return NextResponse.json([]);
+      }
+
       const registros = await prisma.registroAsistencia.findMany({
         where: { fecha },
       });
@@ -101,12 +137,20 @@ export async function POST(request: Request) {
       estado,
       observacion,
       observacionTexto,
-      supervisorNombre = "Supervisor del Sistema",
+      supervisorNombre,
     } = body;
 
     if (!comercianteId || !fecha || !estado) {
       return NextResponse.json(
         { error: "comercianteId, fecha y estado son requeridos." },
+        { status: 400 }
+      );
+    }
+
+    const hoyStr = obtenerFechaHoyEcuador();
+    if (fecha !== hoyStr) {
+      return NextResponse.json(
+        { error: "Solo se permite registrar o modificar asistencia en la fecha actual." },
         { status: 400 }
       );
     }
@@ -130,7 +174,6 @@ export async function POST(request: Request) {
     });
 
     if (!puestoObj) {
-      // Si no tiene puesto formal, asignar a la primera nave disponible o NAVE A
       const naveDefecto = await prisma.nave.findFirst();
       if (!naveDefecto) {
         return NextResponse.json({ error: "No existen naves registradas en el sistema." }, { status: 400 });
@@ -188,13 +231,55 @@ export async function POST(request: Request) {
         },
       });
 
-      // Sincronizar en sesiones_control_supervisor
+      // Sincronizar en sesiones_control_supervisor con fidelidad de auditoría
       const nave = await tx.nave.findUnique({ where: { id: puestoObj!.naveId } });
-      const supervisor = await tx.usuario.findFirst({
-        where: { rol: "SUPERVISOR", estado: "Habilitado" },
-      });
 
-      if (nave && supervisor) {
+      if (nave) {
+        // 1. Determinar supervisor sin depender exclusivamente de rol SUPERVISOR
+        const headerUserId = request.headers.get("x-user-id");
+        const headerUserCedula = request.headers.get("x-user-cedula");
+
+        let userEjecutor = null;
+        if (headerUserId) {
+          userEjecutor = await tx.usuario.findUnique({ where: { id: headerUserId } });
+        }
+        if (!userEjecutor && headerUserCedula) {
+          userEjecutor = await tx.usuario.findUnique({ where: { cedula: headerUserCedula } });
+        }
+        if (!userEjecutor) {
+          userEjecutor = await tx.usuario.findFirst({
+            where: { rol: "SUPERVISOR", estado: "Habilitado" },
+          });
+        }
+        if (!userEjecutor) {
+          userEjecutor = await tx.usuario.findFirst({
+            where: { rol: "SUPERADMIN", estado: "Habilitado" },
+          });
+        }
+
+        const supervisorId = userEjecutor ? userEjecutor.id : "u-super";
+        const supervisorNombreFinal = userEjecutor
+          ? `${userEjecutor.nombres} ${userEjecutor.apellidos}`
+          : supervisorNombre || "Supervisor del Sistema";
+
+        // 2. Poblar nómina COMPLETA de la nave
+        const puestosOcupadosNave = await tx.puesto.findMany({
+          where: { naveId: nave.id, estado: "Ocupado" },
+          include: { comerciante: true },
+        });
+
+        const comIds = puestosOcupadosNave
+          .map((p) => p.comercianteId)
+          .filter((id): id is string => Boolean(id));
+
+        const registrosDia = await tx.registroAsistencia.findMany({
+          where: {
+            fecha,
+            comercianteId: { in: comIds },
+          },
+        });
+        const regMap = new Map(registrosDia.map((r) => [r.comercianteId, r]));
+
         const sesionExistente = await tx.sesionControlSupervisor.findFirst({
           where: {
             naveId: nave.id,
@@ -202,42 +287,67 @@ export async function POST(request: Request) {
           },
         });
 
-        const detalles: DetalleComercianteControl[] = Array.isArray(sesionExistente?.detallesComerciantes)
+        const detallesPrevios = Array.isArray(sesionExistente?.detallesComerciantes)
           ? (sesionExistente!.detallesComerciantes as unknown as DetalleComercianteControl[])
           : [];
+        const mapaPrevios = new Map(detallesPrevios.map((d) => [d.comercianteId, d]));
 
-        const indexExistente = detalles.findIndex((d) => d.comercianteId === comercianteId);
-        const nuevoDetalle: DetalleComercianteControl = {
-          comercianteId,
-          ciu: comerciante.ciu,
-          cedula: comerciante.cedula,
-          contribuyente: comerciante.contribuyente,
-          puesto: puestoObj!.codigo,
-          estado: estado as EstadoAsistencia,
-          metodo: "MANUAL",
-          horaRegistro: new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }),
-        };
+        const metodoModificado = sesionExistente?.esPersistencia
+          ? "MODIFICADO_TRAS_PERSISTENCIA"
+          : "MANUAL";
+        const horaModificado = new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
 
-        if (indexExistente >= 0) {
-          detalles[indexExistente] = nuevoDetalle;
-        } else {
-          detalles.push(nuevoDetalle);
+        const detallesFinales: DetalleComercianteControl[] = [];
+
+        for (const p of puestosOcupadosNave) {
+          const com = p.comerciante;
+          if (!com || com.estadoRegistro !== "Habilitado") continue;
+
+          if (com.idInterno === comercianteId) {
+            detallesFinales.push({
+              comercianteId,
+              ciu: com.ciu,
+              cedula: com.cedula,
+              contribuyente: com.contribuyente,
+              puesto: p.codigo,
+              estado: estado as EstadoAsistencia,
+              metodo: metodoModificado,
+              horaRegistro: horaModificado,
+            });
+          } else {
+            const previo = mapaPrevios.get(com.idInterno);
+            if (previo) {
+              detallesFinales.push(previo);
+            } else {
+              const r = regMap.get(com.idInterno);
+              detallesFinales.push({
+                comercianteId: com.idInterno,
+                ciu: com.ciu,
+                cedula: com.cedula,
+                contribuyente: com.contribuyente,
+                puesto: p.codigo,
+                estado: r?.estado ?? "Presente",
+                metodo: sesionExistente?.esPersistencia ? "PERSISTENCIA" : "MANUAL",
+                horaRegistro: horaModificado,
+              });
+            }
+          }
         }
 
-        const presentes = detalles.filter((d) => d.estado === "Presente").length;
-        const ausentes = detalles.filter((d) => d.estado === "Ausente").length;
-        const permisos = detalles.filter((d) => d.estado === "Permiso").length;
+        const presentes = detallesFinales.filter((d) => d.estado === "Presente").length;
+        const ausentes = detallesFinales.filter((d) => d.estado === "Ausente").length;
+        const permisos = detallesFinales.filter((d) => d.estado === "Permiso").length;
 
         const resumen = {
-          totalOcupados: detalles.length,
-          tomados: detalles.length,
+          totalOcupados: detallesFinales.length,
+          tomados: detallesFinales.length,
           presentes,
           ausentes,
           permisos,
         };
 
         const etiquetas: EtiquetaControlSupervisor[] = Array.isArray(sesionExistente?.etiquetas)
-          ? (sesionExistente!.etiquetas as unknown as EtiquetaControlSupervisor[])
+          ? [...(sesionExistente!.etiquetas as unknown as EtiquetaControlSupervisor[])]
           : ["EN_FECHA"];
 
         let modificadoTrasPersistencia = sesionExistente?.modificadoTrasPersistencia || false;
@@ -253,7 +363,7 @@ export async function POST(request: Request) {
             where: { id: sesionExistente.id },
             data: {
               resumen,
-              detallesComerciantes: detalles as unknown as Prisma.InputJsonValue,
+              detallesComerciantes: detallesFinales as unknown as Prisma.InputJsonValue,
               etiquetas,
               modificadoTrasPersistencia,
             },
@@ -261,8 +371,8 @@ export async function POST(request: Request) {
         } else {
           await tx.sesionControlSupervisor.create({
             data: {
-              supervisorId: supervisor.id,
-              supervisorNombre: supervisorNombre || `${supervisor.nombres} ${supervisor.apellidos}`,
+              supervisorId,
+              supervisorNombre: supervisorNombreFinal,
               naveId: nave.id,
               naveNombre: nave.nombre,
               fechaJornada: fecha,
@@ -270,7 +380,7 @@ export async function POST(request: Request) {
               esPersistencia: false,
               etiquetas,
               resumen,
-              detallesComerciantes: detalles as unknown as Prisma.InputJsonValue,
+              detallesComerciantes: detallesFinales as unknown as Prisma.InputJsonValue,
             },
           });
         }

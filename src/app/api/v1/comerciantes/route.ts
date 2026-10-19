@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante } from "@prisma/client";
+import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 
 export async function GET(request: Request) {
   try {
@@ -148,6 +149,10 @@ export async function POST(request: Request) {
 
       return nuevo;
     });
+
+    if (puestoId) {
+      await asegurarAsistenciaInicialDelDia();
+    }
 
     return NextResponse.json(resultado, { status: 201 });
   } catch (error) {

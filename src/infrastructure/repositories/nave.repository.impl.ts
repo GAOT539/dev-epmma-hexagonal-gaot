@@ -1,47 +1,28 @@
-// ── Adaptador de Infraestructura: NaveRepository (API REST + Respaldo Mock) ────
+// ── Adaptador de Infraestructura: NaveRepository (Consumo Directo API REST / MySQL) ──
 
 import type { INaveRepository } from "@/domain/ports/nave.repository";
 import type { Nave, PlanoEspacialNave } from "@/domain/models/nave.model";
-import {
-  eliminarNave as mockEliminarNave,
-  obtenerSupervisoresDisponibles as mockObtenerSupervisores,
-  obtenerPlanoNave as mockObtenerPlanoNave,
-  guardarPlanoNave as mockGuardarPlanoNave,
-  generarPlanoAutomatico as mockGenerarPlanoAutomatico,
-} from "@/infrastructure/mocks/naves.mock";
-import {
-  getNaves as mockGetNaves,
-  crearNave as mockCrearNave,
-  actualizarNave as mockActualizarNave,
-} from "@/infrastructure/mocks/mercado.mock";
+import { generarPlanoAutomatico as mockGenerarPlanoAutomatico } from "@/infrastructure/mocks/naves.mock";
 
 export class NaveRepositoryImpl implements INaveRepository {
   async obtenerNaves(): Promise<Nave[]> {
-    try {
-      const res = await fetch("/api/v1/naves");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.naves && Array.isArray(data.naves)) {
-          return data.naves;
-        }
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/naves");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener naves");
     }
-    return Promise.resolve([...mockGetNaves()]);
+    const data = await res.json();
+    return Array.isArray(data.naves) ? data.naves : [];
   }
 
   async obtenerNavePorId(id: string): Promise<Nave | null> {
-    try {
-      const res = await fetch(`/api/v1/naves/${id}`);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/naves/${id}`);
+    if (!res.ok) {
+      if (res.status === 404) return null;
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener nave");
     }
-    const nave = mockGetNaves().find((n) => n.id === id) ?? null;
-    return Promise.resolve(nave ? { ...nave } : null);
+    return await res.json();
   }
 
   async crearNave(
@@ -49,20 +30,16 @@ export class NaveRepositoryImpl implements INaveRepository {
     cantidadPuestos: number,
     supervisores: string[] = []
   ): Promise<Nave> {
-    try {
-      const res = await fetch("/api/v1/naves", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nombre, cantidadPuestos, supervisores }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/naves", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nombre, cantidadPuestos, supervisores }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al crear nave");
     }
-    const nueva = mockCrearNave(nombre, cantidadPuestos, supervisores);
-    return Promise.resolve({ ...nueva });
+    return await res.json();
   }
 
   async actualizarNave(
@@ -73,85 +50,69 @@ export class NaveRepositoryImpl implements INaveRepository {
       supervisores?: string[];
     }
   ): Promise<Nave | null> {
-    try {
-      const res = await fetch(`/api/v1/naves/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/naves/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const respData = await res.json().catch(() => ({}));
+      throw new Error(respData.error || respData.mensaje || "Error al actualizar nave");
     }
-    const actualizada = mockActualizarNave(id, data);
-    return Promise.resolve(actualizada ? { ...actualizada } : null);
+    return await res.json();
   }
 
   async eliminarNave(id: string): Promise<{ exito: boolean; mensaje: string }> {
-    try {
-      const res = await fetch(`/api/v1/naves/${id}`, {
-        method: "DELETE",
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/naves/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      return {
+        exito: false,
+        mensaje: data.error || data.mensaje || "Error al eliminar la nave",
+      };
     }
-    const resultado = mockEliminarNave(id);
-    return Promise.resolve(resultado);
+    return await res.json();
   }
 
   async obtenerSupervisoresDisponibles(): Promise<string[]> {
-    try {
-      const res = await fetch("/api/v1/naves");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.supervisoresDisponibles && Array.isArray(data.supervisoresDisponibles)) {
-          return data.supervisoresDisponibles;
-        }
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/naves");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener supervisores disponibles");
     }
-    return Promise.resolve([...mockObtenerSupervisores()]);
+    const data = await res.json();
+    return Array.isArray(data.supervisoresDisponibles) ? data.supervisoresDisponibles : [];
   }
 
   async obtenerPlanoNave(naveId: string): Promise<PlanoEspacialNave> {
-    try {
-      const res = await fetch(`/api/v1/naves/${naveId}/plano`);
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/naves/${naveId}/plano`);
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener plano de nave");
     }
-    return Promise.resolve(mockObtenerPlanoNave(naveId));
+    return await res.json();
   }
 
   async guardarPlanoNave(
     naveId: string,
     plano: PlanoEspacialNave
   ): Promise<PlanoEspacialNave> {
-    try {
-      const res = await fetch(`/api/v1/naves/${naveId}/plano`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(plano),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch(`/api/v1/naves/${naveId}/plano`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(plano),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al guardar plano de nave");
     }
-    return Promise.resolve(mockGuardarPlanoNave(naveId, plano));
+    return await res.json();
   }
 
   async generarPlanoAutomatico(naveId: string): Promise<PlanoEspacialNave> {
-    // Generación heurística arquitectónica
+    // Generación espacial heurística asistida
     return Promise.resolve(mockGenerarPlanoAutomatico(naveId));
   }
 }

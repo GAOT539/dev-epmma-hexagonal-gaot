@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
+import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 
 export async function POST(request: Request) {
   try {
@@ -241,6 +242,10 @@ function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
 
       return { exitosos, errores };
     });
+
+    if (resultado.exitosos > 0) {
+      await asegurarAsistenciaInicialDelDia();
+    }
 
     return NextResponse.json({
       exitosos: resultado.exitosos,

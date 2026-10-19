@@ -1,4 +1,4 @@
-// ── Adaptador de Infraestructura: ImportadorRepository (API REST + Respaldo Mock) 
+// ── Adaptador de Infraestructura: ImportadorRepository (Consumo Directo API REST / MySQL) ──
 
 import type { IImportadorRepository } from "@/domain/ports/importador.repository";
 import type {
@@ -6,8 +6,6 @@ import type {
   ImportacionResultado,
 } from "@/domain/models/comerciante.model";
 import {
-  simularImportacion as mockSimularImportacion,
-  guardarImportacion as mockGuardarImportacion,
   parsearExcel as parserExcel,
   parsearXML as parserXML,
   parsearCSV as parserCSV,
@@ -18,39 +16,31 @@ export class ImportadorRepositoryImpl implements IImportadorRepository {
   async simularImportacion(
     registros: ImportacionRegistro[]
   ): Promise<ImportacionResultado> {
-    try {
-      const res = await fetch("/api/v1/catastro/simular", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registros }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/catastro/simular", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registros }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al simular importación");
     }
-    const res = mockSimularImportacion(registros);
-    return Promise.resolve({ ...res });
+    return await res.json();
   }
 
   async guardarImportacion(
     registros: ImportacionRegistro[]
   ): Promise<ImportacionResultado> {
-    try {
-      const res = await fetch("/api/v1/catastro/importar", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ registros }),
-      });
-      if (res.ok) {
-        return await res.json();
-      }
-    } catch {
-      // Fallback
+    const res = await fetch("/api/v1/catastro/importar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ registros }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al guardar importación");
     }
-    const res = mockGuardarImportacion(registros);
-    return Promise.resolve({ ...res });
+    return await res.json();
   }
 
   async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {

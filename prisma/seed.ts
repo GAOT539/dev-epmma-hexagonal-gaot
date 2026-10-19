@@ -4,6 +4,7 @@
 import { PrismaClient, type Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import type { CeldaPlanoNave } from "../src/domain/models/nave.model";
+import { asegurarAsistenciaInicialDelDia, obtenerFechaHoyEcuador } from "../src/infrastructure/database/daily-attendance.service";
 
 const prisma = new PrismaClient();
 
@@ -200,6 +201,12 @@ async function main() {
   });
 
   console.log(`Plano espacial de NAVE A generado con ${puestoIndex}/${COMERCIANTES_NAVE_A.length} puestos ubicados (100%).`);
+
+  // 6. Asegurar asistencia inicial del día en "Presente" para hoy (0 registros pasados o futuros)
+  const fechaHoy = obtenerFechaHoyEcuador();
+  const resAsistencia = await asegurarAsistenciaInicialDelDia(fechaHoy);
+  console.log(`Asistencia inicial del día (${fechaHoy}) sembrada con éxito: ${resAsistencia.totalInicializados} registros en estado 'Presente'.`);
+
   console.log("Sembrado finalizado exitosamente.");
 }
 

@@ -89,9 +89,35 @@ export default function ListasPage() {
   const [comentarioPersistencia, setComentarioPersistencia] = useState("");
   const [guardandoPersistencia, setGuardandoPersistencia] = useState(false);
 
+  // Límites dinámicos de fechas obtenidos de la base de datos
+  const [limites, setLimites] = useState<{ minFecha: string; maxFecha: string; hoy: string }>({
+    minFecha: formatDate(new Date()),
+    maxFecha: formatDate(new Date()),
+    hoy: formatDate(new Date()),
+  });
+
   const [asistenciaDelDia, setAsistenciaDelDia] = useState<RegistroAsistencia[]>([]);
   const [comerciantesMap, setComerciantesMap] = useState<Map<string, Comerciante>>(new Map());
   const [cargando, setCargando] = useState(true);
+
+  // Carga de límites desde la base de datos
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/v1/asistencia?meta=limites")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!activo || !data) return;
+        setLimites({
+          minFecha: data.minFecha || formatDate(new Date()),
+          maxFecha: data.maxFecha || formatDate(new Date()),
+          hoy: data.hoy || formatDate(new Date()),
+        });
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // Carga inicial de Naves y Comerciantes
   useEffect(() => {
@@ -318,19 +344,26 @@ export default function ListasPage() {
     })
   );
 
-  // Días anteriores (excluyendo hoy, para el contenedor con scroll independiente)
-  const DIAS_MOSTRADOS = 14;
+  // Días anteriores (excluyendo hoy, restringido estrictamente a >= minFecha)
   const pastDates = useMemo(() => {
     const today = new Date();
-    const start = subDays(today, DIAS_MOSTRADOS);
-    const end = subDays(today, 1);
-    const dates = eachDayOfInterval({ start, end });
-    if (!isToday(selectedDate) && !dates.some((d) => formatDate(d) === formatDate(selectedDate))) {
-      dates.push(selectedDate);
-      dates.sort((a, b) => a.getTime() - b.getTime());
+    const yesterday = subDays(today, 1);
+    const minDateObj = new Date(limites.minFecha + "T00:00:00");
+
+    if (minDateObj > yesterday) {
+      return [];
     }
-    return dates;
-  }, [selectedDate]);
+
+    try {
+      const dates = eachDayOfInterval({ start: minDateObj, end: yesterday });
+      return dates.filter((d) => {
+        const val = formatDate(d);
+        return val >= limites.minFecha && val <= limites.hoy && val !== formatDate(today);
+      });
+    } catch {
+      return [];
+    }
+  }, [limites.minFecha, limites.hoy]);
 
   function selectNave(naveId: string) {
     if (!navesPermitidas.some((n) => n.id === naveId)) return;
@@ -488,18 +521,20 @@ export default function ListasPage() {
             {pastDates.map((date) => {
               const dateValue = formatDate(date);
               const isSelected = fechaStr === dateValue;
-              const isFutureDate = isFuture(date) && !isToday(date);
+              const isPastDisabled = dateValue < limites.minFecha;
+              const isFutureDate = (isFuture(date) && !isToday(date)) || dateValue > limites.hoy;
+              const isBlocked = isFutureDate || isPastDisabled;
 
               return (
                 <button
                   key={dateValue}
                   type="button"
-                  onClick={() => !isFutureDate && setSelectedDate(date)}
-                  disabled={isFutureDate}
+                  onClick={() => !isBlocked && setSelectedDate(date)}
+                  disabled={isBlocked}
                   aria-pressed={isSelected}
                   className={[
                     "shrink-0 rounded-full px-4 py-2 text-xs font-semibold capitalize transition-all duration-150",
-                    isFutureDate
+                    isBlocked
                       ? "bg-institucional-whiteSmokeBlack/10 text-institucional-whiteSmokeBlack/40 cursor-not-allowed"
                       : isSelected
                         ? "bg-institucional-green text-base-white shadow-sm font-bold"
@@ -546,7 +581,13 @@ export default function ListasPage() {
                       setCalendarOpen(false);
                     }
                   }}
-                  disabled={(date) => isFuture(date) && !isToday(date)}
+                  disabled={(date) => {
+                    const minD = new Date(limites.minFecha + "T00:00:00");
+                    minD.setHours(0, 0, 0, 0);
+                    const todayEnd = new Date();
+                    todayEnd.setHours(23, 59, 59, 999);
+                    return date > todayEnd || date < minD;
+                  }}
                   locale={es}
                   autoFocus
                 />

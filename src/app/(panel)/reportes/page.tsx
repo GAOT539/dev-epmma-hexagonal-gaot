@@ -9,7 +9,7 @@ import {
   Loader2,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { format, subDays, eachDayOfInterval } from "date-fns";
+import { format, eachDayOfInterval, startOfDay, endOfDay, parseISO } from "date-fns";
 import { es } from "date-fns/locale";
 import { useAuth } from "@/application/services/auth.service";
 import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
@@ -48,14 +48,40 @@ export default function ReportesPage() {
   const [incluirObservaciones, setIncluirObservaciones] = useState(true);
   const [soloObservaciones, setSoloObservaciones] = useState(false);
 
-  // Estados para fechas independientes
-  const [fechaInicioDate, setFechaInicioDate] = useState<Date | undefined>(() => subDays(new Date(), 14));
+  // Límites dinámicos de fechas obtenidos de la base de datos
+  const [limites, setLimites] = useState<{ minFecha: string; maxFecha: string; hoy: string }>({
+    minFecha: format(new Date(), "yyyy-MM-dd"),
+    maxFecha: format(new Date(), "yyyy-MM-dd"),
+    hoy: format(new Date(), "yyyy-MM-dd"),
+  });
+
+  // Estados para fechas independientes: inicializados en hoy
+  const [fechaInicioDate, setFechaInicioDate] = useState<Date | undefined>(() => new Date());
   const [fechaFinDate, setFechaFinDate] = useState<Date | undefined>(() => new Date());
   const [openInicio, setOpenInicio] = useState(false);
   const [openFin, setOpenFin] = useState(false);
 
   const fechaInicio = fechaInicioDate ? format(fechaInicioDate, "yyyy-MM-dd") : "";
   const fechaFin = fechaFinDate ? format(fechaFinDate, "yyyy-MM-dd") : "";
+
+  // Cargar límites de fechas reales de la base de datos
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/v1/asistencia?meta=limites")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!activo || !data) return;
+        setLimites({
+          minFecha: data.minFecha || format(new Date(), "yyyy-MM-dd"),
+          maxFecha: data.maxFecha || format(new Date(), "yyyy-MM-dd"),
+          hoy: data.hoy || format(new Date(), "yyyy-MM-dd"),
+        });
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // Cargar naves y comerciantes desde la capa de aplicación
   useEffect(() => {
@@ -101,23 +127,38 @@ export default function ReportesPage() {
     return map;
   }, [allNaves]);
 
-  // Rango de fechas
+  // Fechas reales registradas en la base de datos o el día de hoy
+  const fechasConRegistros = useMemo(() => {
+    const s = new Set<string>();
+    asistenciaData.forEach((r) => s.add(r.fecha));
+    s.add(limites.hoy);
+    return s;
+  }, [asistenciaData, limites.hoy]);
+
+  // Rango de fechas filtrado estrictamente: entre minFecha y hoyStr, con registros reales
   const fechas = useMemo(() => {
     if (!fechaInicio || !fechaFin) return [];
     try {
-      return eachDayOfInterval({
+      const allDays = eachDayOfInterval({
         start: new Date(fechaInicio + "T00:00:00"),
         end: new Date(fechaFin + "T00:00:00"),
       }).map((d) => format(d, "yyyy-MM-dd"));
+
+      return allDays.filter(
+        (f) =>
+          f >= limites.minFecha &&
+          f <= limites.hoy &&
+          fechasConRegistros.has(f)
+      );
     } catch {
       return [];
     }
-  }, [fechaInicio, fechaFin]);
+  }, [fechaInicio, fechaFin, limites.minFecha, limites.hoy, fechasConRegistros]);
 
   // Carga asíncrona de datos de asistencia
   useEffect(() => {
     let activo = true;
-    if (!fechaInicio || !fechaFin || fechas.length === 0) {
+    if (!fechaInicio || !fechaFin) {
       return;
     }
 
@@ -139,7 +180,7 @@ export default function ReportesPage() {
     return () => {
       activo = false;
     };
-  }, [selectedNaveId, fechaInicio, fechaFin, fechas]);
+  }, [selectedNaveId, fechaInicio, fechaFin]);
 
   // Filtro combinado: Nave + Buscador (apellidos, nombres o cédula)
   const reporteFiltrado = useMemo<ReporteItem[]>(() => {
@@ -190,7 +231,7 @@ export default function ReportesPage() {
         comRegistros.forEach((r) => regFechaMap.set(r.fecha, r));
 
         const estados = fechas.map(
-          (f) => regFechaMap.get(f)?.estado ?? "Presente"
+          (f) => regFechaMap.get(f)?.estado ?? (f === limites.hoy ? "Presente" : "Ausente")
         );
         const observaciones = formatearNovedadesReporte(comRegistros);
 
@@ -227,6 +268,7 @@ export default function ReportesPage() {
     searchQuery,
     fechas,
     soloObservaciones,
+    limites.hoy,
   ]);
 
   const hayDatos = reporteFiltrado.length > 0;
@@ -340,6 +382,10 @@ export default function ReportesPage() {
                           }
                           setOpenInicio(false);
                         }}
+                        disabled={(date) => {
+                          const minD = limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date());
+                          return date > endOfDay(new Date()) || date < minD;
+                        }}
                       />
                     </PopoverContent>
                   </Popover>
@@ -365,7 +411,12 @@ export default function ReportesPage() {
                           setFechaFinDate(date);
                           setOpenFin(false);
                         }}
-                        disabled={(date) => (fechaInicioDate ? date < fechaInicioDate : false)}
+                        disabled={(date) => {
+                          const minD = fechaInicioDate
+                            ? startOfDay(fechaInicioDate)
+                            : (limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date()));
+                          return date > endOfDay(new Date()) || date < minD;
+                        }}
                       />
                     </PopoverContent>
                   </Popover>

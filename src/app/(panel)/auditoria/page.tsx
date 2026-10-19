@@ -11,7 +11,7 @@ import {
   Download,
   Loader2,
 } from "lucide-react";
-import { format, subDays, isBefore } from "date-fns";
+import { format, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { auditoriaService } from "@/application/services/auditoria.service";
 import { usuarioService } from "@/application/services/usuario.service";
@@ -38,10 +38,17 @@ export default function ControlSupervisoresPage() {
   const [sesiones, setSesiones] = useState<SesionControlSupervisor[]>([]);
   const [cargando, setCargando] = useState(true);
 
-  // Filtros
+  // Límites dinámicos de fechas obtenidos de la base de datos
+  const [limites, setLimites] = useState<{ minFecha: string; maxFecha: string; hoy: string }>({
+    minFecha: format(new Date(), "yyyy-MM-dd"),
+    maxFecha: format(new Date(), "yyyy-MM-dd"),
+    hoy: format(new Date(), "yyyy-MM-dd"),
+  });
+
+  // Filtros inicializados en el rango real (minFecha .. hoy)
   const [busqueda, setBusqueda] = useState("");
   const [supervisorSeleccionado, setSupervisorSeleccionado] = useState("");
-  const [fechaInicio, setFechaInicio] = useState<Date | undefined>(() => subDays(new Date(), 21));
+  const [fechaInicio, setFechaInicio] = useState<Date | undefined>(() => new Date());
   const [fechaFin, setFechaFin] = useState<Date | undefined>(() => new Date());
   const [calendarInicioOpen, setCalendarInicioOpen] = useState(false);
   const [calendarFinOpen, setCalendarFinOpen] = useState(false);
@@ -53,6 +60,28 @@ export default function ControlSupervisoresPage() {
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
   const fechaHastaStr = fechaFin ? format(fechaFin, "yyyy-MM-dd") : undefined;
+
+  // Cargar límites de fechas reales de la base de datos
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/v1/asistencia?meta=limites")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!activo || !data) return;
+        setLimites({
+          minFecha: data.minFecha || format(new Date(), "yyyy-MM-dd"),
+          maxFecha: data.maxFecha || format(new Date(), "yyyy-MM-dd"),
+          hoy: data.hoy || format(new Date(), "yyyy-MM-dd"),
+        });
+        if (data.minFecha) {
+          setFechaInicio(parseISO(data.minFecha));
+        }
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
 
   // Cargar usuarios con rol SUPERVISOR
   useEffect(() => {
@@ -91,6 +120,8 @@ export default function ControlSupervisoresPage() {
   // Manejadores de fechas independientes con validación
   function handleSelectFechaInicio(date: Date | undefined) {
     if (!date) return;
+    const minD = limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date());
+    if (date > endOfDay(new Date()) || date < minD) return;
     setFechaInicio(date);
     if (fechaFin && isBefore(fechaFin, date)) {
       setFechaFin(date);
@@ -101,8 +132,11 @@ export default function ControlSupervisoresPage() {
 
   function handleSelectFechaFin(date: Date | undefined) {
     if (!date) return;
-    if (fechaInicio && isBefore(date, fechaInicio)) {
-      toast.error("La Fecha de Fin no puede ser anterior a la Fecha de Inicio");
+    const minD = fechaInicio
+      ? startOfDay(fechaInicio)
+      : (limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date()));
+    if (date > endOfDay(new Date()) || date < minD) {
+      toast.error("La Fecha de Fin no puede ser anterior a la Fecha de Inicio ni posterior a hoy");
       return;
     }
     setFechaFin(date);
@@ -229,6 +263,10 @@ export default function ControlSupervisoresPage() {
                     mode="single"
                     selected={fechaInicio}
                     onSelect={handleSelectFechaInicio}
+                    disabled={(date) => {
+                      const minD = limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date());
+                      return date > endOfDay(new Date()) || date < minD;
+                    }}
                   />
                 </PopoverContent>
               </Popover>
@@ -249,7 +287,12 @@ export default function ControlSupervisoresPage() {
                     mode="single"
                     selected={fechaFin}
                     onSelect={handleSelectFechaFin}
-                    disabled={(date) => (fechaInicio ? isBefore(date, fechaInicio) : false)}
+                    disabled={(date) => {
+                      const minD = fechaInicio
+                        ? startOfDay(fechaInicio)
+                        : (limites.minFecha ? startOfDay(parseISO(limites.minFecha)) : startOfDay(new Date()));
+                      return date > endOfDay(new Date()) || date < minD;
+                    }}
                   />
                 </PopoverContent>
               </Popover>

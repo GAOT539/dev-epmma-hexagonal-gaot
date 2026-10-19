@@ -6,6 +6,7 @@ import type { Prisma } from "@prisma/client";
 import type { PermisoDetalle } from "@/domain/models/asistencia.model";
 import type { DetalleComercianteControl } from "@/domain/models/auditoria.model";
 import { parseISO, subDays, format, isAfter, isBefore, isEqual } from "date-fns";
+import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,14 @@ export async function POST(request: Request) {
       supervisorNombre = "Supervisor Asignado",
       comentario = "Persistencia selectiva de asistencia ejecutada",
     } = body;
+
+    const hoyStr = obtenerFechaHoyEcuador();
+    if (fechaHasta !== hoyStr) {
+      return NextResponse.json(
+        { error: "Solo se permite registrar o modificar asistencia en la fecha actual." },
+        { status: 400 }
+      );
+    }
 
     if (!naveId || !fechaHasta) {
       return NextResponse.json(

@@ -1,0 +1,171 @@
+// ── Servicio de Asistencia Diaria Automática (02:00 AM Ecuador + Catch-Up Resiliente) ──
+
+import { prisma } from "@/infrastructure/database/prisma";
+import type { Prisma } from "@prisma/client";
+
+declare global {
+  var __epmma_cron_2am_initialized: boolean | undefined;
+  var __epmma_last_2am_run_date: string | undefined;
+  var __epmma_last_occupied_count: number | undefined;
+}
+
+/**
+ * Obtiene la fecha actual en la zona horaria oficial de Ecuador (America/Guayaquil)
+ * en formato estándar ISO "YYYY-MM-DD".
+ */
+export function obtenerFechaHoyEcuador(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Guayaquil",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+/**
+ * Asegura que todos los comerciantes con puesto ocupado y estado habilitado tengan
+ * su registro de asistencia para el día de hoy inicializado en "Presente" (o "Permiso"
+ * si tienen un permiso vigente registrado).
+ *
+ * Esta operación es 100% idempotente, segura contra condiciones de carrera y
+ * NUNCA toca registros de fechas pasadas ni futuras, ni sobreescribe modificaciones
+ * manuales realizadas en la jornada de hoy.
+ */
+export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Promise<{
+  totalInicializados: number;
+  fecha: string;
+}> {
+  const hoyStr = fechaHoyStr || obtenerFechaHoyEcuador();
+
+  // 1. Obtener todos los puestos ocupados con comerciantes habilitados
+  const puestosOcupados = await prisma.puesto.findMany({
+    where: {
+      estado: "Ocupado",
+      comercianteId: { not: null },
+      comerciante: {
+        estadoRegistro: "Habilitado",
+      },
+    },
+    include: {
+      comerciante: true,
+    },
+  });
+
+  if (puestosOcupados.length === 0) {
+    globalThis.__epmma_last_2am_run_date = hoyStr;
+    globalThis.__epmma_last_occupied_count = 0;
+    return { totalInicializados: 0, fecha: hoyStr };
+  }
+
+  // 2. Comerciantes que ya cuentan con registro en la fecha de hoy
+  const existentes = await prisma.registroAsistencia.findMany({
+    where: { fecha: hoyStr },
+    select: { comercianteId: true },
+  });
+  const existentesSet = new Set(existentes.map((r) => r.comercianteId));
+
+  // 3. Filtrar comerciantes que aún no tienen registro para hoy
+  const faltantes = puestosOcupados.filter(
+    (p) => p.comerciante && !existentesSet.has(p.comerciante.idInterno)
+  );
+
+  // Si todos los puestos ocupados ya tienen su registro hoy, finalizar en silencio sin escrituras innecesarias
+  if (faltantes.length === 0) {
+    globalThis.__epmma_last_2am_run_date = hoyStr;
+    globalThis.__epmma_last_occupied_count = puestosOcupados.length;
+    return { totalInicializados: 0, fecha: hoyStr };
+  }
+
+  let totalInicializados = 0;
+
+  for (const puesto of faltantes) {
+    const comerciante = puesto.comerciante;
+    if (!comerciante) continue;
+
+    // Verificar si el comerciante tiene algún permiso vigente que cubra la jornada de hoy
+    const registroConPermiso = await prisma.registroAsistencia.findFirst({
+      where: {
+        comercianteId: comerciante.idInterno,
+        permisoInicio: { lte: hoyStr },
+        permisoFin: { gte: hoyStr },
+      },
+      orderBy: { creadoEn: "desc" },
+    });
+
+    // Upsert idempotente: si por condición de carrera ya existiera, NO alterar estado ni observaciones
+    await prisma.registroAsistencia.upsert({
+      where: {
+        comercianteId_fecha: {
+          comercianteId: comerciante.idInterno,
+          fecha: hoyStr,
+        },
+      },
+      update: {
+        // No alterar campos si ya existe
+      },
+      create: {
+        comercianteId: comerciante.idInterno,
+        puestoId: puesto.id,
+        fecha: hoyStr,
+        estado: registroConPermiso ? "Permiso" : "Presente",
+        observacion: null,
+        observacionTexto: null,
+        observaciones: [],
+        permisos: registroConPermiso?.permisos ? (registroConPermiso.permisos as Prisma.InputJsonValue) : [],
+        permisoInicio: registroConPermiso?.permisoInicio ?? null,
+        permisoFin: registroConPermiso?.permisoFin ?? null,
+      },
+    });
+
+    existentesSet.add(comerciante.idInterno);
+    totalInicializados++;
+  }
+
+  globalThis.__epmma_last_2am_run_date = hoyStr;
+  globalThis.__epmma_last_occupied_count = puestosOcupados.length;
+
+  return { totalInicializados, fecha: hoyStr };
+}
+
+/**
+ * Inicializa un planificador resiliente en memoria que:
+ * 1. Ejecuta inmediatamente la verificación de recuperación (Catch-up) al iniciar el servidor.
+ * 2. Cada 60 segundos comprueba si son las 02:00 AM o más tarde en Ecuador (hora >= 2) y hoy
+ *    aún no ha sido sincronizado, disparando la generación automática.
+ */
+export function iniciarCronAsistenciaDiaria2AM() {
+  if (globalThis.__epmma_cron_2am_initialized) return;
+  globalThis.__epmma_cron_2am_initialized = true;
+
+  // Verificación inmediata al arrancar el servidor (Catch-up para encendidos posteriores a las 02:00 AM)
+  asegurarAsistenciaInicialDelDia().catch((err) => {
+    console.error("[ARRANQUE] Error en verificación inicial de asistencia:", err);
+  });
+
+  setInterval(async () => {
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Guayaquil",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+      }).formatToParts(new Date());
+
+      const hour = parseInt(parts.find((p) => p.type === "hour")?.value || "0", 10);
+      const hoyStr = obtenerFechaHoyEcuador();
+
+      // Si la hora es >= 2 (02:00 AM en adelante) y la fecha de hoy no está sincronizada
+      if (hour >= 2 && globalThis.__epmma_last_2am_run_date !== hoyStr) {
+        console.log(`[CRON ASISTENCIA] Sincronización automática de jornada (${hoyStr}) a las ${hour}h Ecuador...`);
+        await asegurarAsistenciaInicialDelDia(hoyStr);
+      }
+    } catch (err) {
+      console.error("[CRON ASISTENCIA] Error en ciclo de verificación:", err);
+    }
+  }, 60_000);
+}
+
+// Iniciar el cron en el entorno de servidor
+if (typeof window === "undefined") {
+  iniciarCronAsistenciaDiaria2AM();
+}

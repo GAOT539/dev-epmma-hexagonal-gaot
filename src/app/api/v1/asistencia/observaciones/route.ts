@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { ObservacionDetalle } from "@/domain/models/asistencia.model";
+import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 
 export async function POST(request: Request) {
   try {
@@ -16,6 +17,14 @@ export async function POST(request: Request) {
       numeroDocumento,
       fechaHora,
     } = body;
+
+    const hoyStr = obtenerFechaHoyEcuador();
+    if (fecha !== hoyStr) {
+      return NextResponse.json(
+        { error: "Solo se permite registrar o modificar asistencia en la fecha actual." },
+        { status: 400 }
+      );
+    }
 
     if (!comercianteId || !fecha || !texto?.trim()) {
       return NextResponse.json(
@@ -119,6 +128,14 @@ export async function DELETE(request: Request) {
     const comercianteId = searchParams.get("comercianteId");
     const fecha = searchParams.get("fecha");
     const observacionId = searchParams.get("observacionId");
+
+    const hoyStr = obtenerFechaHoyEcuador();
+    if (fecha !== hoyStr) {
+      return NextResponse.json(
+        { error: "Solo se permite registrar o modificar asistencia en la fecha actual." },
+        { status: 400 }
+      );
+    }
 
     if (!comercianteId || !fecha || !observacionId) {
       return NextResponse.json(
