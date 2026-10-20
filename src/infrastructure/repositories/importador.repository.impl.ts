@@ -11,7 +11,7 @@ import {
   parsearXML as parserXML,
   parsearCSV as parserCSV,
   generarRegistrosEjemplo as parserEjemplo,
-} from "@/infrastructure/mocks/importador.mock";
+} from "@/infrastructure/parsers/catastro-file.parser";
 
 export class ImportadorRepositoryImpl implements IImportadorRepository {
   async simularImportacion(

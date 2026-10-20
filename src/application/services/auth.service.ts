@@ -1,12 +1,10 @@
 // ── Capa de Aplicación: Servicio de Autenticación y Autorización ─────────────
 
-import { solicitarRestablecimientoPassword as mockSolicitar } from "@/infrastructure/mocks/auth.mock";
-
 export {
   MENU_POR_ROL,
   validatePassword,
   validatePassword as validarPassword,
-} from "@/infrastructure/mocks/auth.mock";
+} from "@/infrastructure/auth/password-policy.utils";
 
 export { useAuth, AuthProvider } from "@/infrastructure/auth/auth-context";
 
@@ -29,7 +27,11 @@ export async function solicitarRestablecimientoPassword(identificador: string) {
     const data = await res.json();
     return { success: false, error: data.error || "Error al solicitar restablecimiento." };
   } catch (err) {
-    console.warn("Fallo en llamada a /api/v1/auth/forgot-password, usando respaldo mock:", err);
-    return mockSolicitar(identificador);
+    console.error("Error al conectar con /api/v1/auth/forgot-password:", err);
+    return {
+      success: false,
+      error: "Error de conexión con el servidor al solicitar restablecimiento.",
+    };
   }
 }
+

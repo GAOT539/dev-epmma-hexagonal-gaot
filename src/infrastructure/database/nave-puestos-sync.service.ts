@@ -47,20 +47,11 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
     include: { comerciante: true },
   });
 
-  // Prefijo identificador de la nave (ej. N-A-, ZCF-, N-E-)
-  const sufijoNave = nave.nombre.replace(/^NAVE\s+/i, "").trim().toUpperCase();
-  const prefijoNave = `N-${sufijoNave}-`;
-
-  // 3. Obtener comerciantes activos que pertenecen a la nave por nombre, id o prefijo de puesto
+  // 3. Obtener comerciantes activos que pertenecen estrictamente a la nave por nombre o id
   const comerciantes = await prisma.comerciante.findMany({
     where: {
       estadoRegistro: "Habilitado",
-      OR: [
-        { nave: nave.nombre },
-        { nave: nave.id },
-        { puestoId: { contains: prefijoNave } },
-        ...(sufijoNave === "CF" ? [{ puestoId: { contains: "ZCF-" } }] : []),
-      ],
+      OR: [{ nave: nave.nombre }, { nave: nave.id }],
     },
   });
 
@@ -71,6 +62,14 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
     }
     const tienePuesto = puestos.some((p) => p.comercianteId === com.idInterno);
     if (!tienePuesto) {
+      // Verificar previamente que este comerciante no esté ya asignado a ningún otro puesto en la base de datos
+      const puestoOcupadoEnBD = await prisma.puesto.findUnique({
+        where: { comercianteId: com.idInterno },
+      });
+      if (puestoOcupadoEnBD) {
+        continue;
+      }
+
       const codigoComerciante = com.puestoId.trim().toUpperCase();
 
       // Buscar si hay un puesto en la nave con el mismo código que esté "Vacante" y sin comerciante

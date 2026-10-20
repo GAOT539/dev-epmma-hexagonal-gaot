@@ -254,7 +254,29 @@ export async function POST(request: Request) {
         });
       }
 
-      // 2. Procesar asignaciones a puestos (existentes o agregados)
+      // 2. Limpieza temporal preventiva de colisiones @unique (P2002) en intercambios o mudanzas
+      const puestoIdsAfectados = asignacionesOcupar
+        .filter((a) => !a.esNuevoPuesto && a.puestoId)
+        .map((a) => a.puestoId);
+      const comercianteIdsAfectados = asignacionesOcupar
+        .filter((a) => a.comercianteId)
+        .map((a) => a.comercianteId);
+
+      if (puestoIdsAfectados.length > 0 || comercianteIdsAfectados.length > 0) {
+        await tx.puesto.updateMany({
+          where: {
+            OR: [
+              ...(puestoIdsAfectados.length > 0 ? [{ id: { in: puestoIdsAfectados } }] : []),
+              ...(comercianteIdsAfectados.length > 0
+                ? [{ comercianteId: { in: comercianteIdsAfectados } }]
+                : []),
+            ],
+          },
+          data: { comercianteId: null },
+        });
+      }
+
+      // 3. Procesar asignaciones a puestos (existentes o agregados)
       for (const asig of asignacionesOcupar) {
         let comercianteIdFinal = asig.comercianteId;
 

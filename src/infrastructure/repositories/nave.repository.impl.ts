@@ -1,6 +1,5 @@
 import type { INaveRepository } from "@/domain/ports/nave.repository";
 import type { Nave, PlanoEspacialNave, Puesto } from "@/domain/models/nave.model";
-import { generarPlanoAutomatico as mockGenerarPlanoAutomatico } from "@/infrastructure/mocks/naves.mock";
 
 export class NaveRepositoryImpl implements INaveRepository {
   async obtenerNaves(): Promise<Nave[]> {
@@ -110,8 +109,27 @@ export class NaveRepositoryImpl implements INaveRepository {
   }
 
   async generarPlanoAutomatico(naveId: string): Promise<PlanoEspacialNave> {
-    // Generación espacial heurística asistida
-    return Promise.resolve(mockGenerarPlanoAutomatico(naveId));
+    const filas = 12;
+    const columnas = 12;
+    const celdas = [];
+    for (let r = 0; r < filas; r++) {
+      for (let c = 0; c < columnas; c++) {
+        celdas.push({
+          fila: r,
+          columna: c,
+          tipo: "VACIO" as const,
+          rowSpan: 1,
+          colSpan: 1,
+        });
+      }
+    }
+    return Promise.resolve({
+      naveId,
+      filas,
+      columnas,
+      celdas,
+      actualizadoEn: new Date().toISOString(),
+    });
   }
 
   async obtenerPuestosNave(naveId: string): Promise<Puesto[]> {

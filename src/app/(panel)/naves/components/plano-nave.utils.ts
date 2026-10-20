@@ -290,7 +290,7 @@ export async function generarPlanoEspacialPDF({
   doc.setTextColor(75, 85, 99);
   const fechaStr = format(new Date(), "dd/MM/yyyy HH:mm");
   doc.text(
-    `Capacidad: ${limitePuestos} puestos | Ubicados: ${metricasPlano.puestosEnPlano} | Ocupados: ${metricasPlano.ocupados} | Vacantes: ${metricasPlano.vacantes} | Fecha: ${fechaStr}`,
+    `Capacidad: ${limitePuestos} puestos | Ubicados en Plano: ${metricasPlano.puestosEnPlano} | Pendientes: ${Math.max(0, limitePuestos - metricasPlano.puestosEnPlano)} | Fecha: ${fechaStr}`,
     pageWidth / 2,
     28,
     { align: "center" }

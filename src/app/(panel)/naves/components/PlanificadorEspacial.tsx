@@ -1295,12 +1295,10 @@ export function PlanificadorEspacial({
                           )
                         : null;
 
-                    const esVacante = Boolean(coincidencia?.esVacante);
-
                     const estiloZona = getColorZonaClasses(
                       celda.colorZona,
                       celda.tipo,
-                      esVacante
+                      false
                     );
 
                     const gridColStart =

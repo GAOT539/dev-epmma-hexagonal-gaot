@@ -368,11 +368,19 @@ export function reconciliarCatastroNaveExistente(
   // ── PASO 1: Comparar Contribuyentes Existentes en la Sección Participante ─────
   for (let idx = 0; idx < registros.length; idx++) {
     const reg = registros[idx];
-    const comExistente = comerciantesNave.find((c) =>
-      sonMismoContribuyente(c, { contribuyente: reg.nombre, cedula: reg.cedula })
+    const candidatos = comerciantesNave.filter(
+      (c) =>
+        !comerciantesProcesadosIds.has(c.idInterno) &&
+        sonMismoContribuyente(c, { contribuyente: reg.nombre, cedula: reg.cedula })
     );
 
-    if (comExistente) {
+    if (candidatos.length > 0) {
+      let comExistente = candidatos.find((c) =>
+        sonCodigosPuestosEquivalentes(c.puestoId || "", reg.puesto)
+      );
+      if (!comExistente) {
+        comExistente = candidatos[0];
+      }
       // Puesto actual del comerciante en la nave
       const puestoActual = puestosNaveParticipantes.find((p) => p.comercianteId === comExistente.idInterno);
       // Puesto al que viene asignado en el nuevo archivo

@@ -210,18 +210,14 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         },
       });
 
-      // 2. Liberar el puesto a Vacante
-      if (actual.puestoId) {
-        await tx.puesto.updateMany({
-          where: {
-            OR: [{ id: actual.puestoId }, { codigo: actual.puestoId }],
-          },
-          data: {
-            estado: "Vacante",
-            comercianteId: null,
-          },
-        });
-      }
+      // 2. Liberar el puesto a Vacante estrictamente por comercianteId
+      await tx.puesto.updateMany({
+        where: { comercianteId: id },
+        data: {
+          estado: "Vacante",
+          comercianteId: null,
+        },
+      });
     });
 
     return NextResponse.json({ success: true, message: "Comerciante deshabilitado exitosamente." });

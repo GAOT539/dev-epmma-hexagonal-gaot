@@ -2,7 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import type { EstadoComerciante } from "@prisma/client";
+import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 
 export async function GET(request: Request) {
@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const puestoId = searchParams.get("puestoId");
     const puestosNave = searchParams.get("puestosNave");
+    const naveParam = searchParams.get("nave");
 
     // Consulta de puestos por nave
     if (puestosNave) {
@@ -50,10 +51,22 @@ export async function GET(request: Request) {
 
     // Consulta de comerciante por puesto
     if (puestoId) {
+      let naveObj = null;
+      if (naveParam) {
+        naveObj = await prisma.nave.findFirst({
+          where: { OR: [{ id: naveParam }, { nombre: naveParam }] },
+        });
+      }
+
+      const wherePuesto: Prisma.PuestoWhereInput = {
+        OR: [{ id: puestoId }, { codigo: puestoId }],
+      };
+      if (naveObj) {
+        wherePuesto.naveId = naveObj.id;
+      }
+
       const puesto = await prisma.puesto.findFirst({
-        where: {
-          OR: [{ id: puestoId }, { codigo: puestoId }],
-        },
+        where: wherePuesto,
         include: { comerciante: true },
       });
 
@@ -62,11 +75,16 @@ export async function GET(request: Request) {
       }
 
       // Si no encontró por puesto.comercianteId, buscar en comerciante.puestoId
+      const whereComerciante: Prisma.ComercianteWhereInput = {
+        puestoId,
+        estadoRegistro: { not: "Deshabilitado" },
+      };
+      if (naveObj) {
+        whereComerciante.OR = [{ nave: naveObj.nombre }, { nave: naveObj.id }];
+      }
+
       const com = await prisma.comerciante.findFirst({
-        where: {
-          puestoId,
-          estadoRegistro: { not: "Deshabilitado" },
-        },
+        where: whereComerciante,
       });
 
       return NextResponse.json(com ?? null);
@@ -125,16 +143,35 @@ export async function POST(request: Request) {
         },
       });
 
-      // 2. Si trae puesto asignado, vincular y ocupar puesto
+      // 2. Si trae puesto asignado, vincular y ocupar puesto en la nave correspondiente
       if (puestoId) {
         const codigoBuscado = String(puestoId).trim();
 
-        // Buscar si ya existe el puesto
-        const puestoObj = await tx.puesto.findFirst({
-          where: {
-            OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
-          },
-        });
+        let naveObj = null;
+        if (nave) {
+          const naveLimpia = String(nave).trim();
+          naveObj = await tx.nave.findFirst({
+            where: {
+              OR: [{ id: naveLimpia }, { nombre: naveLimpia }],
+            },
+          });
+        }
+
+        let puestoObj = null;
+        if (naveObj) {
+          puestoObj = await tx.puesto.findFirst({
+            where: {
+              naveId: naveObj.id,
+              OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
+            },
+          });
+        } else {
+          puestoObj = await tx.puesto.findFirst({
+            where: {
+              OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
+            },
+          });
+        }
 
         if (puestoObj) {
           // Ocupar puesto existente
@@ -145,24 +182,16 @@ export async function POST(request: Request) {
               comercianteId: nuevo.idInterno,
             },
           });
-        } else if (nave) {
-          // Si el puesto no existe pero viene la nave, buscar la nave
-          const naveObj = await tx.nave.findFirst({
-            where: {
-              OR: [{ id: nave }, { nombre: nave }],
+        } else if (naveObj) {
+          // Si el puesto no existe en la nave, crearlo directamente asociado a naveId
+          await tx.puesto.create({
+            data: {
+              codigo: codigoBuscado,
+              naveId: naveObj.id,
+              estado: "Ocupado",
+              comercianteId: nuevo.idInterno,
             },
           });
-
-          if (naveObj) {
-            await tx.puesto.create({
-              data: {
-                codigo: codigoBuscado,
-                naveId: naveObj.id,
-                estado: "Ocupado",
-                comercianteId: nuevo.idInterno,
-              },
-            });
-          }
         }
       }
 

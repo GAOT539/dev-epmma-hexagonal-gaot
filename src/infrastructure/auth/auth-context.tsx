@@ -9,10 +9,6 @@ import {
   useState,
 } from "react";
 import type { Usuario } from "@/domain/models/comerciante.model";
-import {
-  authenticateUser as mockAuthenticateUser,
-  changePassword as mockChangePassword,
-} from "@/infrastructure/mocks/auth.mock";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -84,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     (identificador: string, password: string) => {
-      // Autenticación síncrona contra API REST (/api/v1/auth/login) para compatibilidad total con Login UI
+      // Autenticación síncrona contra API REST (/api/v1/auth/login)
       try {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/v1/auth/login", false); // Synchronous same-origin call
@@ -107,14 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        console.warn("Fallo en llamada XHR a /api/v1/auth/login, utilizando respaldo mock:", err);
-      }
-
-      // Respaldo resiliente con mock institucional
-      const result = mockAuthenticateUser(identificador, password);
-      if (result) {
-        setUser(result);
-        return { success: true, user: result };
+        console.error("Fallo en llamada XHR a /api/v1/auth/login:", err);
       }
 
       return {
@@ -167,16 +156,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        console.warn("Fallo en llamada XHR a /api/v1/auth/change-password, utilizando respaldo mock:", err);
+        console.error("Fallo en llamada XHR a /api/v1/auth/change-password:", err);
       }
 
-      // Respaldo resiliente
-      const mockResult = mockChangePassword(user.id, newPassword);
-      if (mockResult.success) {
-        const updatedUser = { ...user, mustChangePassword: false };
-        setUser(updatedUser);
-      }
-      return mockResult;
+      return {
+        success: false,
+        error: "Error de conexión al actualizar contraseña en el servidor.",
+      };
     },
     [user]
   );

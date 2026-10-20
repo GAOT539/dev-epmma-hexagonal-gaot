@@ -6,22 +6,36 @@ import type {
   FiltrosControlSupervisor,
 } from "@/domain/ports/auditoria.repository";
 import type { LogAuditoria, SesionControlSupervisor } from "@/domain/models/auditoria.model";
-import {
-  getLogsFiltrados as mockGetLogsFiltrados,
-  agregarLog as mockAgregarLog,
-} from "@/infrastructure/mocks/auditoria.mock";
+const logsEnMemoria: LogAuditoria[] = [];
 
 export class AuditoriaRepositoryImpl implements IAuditoriaRepository {
   async obtenerLogsFiltrados(
     filtros: FiltrosAuditoria
   ): Promise<LogAuditoria[]> {
-    return Promise.resolve([...mockGetLogsFiltrados(filtros)]);
+    let logs = [...logsEnMemoria];
+    if (filtros.usuarioId) {
+      logs = logs.filter((l) => l.usuarioId === filtros.usuarioId);
+    }
+    if (filtros.busqueda) {
+      const b = filtros.busqueda.toLowerCase();
+      logs = logs.filter(
+        (l) =>
+          l.usuarioNombre.toLowerCase().includes(b) ||
+          l.accion.toLowerCase().includes(b) ||
+          l.detalle.toLowerCase().includes(b)
+      );
+    }
+    return Promise.resolve(logs);
   }
 
   async agregarLog(
     log: Omit<LogAuditoria, "id" | "timestamp">
   ): Promise<void> {
-    mockAgregarLog(log);
+    logsEnMemoria.unshift({
+      ...log,
+      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      timestamp: new Date().toISOString(),
+    });
     return Promise.resolve();
   }
 
