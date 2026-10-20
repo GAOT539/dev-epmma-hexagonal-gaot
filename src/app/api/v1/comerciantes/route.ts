@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
+import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function GET(request: Request) {
   try {
@@ -53,9 +54,25 @@ export async function GET(request: Request) {
     if (puestoId) {
       let naveObj = null;
       if (naveParam) {
-        naveObj = await prisma.nave.findFirst({
-          where: { OR: [{ id: naveParam }, { nombre: naveParam }] },
+        const paramNorm = naveParam.normalize("NFC").trim();
+        const paramSlug = generarSlugNave(paramNorm);
+        const candidatos = await prisma.nave.findMany({
+          where: {
+            OR: [
+              { id: paramNorm },
+              { nombre: paramNorm },
+              { id: paramSlug },
+              { nombre: paramNorm.toUpperCase() },
+            ],
+          },
         });
+        const paramUpper = paramNorm.toUpperCase();
+        naveObj = candidatos.find(
+          (n) =>
+            n.nombre.normalize("NFC").trim().toUpperCase() === paramUpper ||
+            n.id === paramNorm ||
+            n.id === paramSlug
+        ) || null;
       }
 
       const wherePuesto: Prisma.PuestoWhereInput = {
@@ -128,15 +145,28 @@ export async function POST(request: Request) {
 
     const cleanCedula = String(cedula).trim();
 
-    // 1. Resolver la entidad Nave por ID o Nombre
+    // 1. Resolver la entidad Nave por ID o Nombre con validación exacta NFC
     let naveObj = null;
     if (nave) {
-      const naveLimpia = String(nave).trim();
-      naveObj = await prisma.nave.findFirst({
+      const naveLimpia = String(nave).normalize("NFC").trim();
+      const naveSlug = generarSlugNave(naveLimpia);
+      const candidatos = await prisma.nave.findMany({
         where: {
-          OR: [{ id: naveLimpia }, { nombre: naveLimpia }],
+          OR: [
+            { id: naveLimpia },
+            { nombre: naveLimpia },
+            { id: naveSlug },
+            { nombre: naveLimpia.toUpperCase() },
+          ],
         },
       });
+      const naveUpper = naveLimpia.toUpperCase();
+      naveObj = candidatos.find(
+        (n) =>
+          n.nombre.normalize("NFC").trim().toUpperCase() === naveUpper ||
+          n.id === naveLimpia ||
+          n.id === naveSlug
+      ) || null;
     }
 
     const nombreNaveFinal = naveObj ? naveObj.nombre : (nave ? String(nave).trim() : null);

@@ -10,6 +10,7 @@ import {
   analizarReconciliacion,
   ejecutarReconciliacionImportacion,
 } from "./mercado.mock";
+import { desglosarCodigosPuestoMultiples } from "../database/catastro-reconciliacion.service";
 
 // ── Datos de ejemplo para simular un archivo XML/CSV ─────────────────────────
 
@@ -120,13 +121,13 @@ function normalizarYCedula(rawVal: unknown): string | null {
 }
 
 function limpiarNombreNave(str: string): string {
-  let limpio = str.replace(/"/g, "").replace(/\s+/g, " ").trim().toUpperCase();
+  let limpio = str.normalize("NFC").replace(/"/g, "").replace(/\s+/g, " ").trim().toUpperCase();
   if (limpio === "(NAVE)") {
     return "PUESTOS AMBULANTES";
   }
   // Colapsar palabra "NAVE" duplicada (ej. "NAVE NAVE ROPA" o "NAVE NAVE AUTO-")
-  while (limpio.includes("NAVE NAVE")) {
-    limpio = limpio.replace(/\bNAVE\s+NAVE\b/g, "NAVE");
+  while (/(?:^|[^A-ZÑ0-9])NAVE\s+NAVE(?=$|[^A-ZÑ0-9])/i.test(limpio)) {
+    limpio = limpio.replace(/(?:^|[^A-ZÑ0-9])NAVE\s+NAVE(?=$|[^A-ZÑ0-9])/gi, "NAVE");
   }
   // Quitar guiones y espacios sueltos al final (ej. "NAVE AUTO-" -> "NAVE AUTO")
   limpio = limpio.replace(/[-\s]+$/, "");
@@ -243,30 +244,30 @@ function seleccionarMejorPuesto(candidatos: string[]): string {
 
 export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   if (!codigoPuesto) return null;
-  const upper = codigoPuesto.trim().toUpperCase();
+  const upper = codigoPuesto.normalize("NFC").trim().toUpperCase();
   if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
     return "NAVE CF";
   }
 
-  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A) donde la nave es letra al final y el puesto empieza por dígito
+  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A, N-01-Ñ) donde la nave es letra al final y el puesto empieza por dígito
   const matchNaveFin =
     upper.match(/^N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?:[\s*].*)?$/i) ||
-    upper.match(/\bN-([0-9]+[A-Z0-9]*)-([A-ZÑ])\b/i);
+    upper.match(/(?:^|[^A-ZÑ0-9])N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?=$|[^A-ZÑ0-9])/i);
   if (matchNaveFin) {
     return `NAVE ${matchNaveFin[2].toUpperCase()}`;
   }
 
-  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-E-04, N-CF-01)
+  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-Ñ-01, N-E-04, N-CF-01)
   const matchNaveIni =
     upper.match(/^N-([A-ZÑ]+)-([A-Z0-9-]+)(?:[\s*].*)?$/i) ||
-    upper.match(/\bN-([A-ZÑ]+)-([A-Z0-9-]+)\b/i);
+    upper.match(/(?:^|[^A-ZÑ0-9])N-([A-ZÑ]+)-([A-Z0-9-]+)(?=$|[^A-ZÑ0-9])/i);
   if (matchNaveIni) {
     return `NAVE ${matchNaveIni[1].toUpperCase()}`;
   }
 
-  const matchNave = upper.match(/\bNAVE\s+([A-ZÑ0-9]+)\b/);
+  const matchNave = upper.match(/(?:^|[^A-ZÑ0-9])NAVE[_\s"-]*([A-ZÑ0-9]+)(?=$|[^A-ZÑ0-9])/i);
   if (matchNave && matchNave[1]) {
-    return `NAVE ${matchNave[1]}`;
+    return `NAVE ${matchNave[1].toUpperCase()}`;
   }
   return null;
 }
@@ -542,6 +543,8 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
       val: string;
       esNumero: boolean;
       prioridad: number;
+      esColPuesto?: boolean;
+      esColDescripcion?: boolean;
     }[] = [];
 
     for (let c = nombreIndex + 1; c < row.length; c++) {
@@ -582,7 +585,8 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
       }
 
       // Descarte de columna Metros identificada por cabecera
-      if (colMts !== -1 && c === colMts) {
+      const esColPuesto = colPuesto !== -1 && Math.abs(c - colPuesto) <= 1;
+      if (colMts !== -1 && (c === colMts || (c === colMts - 1 && !esColPuesto))) {
         continue;
       }
 
@@ -606,45 +610,52 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
         continue;
       }
 
-      const esNum = !esSinNumero(upper) && /^\d+(\.\d+)?$/.test(upper);
       const esColDescripcion = colDescripcion !== -1 && Math.abs(c - colDescripcion) <= 1;
-      const esColPuesto = colPuesto !== -1 && Math.abs(c - colPuesto) <= 1;
+
+      // Si es la columna de Descripción y contiene una sola letra aislada (ej. "F"), ignorarla
+      if (esColDescripcion && /^[A-ZÑ]$/i.test(upper)) {
+        continue;
+      }
+
+      const esNum = !esSinNumero(upper) && /^\d+(\.\d+)?$/.test(upper);
 
       candidatosPuesto.push({
         col: c,
         val: upper,
         esNumero: esNum,
-        prioridad: esColDescripcion ? 2 : esColPuesto ? 1 : 0,
+        prioridad: esColPuesto ? 3 : esColDescripcion ? 2 : 1,
+        esColPuesto,
+        esColDescripcion,
       });
     }
 
-    // 3. Descarte de la columna Mts/MTR por posición:
-    const candidatosFiltrados: string[] = [];
+    // 3. Selección del Puesto: Máxima prioridad para la columna Puesto
+    let puesto = "-";
+    const candPuesto = candidatosPuesto.find((cand) => cand.esColPuesto && cand.val && cand.val !== "-");
+    if (candPuesto) {
+      puesto = candPuesto.val;
+    } else {
+      const candidatosFiltrados: string[] = [];
 
-    if (candidatosPuesto.length === 1) {
-      // NUNCA descartes el primer número corto si es el único candidato a Puesto
-      candidatosFiltrados.push(candidatosPuesto[0].val);
-    } else if (candidatosPuesto.length > 1) {
-      const tieneNoNumericos = candidatosPuesto.some((c) => !c.esNumero);
-      if (tieneNoNumericos) {
-        // En Bodegas (col 10 Puesto, col 15 Metros, col 16 Descripción):
-        // Se descartan los valores puramente numéricos de Metros y se conservan los códigos de puesto.
-        // Si hay un candidato de la columna de Descripción, se prioriza.
-        const noNumericos = candidatosPuesto.filter((c) => !c.esNumero);
-        noNumericos.sort((a, b) => b.prioridad - a.prioridad);
-        for (const cand of noNumericos) {
-          candidatosFiltrados.push(cand.val);
-        }
-      } else {
-        // Todos numéricos (ej. puesto "13" y metros "4"):
-        // La columna de Metros siempre está ubicada a la derecha del Puesto.
-        // Descartar el último número y tomar el anterior.
-        candidatosPuesto.sort((a, b) => a.col - b.col);
+      if (candidatosPuesto.length === 1) {
         candidatosFiltrados.push(candidatosPuesto[0].val);
+      } else if (candidatosPuesto.length > 1) {
+        const tieneNoNumericos = candidatosPuesto.some((c) => !c.esNumero);
+        if (tieneNoNumericos) {
+          const noNumericos = candidatosPuesto.filter((c) => !c.esNumero);
+          noNumericos.sort((a, b) => b.prioridad - a.prioridad);
+          for (const cand of noNumericos) {
+            candidatosFiltrados.push(cand.val);
+          }
+        } else {
+          candidatosPuesto.sort((a, b) => a.col - b.col);
+          candidatosFiltrados.push(candidatosPuesto[0].val);
+        }
       }
+
+      puesto = seleccionarMejorPuesto(candidatosFiltrados);
     }
 
-    let puesto = seleccionarMejorPuesto(candidatosFiltrados);
     if (!puesto || puesto.trim() === "") {
       puesto = "-";
     }
@@ -676,17 +687,21 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
       }
     }
 
-    registros.push({
-      ciu,
-      cedula: cedulaEncontrada.trim(),
-      nombre,
-      contribuyente: nombre,
-      actividad,
-      nave: naveFila,
-      puesto,
-      numBodega: puesto,
-      gen01Codi: "-",
-    });
+    // Desglose automático de puestos múltiples (ej. "024-027" -> "024" y "027")
+    const puestosDesglosados = desglosarCodigosPuestoMultiples(puesto);
+    for (const p of puestosDesglosados) {
+      registros.push({
+        ciu,
+        cedula: cedulaEncontrada.trim(),
+        nombre,
+        contribuyente: nombre,
+        actividad,
+        nave: naveFila,
+        puesto: p,
+        numBodega: p,
+        gen01Codi: "-",
+      });
+    }
   }
 
   return registros;
@@ -916,17 +931,20 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
       }
     }
 
-    registros.push({
-      ciu: ciu || "S/N",
-      cedula,
-      nombre: nombre || "Comerciante",
-      contribuyente: nombre || "Comerciante",
-      actividad: actividad || "General",
-      nave: naveFinal,
-      puesto,
-      numBodega: puesto,
-      gen01Codi: "-",
-    });
+    const puestosDesglosados = desglosarCodigosPuestoMultiples(puesto);
+    for (const p of puestosDesglosados) {
+      registros.push({
+        ciu: ciu || "S/N",
+        cedula,
+        nombre: nombre || "Comerciante",
+        contribuyente: nombre || "Comerciante",
+        actividad: actividad || "General",
+        nave: naveFinal,
+        puesto: p,
+        numBodega: p,
+        gen01Codi: "-",
+      });
+    }
   }
 
   return registros;

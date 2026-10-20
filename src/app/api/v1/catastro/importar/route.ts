@@ -4,17 +4,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
-import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
+import {
+  sincronizarPuestosDeNaveEnBD,
+  asegurarColacionEspanolEnBD,
+} from "@/infrastructure/database/nave-puestos-sync.service";
 import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
   esCodigoTipoBodegaOLocal,
+  expandirRegistrosMultiPuesto,
+  generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const registros: ImportacionRegistro[] = body.registros || [];
+    const registrosRaw: ImportacionRegistro[] = body.registros || [];
+    const registros: ImportacionRegistro[] = expandirRegistrosMultiPuesto(registrosRaw);
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
@@ -29,21 +35,31 @@ export async function POST(request: Request) {
 
     const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
 
-    // 1. Detección o Selección de Nave
+    // 1. Detección o Selección de Nave con Validación Estricta Unicode NFC
     let naveExistente = null;
     let naveDetectada = "";
 
     if (naveIdManual) {
-      naveExistente = await prisma.nave.findFirst({
+      const manualNorm = naveIdManual.normalize("NFC").trim();
+      const manualSlug = generarSlugNave(manualNorm);
+      const candidatos = await prisma.nave.findMany({
         where: {
           OR: [
-            { id: naveIdManual },
-            { nombre: naveIdManual },
-            { id: naveIdManual.toLowerCase().replace(/\s+/g, "-") },
+            { id: manualNorm },
+            { nombre: manualNorm },
+            { id: manualSlug },
+            { nombre: manualNorm.toUpperCase() },
           ],
         },
         include: { puestos: true },
       });
+      const manualUpper = manualNorm.toUpperCase();
+      naveExistente = candidatos.find(
+        (n) =>
+          n.nombre.normalize("NFC").trim().toUpperCase() === manualUpper ||
+          n.id === manualNorm ||
+          n.id === manualSlug
+      ) || null;
       if (naveExistente) {
         naveDetectada = naveExistente.nombre;
       }
@@ -52,7 +68,7 @@ export async function POST(request: Request) {
     if (!naveExistente) {
       const regConNave = registros.find((r) => r.nave && r.nave !== "NO DEFINIDA");
       if (regConNave?.nave && regConNave.nave !== "NO DEFINIDA") {
-        naveDetectada = regConNave.nave.trim().toUpperCase();
+        naveDetectada = regConNave.nave.normalize("NFC").trim().toUpperCase();
       }
 
       if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
@@ -71,15 +87,24 @@ export async function POST(request: Request) {
       }
 
       if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
-        naveExistente = await prisma.nave.findFirst({
+        const detectadaNorm = naveDetectada.normalize("NFC").trim();
+        const detectadaSlug = generarSlugNave(detectadaNorm);
+        const candidatos = await prisma.nave.findMany({
           where: {
             OR: [
-              { nombre: naveDetectada },
-              { id: naveDetectada.toLowerCase().replace(/\s+/g, "-") },
+              { nombre: detectadaNorm },
+              { id: detectadaSlug },
+              { nombre: detectadaNorm.toUpperCase() },
             ],
           },
           include: { puestos: true },
         });
+        const detectadaUpper = detectadaNorm.toUpperCase();
+        naveExistente = candidatos.find(
+          (n) =>
+            n.nombre.normalize("NFC").trim().toUpperCase() === detectadaUpper ||
+            n.id === detectadaSlug
+        ) || null;
       }
     }
 
@@ -102,14 +127,11 @@ export async function POST(request: Request) {
 
     // ── CASO A: Crear Nueva Nave ──────────────────────────────────────────────
     if ((crearNuevaNave || modoUnificacion === "SEPARAR") && !naveExistente) {
-      const nombreNueva = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").trim().toUpperCase();
-      const idSlug =
-        nombreNueva
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .replace(/[^a-z0-9]+/g, "-")
-          .replace(/^-+|-+$/g, "") || `nave-${Date.now()}`;
+      // Asegurar colación en español en BD antes de crear la nave
+      await asegurarColacionEspanolEnBD();
+
+      const nombreNueva = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").normalize("NFC").trim().toUpperCase();
+      const idSlug = generarSlugNave(nombreNueva) || `nave-${Date.now()}`;
 
       // Capacidad EXACTA a los registros reales (CERO '100' forzado)
       const capacidad = registros.length;

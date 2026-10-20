@@ -16,13 +16,107 @@ export interface ComponentesCodigoPuesto {
 }
 
 /**
+ * Genera un slug identificador para la nave preservando la 'Ñ' de forma distintiva:
+ * - "NAVE Ñ" genera "nave-nh"
+ * - "NAVE N" genera "nave-n"
+ * Evita colisiones de IDs y mantiene la unicidad e integridad referencial.
+ */
+export function generarSlugNave(nombre: string): string {
+  if (!nombre) return "";
+  return nombre
+    .normalize("NFC")
+    .trim()
+    .toLowerCase()
+    .replace(/ñ/g, "nh")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Desglose inteligente de celdas multi-puesto separadas por guion (ej. "024-027" -> ["024", "027"]):
+ * - Protege códigos con prefijo o formato de nave como N-A-10, BODEGA N-A-01, ZCF-01, N-02A-H.
+ * - Desglosa secuencias puramente numéricas con posibles sufijos de puesto (ej. "024-027", "039-040", "105-129").
+ */
+export function desglosarCodigosPuestoMultiples(codigoPuesto: string): string[] {
+  if (!codigoPuesto) return ["-"];
+  const codigoLimpio = codigoPuesto.normalize("NFC").trim();
+  if (!codigoLimpio || codigoLimpio === "-") return ["-"];
+
+  const upper = codigoLimpio.toUpperCase();
+
+  // Regla 1: Protección de códigos institucionales o con prefijo de nave
+  if (
+    upper.startsWith("N-") ||
+    upper.startsWith("ZCF-") ||
+    upper.startsWith("P-") ||
+    upper.startsWith("BODEGA") ||
+    upper.startsWith("CUBICULO") ||
+    upper.startsWith("CUBÍCULO") ||
+    upper.startsWith("NUCLEO") ||
+    upper.startsWith("NÚCLEO") ||
+    upper.startsWith("LOCAL") ||
+    upper.startsWith("PUESTO")
+  ) {
+    return [codigoLimpio];
+  }
+
+  // Protección de formatos con letra de nave como segmento (ej. N-02A-H, N-H-01)
+  if (/^N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])(?:[\s*].*)?$/i.test(upper)) {
+    return [codigoLimpio];
+  }
+
+  // Regla 2: Detección y separación de múltiples puestos numéricos (ej. "024-027", "058-063")
+  if (codigoLimpio.includes("-")) {
+    const partes = codigoLimpio
+      .split("-")
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    if (
+      partes.length >= 2 &&
+      partes.every((p) => /^\d+[A-ZÑ]?$/i.test(p))
+    ) {
+      return partes;
+    }
+  }
+
+  return [codigoLimpio];
+}
+
+/**
+ * Expande registros con códigos multi-puesto (ej. "024-027") en registros individuales.
+ */
+export function expandirRegistrosMultiPuesto(
+  registros: ImportacionRegistro[]
+): ImportacionRegistro[] {
+  const expandidos: ImportacionRegistro[] = [];
+  for (const reg of registros) {
+    const desglosados = desglosarCodigosPuestoMultiples(reg.puesto || "-");
+    if (desglosados.length <= 1) {
+      expandidos.push(reg);
+    } else {
+      for (const p of desglosados) {
+        expandidos.push({
+          ...reg,
+          puesto: p,
+          numBodega: p,
+        });
+      }
+    }
+  }
+  return expandidos;
+}
+
+/**
  * Distingue de forma inteligente entre Códigos de Bodegas/Locales y Códigos Numéricos de Puestos:
  * - Bodegas/Locales: Inician con BODEGA, CUBICULO, NUCLEO, LOCAL, ZCF o tienen formato con prefijo/sufijo de nave (N-H-01, N-02A-H).
  * - Puestos Numéricos: "001", "058-063", "125", "4A", "7".
  */
 export function esCodigoTipoBodegaOLocal(codigo: string): boolean {
   if (!codigo) return false;
-  const upper = codigo.trim().toUpperCase();
+  const upper = codigo.normalize("NFC").trim().toUpperCase();
 
   if (
     upper.startsWith("BODEGA") ||
@@ -36,7 +130,7 @@ export function esCodigoTipoBodegaOLocal(codigo: string): boolean {
     return true;
   }
 
-  // Formato con prefijo o sufijo de nave (ej. N-H-01, N-02A-H, N-A-01, N-E-04)
+  // Formato con prefijo o sufijo de nave (ej. N-H-01, N-02A-H, N-A-01, N-E-04, N-Ñ-01)
   if (/^N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])(?:[\s*].*)?$/i.test(upper)) {
     return true;
   }
@@ -45,35 +139,35 @@ export function esCodigoTipoBodegaOLocal(codigo: string): boolean {
 }
 
 /**
- * Infiere el nombre estándar de la nave (ej. "NAVE H", "NAVE A", "NAVE CF") a partir de un código de puesto
- * Reconoce tanto prefijo de nave (N-H-01) como sufijo de nave al final (N-02A-H).
+ * Infiere el nombre estándar de la nave (ej. "NAVE H", "NAVE A", "NAVE Ñ", "NAVE CF") a partir de un código de puesto
+ * Reconoce tanto prefijo de nave (N-H-01, N-Ñ-01) como sufijo de nave al final (N-02A-H, N-01-Ñ).
  */
 export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   if (!codigoPuesto) return null;
-  const upper = codigoPuesto.trim().toUpperCase();
+  const upper = codigoPuesto.normalize("NFC").trim().toUpperCase();
   if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
     return "NAVE CF";
   }
 
-  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A) donde la nave es letra al final y el puesto empieza por dígito
+  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A, N-01-Ñ) donde la nave es letra al final
   const matchNaveFin =
     upper.match(/^N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?:[\s*].*)?$/i) ||
-    upper.match(/\bN-([0-9]+[A-Z0-9]*)-([A-ZÑ])\b/i);
+    upper.match(/(?:^|[^A-ZÑ0-9])N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?=$|[^A-ZÑ0-9])/i);
   if (matchNaveFin) {
     return `NAVE ${matchNaveFin[2].toUpperCase()}`;
   }
 
-  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-E-04, N-CF-01)
+  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-Ñ-01, N-E-04, N-CF-01)
   const matchNaveIni =
     upper.match(/^N-([A-ZÑ]+)-([A-Z0-9-]+)(?:[\s*].*)?$/i) ||
-    upper.match(/\bN-([A-ZÑ]+)-([A-Z0-9-]+)\b/i);
+    upper.match(/(?:^|[^A-ZÑ0-9])N-([A-ZÑ]+)-([A-Z0-9-]+)(?=$|[^A-ZÑ0-9])/i);
   if (matchNaveIni) {
     return `NAVE ${matchNaveIni[1].toUpperCase()}`;
   }
 
-  const matchNave = upper.match(/\bNAVE\s+([A-ZÑ0-9]+)\b/);
+  const matchNave = upper.match(/(?:^|[^A-ZÑ0-9])NAVE[_\s"-]*([A-ZÑ0-9]+)(?=$|[^A-ZÑ0-9])/i);
   if (matchNave && matchNave[1]) {
-    return `NAVE ${matchNave[1]}`;
+    return `NAVE ${matchNave[1].toUpperCase()}`;
   }
   return null;
 }
@@ -97,7 +191,7 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
     };
   }
 
-  const upper = codigo.trim().toUpperCase().replace(/#/g, "").trim();
+  const upper = codigo.normalize("NFC").trim().toUpperCase().replace(/#/g, "").trim();
 
   // 1. Extraer categoría funcional
   let categoria: "BODEGA" | "CUBICULO" | "NUCLEO" | "" = "";
@@ -193,8 +287,8 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
 export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null): boolean {
   if (!cod1 || !cod2) return false;
 
-  const c1 = cod1.trim().toUpperCase();
-  const c2 = cod2.trim().toUpperCase();
+  const c1 = cod1.normalize("NFC").trim().toUpperCase();
+  const c2 = cod2.normalize("NFC").trim().toUpperCase();
 
   // Igualdad exacta
   if (c1 === c2) return true;

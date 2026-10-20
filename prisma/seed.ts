@@ -5,6 +5,7 @@ import { PrismaClient, type Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import type { CeldaPlanoNave } from "../src/domain/models/nave.model";
 import { asegurarAsistenciaInicialDelDia, obtenerFechaHoyEcuador } from "../src/infrastructure/database/daily-attendance.service";
+import { asegurarColacionEspanolEnBD } from "../src/infrastructure/database/nave-puestos-sync.service";
 
 const prisma = new PrismaClient();
 
@@ -54,6 +55,9 @@ const COMERCIANTES_NAVE_A: ComercianteSeedData[] = [
 
 async function main() {
   console.log("Iniciando sembrado inicial de base de datos EP-EMA...");
+
+  // 0. Asegurar colación en español en MySQL
+  await asegurarColacionEspanolEnBD(true);
 
   // 1. Limpieza en orden de dependencias para garantizar idempotencia
   await prisma.sesionControlSupervisor.deleteMany({});

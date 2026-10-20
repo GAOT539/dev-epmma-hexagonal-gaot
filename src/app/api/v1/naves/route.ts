@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
+import {
+  sincronizarPuestosDeNaveEnBD,
+  asegurarColacionEspanolEnBD,
+} from "@/infrastructure/database/nave-puestos-sync.service";
+import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function GET() {
   try {
@@ -61,17 +65,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El nombre de la nave es obligatorio." }, { status: 400 });
     }
 
-    const nombreLimpio = String(nombre).trim().toUpperCase();
-    const slug = nombreLimpio
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+    const nombreLimpio = String(nombre).normalize("NFC").trim().toUpperCase();
+    const slug = generarSlugNave(nombreLimpio);
 
     const idNave = slug || `nave-${Date.now()}`;
     const cantidad = Number(cantidadPuestos) > 0 ? Number(cantidadPuestos) : 100;
     const listaSupervisores = Array.isArray(supervisores) ? supervisores : [];
+
+    // Asegurar colación en español en BD antes de crear la nave
+    await asegurarColacionEspanolEnBD();
 
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Crear la nave
@@ -86,8 +88,8 @@ export async function POST(request: Request) {
         },
       });
 
-      // 2. Generar puestos vacantes iniciales
-      const prefix = idNave.toUpperCase().replace("NAVE-", "N-");
+      // 2. Generar puestos vacantes iniciales calculando el prefijo a partir del nombre (ej. NAVE Ñ -> N-Ñ)
+      const prefix = nombreLimpio.replace(/^NAVE\s+/i, "N-").replace(/\s+/g, "-");
       const puestosData = [];
       for (let i = 1; i <= cantidad; i++) {
         puestosData.push({

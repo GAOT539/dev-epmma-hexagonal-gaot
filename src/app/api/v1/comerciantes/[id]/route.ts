@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
+import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -44,14 +45,27 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const rawNave = body.nave !== undefined ? body.nave : (body.naveId !== undefined ? body.naveId : actual.nave);
     let naveObj = null;
     if (rawNave) {
-      const naveTermino = String(rawNave).trim();
-      naveObj = await prisma.nave.findFirst({
+      const naveTermino = String(rawNave).normalize("NFC").trim();
+      const naveSlug = generarSlugNave(naveTermino);
+      const candidatos = await prisma.nave.findMany({
         where: {
-          OR: [{ id: naveTermino }, { nombre: naveTermino }],
+          OR: [
+            { id: naveTermino },
+            { nombre: naveTermino },
+            { id: naveSlug },
+            { nombre: naveTermino.toUpperCase() },
+          ],
         },
       });
+      const naveUpper = naveTermino.toUpperCase();
+      naveObj = candidatos.find(
+        (n) =>
+          n.nombre.normalize("NFC").trim().toUpperCase() === naveUpper ||
+          n.id === naveTermino ||
+          n.id === naveSlug
+      ) || null;
     }
-    const nombreNaveFinal = naveObj ? naveObj.nombre : (rawNave ? String(rawNave).trim() : actual.nave);
+    const nombreNaveFinal = naveObj ? naveObj.nombre : (rawNave ? String(rawNave).normalize("NFC").trim() : actual.nave);
 
     const esDeshabilitacion =
       (body.deshabilitadoPor !== undefined && body.deshabilitadoPor !== null && String(body.deshabilitadoPor).trim().length > 0) ||

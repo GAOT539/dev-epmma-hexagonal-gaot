@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
-import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
+import {
+  sincronizarPuestosDeNaveEnBD,
+  generarSlugNave,
+} from "@/infrastructure/database/nave-puestos-sync.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -32,19 +35,30 @@ function ordenarPuestos<T extends { codigo: string }>(puestos: T[]): T[] {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
+    const idNorm = id.normalize("NFC").trim();
+    const slug = generarSlugNave(idNorm);
 
     // Auto-reconciliación de puestos de la nave en base de datos
-    await sincronizarPuestosDeNaveEnBD(id);
+    await sincronizarPuestosDeNaveEnBD(idNorm);
 
-    const nave = await prisma.nave.findFirst({
+    const candidatos = await prisma.nave.findMany({
       where: {
         OR: [
-          { id },
-          { nombre: id },
-          { id: id.toLowerCase().replace(/\s+/g, "-") },
+          { id: idNorm },
+          { nombre: idNorm },
+          { id: slug },
+          { nombre: idNorm.toUpperCase() },
         ],
       },
     });
+
+    const targetUpper = idNorm.toUpperCase();
+    const nave = candidatos.find(
+      (n) =>
+        n.nombre.normalize("NFC").trim().toUpperCase() === targetUpper ||
+        n.id === idNorm ||
+        n.id === slug
+    );
 
     if (!nave) {
       return NextResponse.json({ error: "Nave no encontrada." }, { status: 404 });

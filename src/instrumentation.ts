@@ -6,12 +6,16 @@ export async function register() {
       iniciarCronAsistenciaDiaria2AM,
       asegurarAsistenciaInicialDelDia,
     } = await import("@/infrastructure/database/daily-attendance.service");
+    const { asegurarColacionEspanolEnBD } = await import(
+      "@/infrastructure/database/nave-puestos-sync.service"
+    );
 
     try {
+      await asegurarColacionEspanolEnBD();
       await asegurarAsistenciaInicialDelDia();
       iniciarCronAsistenciaDiaria2AM();
     } catch (error) {
-      console.error("[INSTRUMENTATION] Error al inicializar asistencia en arranque:", error);
+      console.error("[INSTRUMENTATION] Error al inicializar servicios en arranque:", error);
     }
   }
 }

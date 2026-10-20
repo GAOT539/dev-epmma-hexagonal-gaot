@@ -7,8 +7,85 @@ export {
   normalizarNombreCompleto,
   sonMismoContribuyente,
   inferirNaveDesdePuesto,
+  generarSlugNave,
+  desglosarCodigosPuestoMultiples,
+  expandirRegistrosMultiPuesto,
 } from "./catastro-reconciliacion.service";
-import { sonCodigosPuestosEquivalentes } from "./catastro-reconciliacion.service";
+import {
+  sonCodigosPuestosEquivalentes,
+  generarSlugNave,
+} from "./catastro-reconciliacion.service";
+
+let colacionEspanolVerificada = false;
+
+/**
+ * Asegura automáticamente en MySQL que las columnas de nombres de nave
+ * (`naves.nombre` y `comerciantes.nave`) utilicen colación en español (`utf8mb4_spanish_ci`),
+ * permitiendo diferenciar nativamente 'N' de 'Ñ' tanto en índices únicos como en consultas SQL.
+ */
+export async function asegurarColacionEspanolEnBD(forzar: boolean = false): Promise<void> {
+  if (colacionEspanolVerificada && !forzar) {
+    return;
+  }
+
+  try {
+    const rows = await prisma.$queryRawUnsafe<
+      {
+        tableName?: string;
+        columnName?: string;
+        collationName?: string;
+        TABLE_NAME?: string;
+        COLUMN_NAME?: string;
+        COLLATION_NAME?: string;
+      }[]
+    >(`
+      SELECT TABLE_NAME as tableName, COLUMN_NAME as columnName, COLLATION_NAME as collationName
+      FROM information_schema.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE()
+        AND ((TABLE_NAME = 'naves' AND COLUMN_NAME = 'nombre')
+          OR (TABLE_NAME = 'comerciantes' AND COLUMN_NAME = 'nave'))
+    `);
+
+    let navesCollation = "";
+    let comerciantesCollation = "";
+
+    for (const r of rows) {
+      const tbl = (r.tableName || r.TABLE_NAME || "").toLowerCase();
+      const col = (r.columnName || r.COLUMN_NAME || "").toLowerCase();
+      const coll = (r.collationName || r.COLLATION_NAME || "").toLowerCase();
+
+      if (tbl === "naves" && col === "nombre") {
+        navesCollation = coll;
+      } else if (tbl === "comerciantes" && col === "nave") {
+        comerciantesCollation = coll;
+      }
+    }
+
+    const esValida = (c: string) =>
+      c === "utf8mb4_spanish_ci" || c === "utf8mb4_es_0900_ai_ci";
+
+    if (navesCollation && (!esValida(navesCollation) || (forzar && navesCollation !== "utf8mb4_spanish_ci"))) {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `naves` MODIFY `nombre` VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci NOT NULL;"
+      );
+      console.log("[DB] Colación de `naves.nombre` actualizada a utf8mb4_spanish_ci.");
+    }
+
+    if (comerciantesCollation && (!esValida(comerciantesCollation) || (forzar && comerciantesCollation !== "utf8mb4_spanish_ci"))) {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE `comerciantes` MODIFY `nave` VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci NULL;"
+      );
+      console.log("[DB] Colación de `comerciantes.nave` actualizada a utf8mb4_spanish_ci.");
+    }
+
+    colacionEspanolVerificada = true;
+  } catch (error) {
+    console.warn(
+      "[DB] Aviso: No se pudo verificar/actualizar colación en español en este momento:",
+      error instanceof Error ? error.message : error
+    );
+  }
+}
 
 /**
  * Reconcilia y garantiza la integridad estricta de la tabla `puestos` de una nave:
@@ -20,15 +97,16 @@ import { sonCodigosPuestosEquivalentes } from "./catastro-reconciliacion.service
 export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promise<void> {
   if (!naveIdONombre) return;
 
-  const termino = naveIdONombre.trim();
+  const termino = naveIdONombre.normalize("NFC").trim();
+  const slug = generarSlugNave(termino);
 
-  // 1. Buscar la nave por id o nombre insensible a mayúsculas
-  const nave = await prisma.nave.findFirst({
+  // 1. Buscar la nave por id o nombre con validación TypeScript exacta
+  const candidatos = await prisma.nave.findMany({
     where: {
       OR: [
         { id: termino },
         { nombre: termino },
-        { id: termino.toLowerCase().replace(/\s+/g, "-") },
+        { id: slug },
         { nombre: termino.toUpperCase() },
       ],
     },
@@ -39,6 +117,14 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
     },
   });
 
+  const targetUpper = termino.toUpperCase();
+  const nave = candidatos.find(
+    (n) =>
+      n.nombre.normalize("NFC").trim().toUpperCase() === targetUpper ||
+      n.id === termino ||
+      n.id === slug
+  );
+
   if (!nave) return;
 
   // 2. Obtener puestos actuales
@@ -48,12 +134,19 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
   });
 
   // 3. Obtener comerciantes activos que pertenecen estrictamente a la nave por nombre o id
-  const comerciantes = await prisma.comerciante.findMany({
+  const todosComerciantes = await prisma.comerciante.findMany({
     where: {
       estadoRegistro: "Habilitado",
       OR: [{ nave: nave.nombre }, { nave: nave.id }],
     },
   });
+
+  const targetNaveNombre = nave.nombre.normalize("NFC").trim().toUpperCase();
+  const comerciantes = todosComerciantes.filter(
+    (c) =>
+      c.nave?.normalize("NFC").trim().toUpperCase() === targetNaveNombre ||
+      c.nave === nave.id
+  );
 
   // ── Paso A: Garantizar que todo comerciante activo de la nave tenga su registro en puestos ──
   for (const com of comerciantes) {

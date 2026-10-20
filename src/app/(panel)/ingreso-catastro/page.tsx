@@ -97,13 +97,13 @@ export default function IngresoCatastroPage() {
         }
 
         // Inferencia de nave desde código de puesto o nombre de archivo si no está definida
-        const nombreArchivoUpper = file.name.toUpperCase();
+        const nombreArchivoUpper = file.name.normalize("NFC").toUpperCase();
         let naveDesdeArchivo: string | null = null;
         if (nombreArchivoUpper.includes("ROPA")) naveDesdeArchivo = "NAVE ROPA";
         else if (nombreArchivoUpper.includes("CF")) naveDesdeArchivo = "NAVE CF";
         else if (nombreArchivoUpper.includes("FLORES")) naveDesdeArchivo = "NAVE FLORES";
-        else if (/\bNAVE[_\s-]*([A-Z0-9]+)\b/.test(nombreArchivoUpper)) {
-          const m = nombreArchivoUpper.match(/\bNAVE[_\s-]*([A-Z0-9]+)\b/);
+        else if (/(?:^|[^A-ZÑ0-9])NAVE[_\s"-]*([A-ZÑ0-9]+)(?=$|[^A-ZÑ0-9])/i.test(nombreArchivoUpper)) {
+          const m = nombreArchivoUpper.match(/(?:^|[^A-ZÑ0-9])NAVE[_\s"-]*([A-ZÑ0-9]+)(?=$|[^A-ZÑ0-9])/i);
           if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
         }
 
@@ -119,7 +119,7 @@ export default function IngresoCatastroPage() {
             else {
               const match =
                 upperPuesto.match(/^N-(?:([A-ZÑ0-9]+)-([A-Z0-9-]+)|([A-Z0-9-]+)-([A-ZÑ]))(?:[\s*].*)?$/i) ||
-                upperPuesto.match(/\bN-(?:([A-ZÑ0-9]+)-([A-Z0-9-]+)|([A-Z0-9-]+)-([A-ZÑ]))\b/i);
+                upperPuesto.match(/(?:^|[^A-ZÑ0-9])N-(?:([A-ZÑ0-9]+)-([A-Z0-9-]+)|([A-Z0-9-]+)-([A-ZÑ]))(?=$|[^A-ZÑ0-9])/i);
               if (match) {
                 const letra = (match[1] || match[4] || "").toUpperCase();
                 if (letra) naveReg = `NAVE ${letra}`;

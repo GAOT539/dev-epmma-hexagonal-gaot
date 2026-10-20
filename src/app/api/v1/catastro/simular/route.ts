@@ -7,12 +7,15 @@ import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
   esCodigoTipoBodegaOLocal,
+  expandirRegistrosMultiPuesto,
+  generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const registros: ImportacionRegistro[] = body.registros || [];
+    const registrosRaw: ImportacionRegistro[] = body.registros || [];
+    const registros: ImportacionRegistro[] = expandirRegistrosMultiPuesto(registrosRaw);
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
@@ -48,21 +51,31 @@ export async function POST(request: Request) {
 
     const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
 
-    // 1. Detección o Selección de Nave
+    // 1. Detección o Selección de Nave con Validación Estricta Unicode NFC
     let naveExistente = null;
     let naveDetectada = "";
 
     if (naveIdManual) {
-      naveExistente = await prisma.nave.findFirst({
+      const manualNorm = naveIdManual.normalize("NFC").trim();
+      const manualSlug = generarSlugNave(manualNorm);
+      const candidatos = await prisma.nave.findMany({
         where: {
           OR: [
-            { id: naveIdManual },
-            { nombre: naveIdManual },
-            { id: naveIdManual.toLowerCase().replace(/\s+/g, "-") },
+            { id: manualNorm },
+            { nombre: manualNorm },
+            { id: manualSlug },
+            { nombre: manualNorm.toUpperCase() },
           ],
         },
         include: { puestos: true },
       });
+      const manualUpper = manualNorm.toUpperCase();
+      naveExistente = candidatos.find(
+        (n) =>
+          n.nombre.normalize("NFC").trim().toUpperCase() === manualUpper ||
+          n.id === manualNorm ||
+          n.id === manualSlug
+      ) || null;
       if (naveExistente) {
         naveDetectada = naveExistente.nombre;
       }
@@ -72,7 +85,7 @@ export async function POST(request: Request) {
       // Intentar inferir nave desde la columna nave o desde los códigos de puesto
       const regConNave = registros.find((r) => r.nave && r.nave !== "NO DEFINIDA");
       if (regConNave?.nave && regConNave.nave !== "NO DEFINIDA") {
-        naveDetectada = regConNave.nave.trim().toUpperCase();
+        naveDetectada = regConNave.nave.normalize("NFC").trim().toUpperCase();
       }
 
       if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
@@ -91,15 +104,24 @@ export async function POST(request: Request) {
       }
 
       if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
-        naveExistente = await prisma.nave.findFirst({
+        const detectadaNorm = naveDetectada.normalize("NFC").trim();
+        const detectadaSlug = generarSlugNave(detectadaNorm);
+        const candidatos = await prisma.nave.findMany({
           where: {
             OR: [
-              { nombre: naveDetectada },
-              { id: naveDetectada.toLowerCase().replace(/\s+/g, "-") },
+              { nombre: detectadaNorm },
+              { id: detectadaSlug },
+              { nombre: detectadaNorm.toUpperCase() },
             ],
           },
           include: { puestos: true },
         });
+        const detectadaUpper = detectadaNorm.toUpperCase();
+        naveExistente = candidatos.find(
+          (n) =>
+            n.nombre.normalize("NFC").trim().toUpperCase() === detectadaUpper ||
+            n.id === detectadaSlug
+        ) || null;
       }
     }
 

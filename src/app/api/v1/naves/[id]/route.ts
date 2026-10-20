@@ -99,8 +99,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       // 3. Ajustar puestos si la cantidad cambió
       const diferencia = nuevaCantidad - naveActual.puestos.length;
       if (diferencia > 0) {
-        // Crear nuevos puestos vacantes
-        const prefix = id.toUpperCase().replace("NAVE-", "N-");
+        // Crear nuevos puestos vacantes calculando el prefijo desde el nombre de la nave
+        const prefix = nuevoNombre.replace(/^NAVE\s+/i, "N-").replace(/\s+/g, "-");
         const nuevosPuestos = [];
         for (let i = 1; i <= diferencia; i++) {
           const num = naveActual.puestos.length + i;
