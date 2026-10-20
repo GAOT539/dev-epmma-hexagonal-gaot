@@ -303,7 +303,7 @@ export function CroquisAsistenciaView({
                         <p className="text-xs font-bold text-white leading-tight line-clamp-2">
                           {comerciante.contribuyente}
                         </p>
-                        <p className="text-[10px] text-white/90 font-mono font-semibold uppercase mt-0.5">
+                        <p className="text-[10px] text-white/95 font-mono font-bold uppercase mt-0.5 whitespace-normal break-words leading-tight">
                           #{puesto.codigo || celda.codigoPuesto || "—"}
                         </p>
                       </div>
@@ -312,7 +312,7 @@ export function CroquisAsistenciaView({
                         <p className="text-xs text-white/80 font-medium">
                           Vacante
                         </p>
-                        <p className="text-[10px] text-white/70 font-mono font-medium uppercase mt-0.5">
+                        <p className="text-[10px] text-white/80 font-mono font-semibold uppercase mt-0.5 whitespace-normal break-words leading-tight">
                           #{puesto.codigo || celda.codigoPuesto || "—"}
                         </p>
                       </div>

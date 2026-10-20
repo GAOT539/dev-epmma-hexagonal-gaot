@@ -179,7 +179,6 @@ async function main() {
           tipo: "PUESTO",
           codigoPuesto: item.puestoCodigo,
           texto: item.puestoCodigo,
-          subtexto: item.actividad,
           colorZona: item.puestoCodigo.startsWith("BODEGA") ? "amarillo" : item.puestoCodigo.startsWith("CUBICULO") ? "naranja" : "verde",
           rowSpan: 1,
           colSpan: 1,

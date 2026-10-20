@@ -1,13 +1,22 @@
+// ── API Route: POST /api/v1/catastro/importar ──────────────────────────────────
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-puestos-sync.service";
+import {
+  reconciliarCatastroNaveExistente,
+  inferirNaveDesdePuesto,
+} from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const registros: ImportacionRegistro[] = body.registros || [];
+    const naveIdManual: string | undefined = body.naveIdManual?.trim();
+    const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
+    const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -16,68 +25,100 @@ export async function POST(request: Request) {
       );
     }
 
-function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
-  if (!codigoPuesto) return null;
-  const upper = codigoPuesto.trim().toUpperCase();
-  if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
-    return "NAVE CF";
-  }
-  const match = upper.match(/\bN-([A-ZÑ0-9]+)-/);
-  if (match && match[1]) {
-    return `NAVE ${match[1]}`;
-  }
-  return null;
-}
+    // 1. Detección o Selección de Nave
+    let naveExistente = null;
+    let naveDetectada = "";
 
-    const regConNave = registros.find((r) => r.nave && r.nave !== "NO DEFINIDA");
-    let naveDetectada = (regConNave?.nave || "").trim().toUpperCase();
-    if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
-      for (const r of registros) {
-        const inf = inferirNaveDesdePuesto(r.puesto || "");
-        if (inf) {
-          naveDetectada = inf;
-          break;
-        }
-      }
-    }
-    if (!naveDetectada) naveDetectada = "NAVE A";
-
-    const resultado = await prisma.$transaction(async (tx) => {
-      // 1. Obtener o crear la nave
-      let naveObj = await tx.nave.findFirst({
+    if (naveIdManual) {
+      naveExistente = await prisma.nave.findFirst({
         where: {
           OR: [
-            { nombre: naveDetectada },
-            { id: naveDetectada.toLowerCase().replace(/\s+/g, "-") },
+            { id: naveIdManual },
+            { nombre: naveIdManual },
+            { id: naveIdManual.toLowerCase().replace(/\s+/g, "-") },
           ],
         },
         include: { puestos: true },
       });
+      if (naveExistente) {
+        naveDetectada = naveExistente.nombre;
+      }
+    }
 
-      const totalOcupados = registros.length;
-      const capacidadNecesaria = Math.max(naveObj ? naveObj.cantidadPuestos : 100, totalOcupados);
+    if (!naveExistente) {
+      const regConNave = registros.find((r) => r.nave && r.nave !== "NO DEFINIDA");
+      if (regConNave?.nave && regConNave.nave !== "NO DEFINIDA") {
+        naveDetectada = regConNave.nave.trim().toUpperCase();
+      }
 
-      if (!naveObj) {
-        const idSlug = naveDetectada
+      if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
+        for (const r of registros) {
+          const inf = inferirNaveDesdePuesto(r.puesto || "");
+          if (inf) {
+            naveDetectada = inf;
+            break;
+          }
+        }
+      }
+
+      if (naveDetectada) {
+        naveExistente = await prisma.nave.findFirst({
+          where: {
+            OR: [
+              { nombre: naveDetectada },
+              { id: naveDetectada.toLowerCase().replace(/\s+/g, "-") },
+            ],
+          },
+          include: { puestos: true },
+        });
+      }
+    }
+
+    // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave
+    if (!naveExistente && !crearNuevaNave) {
+      return NextResponse.json(
+        {
+          exitosos: 0,
+          errores: [
+            {
+              fila: 0,
+              mensaje:
+                "Nave no encontrada. Seleccione una nave existente o active la opción de crear nueva nave.",
+            },
+          ],
+        },
+        { status: 400 }
+      );
+    }
+
+    // ── CASO A: Crear Nueva Nave ──────────────────────────────────────────────
+    if (crearNuevaNave && !naveExistente) {
+      const nombreNueva = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").trim().toUpperCase();
+      const idSlug =
+        nombreNueva
           .toLowerCase()
           .normalize("NFD")
           .replace(/[\u0300-\u036f]/g, "")
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || `nave-${Date.now()}`;
 
-        naveObj = await tx.nave.create({
+      const totalRegistros = registros.length;
+      const capacidad = Math.max(totalRegistros, 100);
+
+      const resultadoCreacion = await prisma.$transaction(async (tx) => {
+        // 1. Crear Nave
+        const nuevaNave = await tx.nave.create({
           data: {
             id: idSlug,
-            nombre: naveDetectada,
-            cantidadPuestos: capacidadNecesaria,
-            limitePuestos: capacidadNecesaria,
+            nombre: nombreNueva,
+            cantidadPuestos: capacidad,
+            limitePuestos: capacidad,
             supervisores: [],
             estadoRegistro: "Habilitado",
           },
-          include: { puestos: true },
         });
 
-        // Crear plano vacío para la nueva nave
+        // 2. Crear plano espacial inicial 12x12 vacío
         const celdasPlano = [];
         for (let r = 0; r < 12; r++) {
           for (let c = 0; c < 12; c++) {
@@ -86,200 +127,182 @@ function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
         }
         await tx.planoNave.create({
           data: {
-            naveId: naveObj.id,
+            naveId: nuevaNave.id,
             filas: 12,
             columnas: 12,
             planoJson: celdasPlano,
           },
         });
-      } else if (naveObj.cantidadPuestos < capacidadNecesaria) {
-        // Ampliar capacidad si el archivo trae más puestos
-        await tx.nave.update({
-          where: { id: naveObj.id },
-          data: {
-            cantidadPuestos: capacidadNecesaria,
-            limitePuestos: capacidadNecesaria,
-          },
-        });
-      }
 
-      const naveIdFinal = naveObj.id;
-      const puestosActuales = await tx.puesto.findMany({ where: { naveId: naveIdFinal } });
-      const codigosPuestosEnArchivo = new Set(
-        registros.map((r) => (r.puesto || "").trim().toUpperCase()).filter(Boolean)
-      );
+        // 3. Crear puestos y comerciantes
+        let exitosos = 0;
+        const errores: { fila: number; mensaje: string }[] = [];
 
-      // 2. Desvincular puestos de esta nave que ya no están ocupados en el nuevo archivo
-      for (const p of puestosActuales) {
-        if (p.estado === "Ocupado" && !codigosPuestosEnArchivo.has(p.codigo.toUpperCase())) {
-          if (p.comercianteId) {
-            await tx.comerciante.updateMany({
-              where: { idInterno: p.comercianteId },
-              data: { puestoId: null },
-            });
+        for (let i = 0; i < registros.length; i++) {
+          const reg = registros[i];
+          const nombre = (reg.nombre || reg.contribuyente || "").trim();
+          const cedula = (reg.cedula || "").trim();
+          if (!nombre || !cedula) {
+            errores.push({ fila: i + 1, mensaje: "Registro incompleto." });
+            continue;
           }
-          await tx.puesto.update({
-            where: { id: p.id },
-            data: { estado: "Vacante", comercianteId: null },
-          });
-          p.estado = "Vacante";
-          p.comercianteId = null;
-        }
-      }
 
-      // 3. Procesar cada registro del archivo soportando múltiples puestos por comerciante
-      let exitosos = 0;
-      const errores: { fila: number; mensaje: string }[] = [];
+          const codigoPuesto = (reg.puesto || `PUESTO-${i + 1}`).trim().toUpperCase();
+          const ciuNormalizado =
+            reg.ciu && reg.ciu !== "-" && reg.ciu.trim().length > 0 ? reg.ciu.trim() : "S/N";
 
-      for (let i = 0; i < registros.length; i++) {
-        const reg = registros[i];
-        const nombre = (reg.nombre || reg.contribuyente || "").trim();
-        const cedula = (reg.cedula || "").trim();
-        if (!nombre || !cedula) {
-          errores.push({ fila: i + 1, mensaje: "Registro incompleto." });
-          continue;
-        }
-
-        const codigoPuesto = (reg.puesto || "-").trim().toUpperCase();
-        const ciuNormalizado = (reg.ciu && reg.ciu !== "-" && reg.ciu.trim().length > 0)
-          ? reg.ciu.trim()
-          : "S/N";
-
-        // Buscar o crear el puesto en la nave
-        let puesto = puestosActuales.find(
-          (p) => p.codigo.toUpperCase() === codigoPuesto
-        );
-
-        if (!puesto) {
-          puesto = await tx.puesto.create({
+          // Crear puesto
+          const puestoId = crypto.randomUUID();
+          const puestoCreado = await tx.puesto.create({
             data: {
-              id: crypto.randomUUID(),
+              id: puestoId,
               codigo: codigoPuesto,
-              naveId: naveIdFinal,
+              naveId: nuevaNave.id,
               estado: "Ocupado",
             },
           });
-          puestosActuales.push(puesto);
-        }
 
-        // Determinar o actualizar el registro del comerciante para este puesto específico
-        let comerciante = null;
-
-        // A. Si el puesto ya tiene un comerciante asignado
-        if (puesto.comercianteId) {
-          const comAsignado = await tx.comerciante.findUnique({
-            where: { idInterno: puesto.comercianteId },
-          });
-          if (comAsignado) {
-            comerciante = await tx.comerciante.update({
-              where: { idInterno: comAsignado.idInterno },
-              data: {
-                ciu: ciuNormalizado,
-                cedula,
-                contribuyente: nombre,
-                actividad: reg.actividad || "General",
-                puestoId: codigoPuesto,
-                nave: naveObj.nombre,
-                estadoRegistro: "Habilitado",
-                modificadoPor: "importador-archivo",
-              },
-            });
-          }
-        }
-
-        // B. Si no estaba asignado en el puesto, buscar si existe un registro con esta cédula y puesto
-        if (!comerciante) {
-          const comExistente = await tx.comerciante.findFirst({
-            where: {
-              cedula,
-              puestoId: codigoPuesto,
-              nave: naveObj.nombre,
-            },
-          });
-          if (comExistente) {
-            comerciante = await tx.comerciante.update({
-              where: { idInterno: comExistente.idInterno },
-              data: {
-                ciu: ciuNormalizado,
-                contribuyente: nombre,
-                actividad: reg.actividad || "General",
-                estadoRegistro: "Habilitado",
-                modificadoPor: "importador-archivo",
-              },
-            });
-          }
-        }
-
-        // C. Si es un nuevo comerciante o un puesto adicional para la misma persona, crear el registro
-        if (!comerciante) {
-          comerciante = await tx.comerciante.create({
+          // Crear comerciante
+          const comercianteCreado = await tx.comerciante.create({
             data: {
               ciu: ciuNormalizado,
               cedula,
               contribuyente: nombre,
               actividad: reg.actividad || "General",
               puestoId: codigoPuesto,
-              nave: naveObj.nombre,
+              nave: nuevaNave.nombre,
               estadoRegistro: "Habilitado",
-              creadoPor: "importador-archivo",
+              creadoPor: "importador-catastro",
+            },
+          });
+
+          // Enlazar puesto con comerciante
+          await tx.puesto.update({
+            where: { id: puestoCreado.id },
+            data: { comercianteId: comercianteCreado.idInterno },
+          });
+
+          exitosos++;
+        }
+
+        return { exitosos, errores, naveId: nuevaNave.id, nombreNave: nuevaNave.nombre };
+      });
+
+      await sincronizarPuestosDeNaveEnBD(resultadoCreacion.naveId);
+      await asegurarAsistenciaInicialDelDia();
+
+      return NextResponse.json({
+        exitosos: resultadoCreacion.exitosos,
+        errores: resultadoCreacion.errores,
+        mensaje: `Nueva nave ${resultadoCreacion.nombreNave} creada con ${resultadoCreacion.exitosos} puestos y comerciantes vinculados.`,
+        reconciliacion: {
+          naveDetectada: resultadoCreacion.nombreNave,
+          esNaveNueva: true,
+          capacidadNave: capacidad,
+          totalOcupados: resultadoCreacion.exitosos,
+          totalVacantes: Math.max(0, capacidad - resultadoCreacion.exitosos),
+          cambiosDetectados: [],
+        },
+      });
+    }
+
+    // ── CASO B: Reconciliación en Nave Existente (Puestos Inmutables) ──────────
+    const puestosNave = naveExistente!.puestos;
+    const comerciantesNave = await prisma.comerciante.findMany({
+      where: {
+        estadoRegistro: { not: "Deshabilitado" },
+        OR: [
+          { nave: naveExistente!.nombre },
+          { nave: naveExistente!.id },
+          { puestoId: { in: puestosNave.map((p) => p.codigo) } },
+        ],
+      },
+    });
+
+    const resultadoPlan = reconciliarCatastroNaveExistente(
+      registros,
+      naveExistente!,
+      puestosNave,
+      comerciantesNave
+    );
+
+    const { asignacionesOcupar, puestosAVacante, reconciliacion } = resultadoPlan;
+
+    await prisma.$transaction(async (tx) => {
+      // 1. Procesar puestos que pasan a Vacante
+      for (const vac of puestosAVacante) {
+        if (vac.comercianteSalienteId) {
+          await tx.comerciante.updateMany({
+            where: { idInterno: vac.comercianteSalienteId },
+            data: { puestoId: null },
+          });
+        }
+        await tx.puesto.update({
+          where: { id: vac.puestoId },
+          data: { estado: "Vacante", comercianteId: null },
+        });
+      }
+
+      // 2. Procesar asignaciones a puestos (Mantiene Puesto.codigo inmutable)
+      for (const asig of asignacionesOcupar) {
+        let comercianteIdFinal = asig.comercianteId;
+
+        if (asig.esNuevoComerciante) {
+          // Crear nuevo comerciante en la base de datos
+          const nuevoCom = await tx.comerciante.create({
+            data: {
+              ciu: asig.datosComerciante.ciu,
+              cedula: asig.datosComerciante.cedula,
+              contribuyente: asig.datosComerciante.contribuyente,
+              actividad: asig.datosComerciante.actividad,
+              puestoId: asig.puestoCodigo, // Siempre el código oficial del puesto de la nave
+              nave: asig.datosComerciante.nave,
+              estadoRegistro: "Habilitado",
+              creadoPor: "importador-reconciliacion",
+            },
+          });
+          comercianteIdFinal = nuevoCom.idInterno;
+        } else {
+          // Actualizar datos del comerciante existente
+          await tx.comerciante.update({
+            where: { idInterno: asig.comercianteId },
+            data: {
+              ciu: asig.datosComerciante.ciu,
+              contribuyente: asig.datosComerciante.contribuyente,
+              actividad: asig.datosComerciante.actividad,
+              puestoId: asig.puestoCodigo, // Siempre el código oficial del puesto de la nave
+              nave: asig.datosComerciante.nave,
+              estadoRegistro: "Habilitado",
+              modificadoPor: "importador-reconciliacion",
             },
           });
         }
 
-        // Vincular y ocupar el puesto garantizando relación unívoca por puesto
+        // Vincular el puesto sin alterar su código
         await tx.puesto.update({
-          where: { id: puesto.id },
+          where: { id: asig.puestoId },
           data: {
             estado: "Ocupado",
-            comercianteId: comerciante.idInterno,
+            comercianteId: comercianteIdFinal,
           },
         });
-        puesto.comercianteId = comerciante.idInterno;
-        puesto.estado = "Ocupado";
-
-        exitosos++;
       }
-
-      // 4. Limpieza de puestos vacantes genéricos sobrantes si superan capacidadNecesaria
-      const totalPuestosEnNave = await tx.puesto.count({
-        where: { naveId: naveIdFinal },
-      });
-
-      if (totalPuestosEnNave > capacidadNecesaria) {
-        const puestosVacantes = await tx.puesto.findMany({
-          where: {
-            naveId: naveIdFinal,
-            estado: "Vacante",
-            comercianteId: null,
-          },
-          select: { id: true },
-        });
-
-        const cantidadAEliminar = totalPuestosEnNave - capacidadNecesaria;
-        const idsAEliminar = puestosVacantes.slice(0, cantidadAEliminar).map((p) => p.id);
-
-        if (idsAEliminar.length > 0) {
-          await tx.puesto.deleteMany({
-            where: { id: { in: idsAEliminar } },
-          });
-        }
-      }
-
-      return { exitosos, errores, naveId: naveIdFinal };
     });
 
-    await sincronizarPuestosDeNaveEnBD(resultado.naveId);
-    if (resultado.exitosos > 0) {
-      await asegurarAsistenciaInicialDelDia();
-    }
+    await sincronizarPuestosDeNaveEnBD(naveExistente!.id);
+    await asegurarAsistenciaInicialDelDia();
 
     return NextResponse.json({
-      exitosos: resultado.exitosos,
-      errores: resultado.errores,
-      mensaje: `Importación completada: ${resultado.exitosos} registros procesados correctamente.`,
+      exitosos: asignacionesOcupar.length,
+      errores: [],
+      mensaje: `Reconciliación completada para ${naveExistente!.nombre}: ${asignacionesOcupar.length} puestos actualizados e inmutables.`,
+      reconciliacion,
     });
   } catch (error) {
     console.error("Error en POST /api/v1/catastro/importar:", error);
-    return NextResponse.json({ error: "Error al ejecutar la importación en la base de datos." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Error al ejecutar la importación en la base de datos." },
+      { status: 500 }
+    );
   }
 }

@@ -44,7 +44,7 @@ interface ModalConfigurarCeldaProps {
   puestosNaveActual: Puesto[];
   puestosNavePendientes: Puesto[];
   codigosPuestosUbicados: Set<string>;
-  comerciantes: Comerciante[];
+  comerciantes?: Comerciante[];
   celdasAbsorbidasModal: CeldaPlano[];
   handleGuardarCeldaModal: (e: React.FormEvent) => void;
   handleVaciarCeldaModal: () => void;
@@ -78,7 +78,6 @@ export function ModalConfigurarCelda({
   puestosNaveActual,
   puestosNavePendientes,
   codigosPuestosUbicados,
-  comerciantes,
   celdasAbsorbidasModal,
   handleGuardarCeldaModal,
   handleVaciarCeldaModal,
@@ -172,11 +171,10 @@ export function ModalConfigurarCelda({
                             -- Seleccionar puesto ({puestosNaveActual.length} registrados, {puestosNavePendientes.length} pendientes) --
                           </option>
                           {puestosNaveActual.map((p) => {
-                            const com = comerciantes.find((c) => c.idInterno === p.comercianteId);
                             const estaUbicado = codigosPuestosUbicados.has(p.codigo.trim().toUpperCase());
                             return (
                               <option key={p.id} value={p.codigo}>
-                                {p.codigo} {com ? `- ${com.contribuyente} (${com.actividad})` : "- Vacante"} {estaUbicado ? "(Ya en plano)" : "★ Pendiente"}
+                                {p.codigo} {estaUbicado ? "(Ya en plano)" : "★ Pendiente"}
                               </option>
                             );
                           })}
@@ -196,19 +194,6 @@ export function ModalConfigurarCelda({
                           autoFocus
                         />
                       )}
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider block mb-1.5">
-                        Detalle Secundario / Metraje (Opcional)
-                      </label>
-                      <Input
-                        type="text"
-                        placeholder="Ej. 72M², Bodega o Con Baño"
-                        value={formSubtexto}
-                        onChange={(e) => setFormSubtexto(e.target.value)}
-                        className="bg-base-white text-sm h-9"
-                      />
                     </div>
 
                     <div>

@@ -333,15 +333,10 @@ export async function generarPlanoEspacialPDF({
           puestosNaveActual
         );
       }
-      const esVacante = Boolean(coincidencia?.esVacante);
-      const comerciante = coincidencia?.comerciante;
 
       // Colores de relleno y borde
       if (celda.tipo === "PUESTO") {
-        if (esVacante) {
-          doc.setFillColor(254, 240, 138); // yellow-200
-          doc.setDrawColor(202, 138, 4); // yellow-600
-        } else if (celda.colorZona === "amarillo") {
+        if (celda.colorZona === "amarillo") {
           doc.setFillColor(254, 243, 199);
           doc.setDrawColor(245, 158, 11);
         } else if (celda.colorZona === "rosado") {
@@ -384,39 +379,19 @@ export async function generarPlanoEspacialPDF({
 
       if (celda.tipo === "PUESTO") {
         doc.setFont("helvetica", "bold");
-        doc.setFontSize(Math.max(5, Math.min(8.5, h * 0.26)));
+        const codText = `${celda.codigoPuesto || coincidencia?.codigoReal || "S/N"}`.trim();
+        const maxTextW = Math.max(8, w - 2);
+        const fontSize = Math.max(4.8, Math.min(8, h * 0.26));
+        doc.setFontSize(fontSize);
         doc.setTextColor(33, 37, 41);
-        const numText = `#${coincidencia?.codigoReal || celda.codigoPuesto || "S/N"}`;
-        doc.text(numText, x + w - 1.5, y + Math.min(h * 0.35, 4.5), {
-          align: "right",
+        const lineas = doc.splitTextToSize(codText, maxTextW);
+        const lineLeading = fontSize * 0.42;
+        const totalH = lineas.length * lineLeading;
+        const startYPos = y + h / 2 - totalH / 2 + lineLeading * 0.8;
+        doc.text(lineas, x + w / 2, startYPos, {
+          align: "center",
+          lineHeightFactor: 1.15,
         });
-
-        if (comerciante) {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(baseFontSize);
-          doc.setTextColor(20, 24, 30);
-          const nombreCorto =
-            comerciante.contribuyente.length > 18
-              ? comerciante.contribuyente.substring(0, 16) + "..."
-              : comerciante.contribuyente;
-          doc.text(nombreCorto, x + 1.5, y + Math.min(h * 0.45, 6));
-
-          if (h > 9 && comerciante.actividad) {
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(Math.max(4, baseFontSize - 1.5));
-            doc.setTextColor(75, 85, 99);
-            const actCorto =
-              comerciante.actividad.length > 20
-                ? comerciante.actividad.substring(0, 18) + "..."
-                : comerciante.actividad;
-            doc.text(actCorto, x + 1.5, y + Math.min(h * 0.72, 9.5));
-          }
-        } else {
-          doc.setFont("helvetica", "bold");
-          doc.setFontSize(Math.max(4.5, baseFontSize - 0.5));
-          doc.setTextColor(146, 64, 14); // yellow-800
-          doc.text("VACANTE", x + 1.5, y + Math.min(h * 0.45, 6));
-        }
       } else {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(baseFontSize);
@@ -458,3 +433,5 @@ export async function generarPlanoEspacialPDF({
   )}.pdf`;
   doc.save(nombreArchivo);
 }
+
+export const exportarPlanoNavePDF = generarPlanoEspacialPDF;

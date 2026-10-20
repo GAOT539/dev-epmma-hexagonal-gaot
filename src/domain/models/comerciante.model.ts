@@ -75,6 +75,14 @@ export interface ReconciliacionResumen {
   totalOcupados: number;
   totalVacantes: number;
   cambiosDetectados: CambioReconciliacion[];
+  naveNoEncontrada?: boolean;
+  navesDisponibles?: Array<{ id: string; nombre: string; cantidadPuestos: number }>;
+}
+
+export interface OpcionesImportacion {
+  naveIdManual?: string;
+  crearNuevaNave?: boolean;
+  nuevoNombreNave?: string;
 }
 
 export interface ImportacionResultado {

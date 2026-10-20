@@ -589,30 +589,9 @@ export function PlanificadorEspacial({
       const siguientePuesto = puestosNavePendientes[0] ?? null;
 
       let codigoAsignar = "";
-      let subtextoAsignar = "MÓDULO ESTÁNDAR";
 
       if (siguientePuesto) {
         codigoAsignar = siguientePuesto.codigo;
-        const com =
-          (siguientePuesto.comercianteId
-            ? comerciantes.find(
-                (c) =>
-                  c.idInterno === siguientePuesto.comercianteId &&
-                  c.estadoRegistro !== "Deshabilitado"
-              )
-            : null) ||
-          comerciantes.find(
-            (c) =>
-              c.estadoRegistro !== "Deshabilitado" &&
-              c.puestoId &&
-              (c.puestoId.trim().toUpperCase() === siguientePuesto.codigo.trim().toUpperCase() ||
-                c.puestoId.trim().toUpperCase() === siguientePuesto.id.trim().toUpperCase())
-          ) ||
-          null;
-
-        if (com?.actividad) {
-          subtextoAsignar = com.actividad;
-        }
       } else {
         // Fallback: siguiente número secuencial disponible 1..limitePuestos
         let siguienteNum = 1;
@@ -638,7 +617,8 @@ export function PlanificadorEspacial({
         columna,
         tipo: "PUESTO",
         codigoPuesto: codigoAsignar,
-        subtexto: subtextoAsignar,
+        texto: codigoAsignar,
+        subtexto: undefined,
       });
 
       toast.info(
@@ -690,7 +670,8 @@ export function PlanificadorEspacial({
         columna,
         tipo: "PUESTO",
         codigoPuesto: cod,
-        subtexto: formSubtexto.trim() || undefined,
+        texto: cod,
+        subtexto: undefined,
         colorZona: formColor,
         rowSpan: rSpan,
         colSpan: cSpan,
@@ -1175,18 +1156,11 @@ export function PlanificadorEspacial({
                 Capacidad completa ({limitePuestos}/{limitePuestos})
               </span>
             ) : (
-              <div className="flex flex-col gap-0.5">
-                <div className="flex items-center gap-1.5">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
-                  <span className="font-mono font-bold text-emerald-300 truncate">
-                    {proximoPuestoRapido.codigo}
-                  </span>
-                </div>
-                <p className="truncate text-[10px] text-gray-200">
-                  {proximoPuestoRapido.comerciante
-                    ? proximoPuestoRapido.comerciante.contribuyente
-                    : "Puesto Vacante"}
-                </p>
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+                <span className="font-mono font-bold text-emerald-300 truncate">
+                  Puesto: {proximoPuestoRapido.codigo}
+                </span>
               </div>
             )}
           </div>
@@ -1393,34 +1367,10 @@ export function PlanificadorEspacial({
                       >
                         {/* Renderizado según tipo de celda */}
                         {celda.tipo === "PUESTO" && (
-                          <>
-                            <div className="space-y-0.5">
-                              {comerciante ? (
-                                <>
-                                  <p className="line-clamp-2 font-bold text-[11px] leading-tight text-base-eerieBlack">
-                                    {comerciante.contribuyente}
-                                  </p>
-                                  <p className="text-[10px] text-gray-700 truncate">
-                                    {comerciante.actividad}
-                                  </p>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="inline-block px-1.5 py-0.5 text-[9px] font-black uppercase bg-yellow-400 text-yellow-950 rounded tracking-wider shadow-2xs">
-                                    VACANTE
-                                  </span>
-                                  {celda.subtexto && (
-                                    <p className="text-[10px] text-yellow-950/80 font-medium truncate pt-0.5">
-                                      {celda.subtexto}
-                                    </p>
-                                  )}
-                                </>
-                              )}
-                            </div>
-
-                            <div className="flex items-center justify-between pt-1 mt-auto">
-                              {modoVista === "EDITAR" && (
-                                <span className="text-[9px] text-gray-700 font-mono font-semibold">
+                          <div className="h-full w-full flex flex-col justify-between p-0.5">
+                            {modoVista === "EDITAR" ? (
+                              <div className="flex items-center justify-start w-full">
+                                <span className="text-[9px] text-gray-500 font-mono font-medium">
                                   {getCoordenadasEtiqueta(
                                     rIdx,
                                     cIdx,
@@ -1428,18 +1378,15 @@ export function PlanificadorEspacial({
                                     cSpan
                                   )}
                                 </span>
-                              )}
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[11px] font-black font-mono shadow-2xs border ${
-                                  esVacante
-                                    ? "bg-yellow-300 text-yellow-950 border-yellow-600/40"
-                                    : "bg-base-white/90 text-base-eerieBlack border-black/10"
-                                } ${modoVista === "VER" ? "ml-auto" : ""}`}
-                              >
-                                #{coincidencia?.codigoReal || celda.codigoPuesto || "S/N"}
+                              </div>
+                            ) : null}
+
+                            <div className="flex-1 flex items-center justify-center my-auto py-0.5 w-full">
+                              <span className="w-full px-1.5 py-1 text-center whitespace-normal break-words leading-tight font-bold font-mono text-[11px] sm:text-xs text-base-eerieBlack bg-white/95 border border-slate-300/80 rounded shadow-2xs">
+                                {celda.codigoPuesto || coincidencia?.codigoReal || "S/N"}
                               </span>
                             </div>
-                          </>
+                          </div>
                         )}
 
                         {celda.tipo === "VACIO" && modoVista === "EDITAR" && (
@@ -1547,14 +1494,7 @@ export function PlanificadorEspacial({
             <div className="flex items-center gap-1.5 font-medium text-gray-700">
               <span className="h-3 w-3 rounded bg-emerald-100 border border-emerald-400 inline-block" />
               <span>
-                Ocupados: <strong className="text-emerald-800">{metricasPlano.ocupados}</strong>
-              </span>
-            </div>
-
-            <div className="flex items-center gap-1.5 font-medium text-gray-700">
-              <span className="h-3 w-3 rounded bg-yellow-200 border border-yellow-500 inline-block" />
-              <span>
-                Vacantes en Plano: <strong className="text-yellow-950">{metricasPlano.vacantes}</strong>
+                Puestos en Plano: <strong className="text-emerald-800">{metricasPlano.puestosEnPlano}</strong>
               </span>
             </div>
 

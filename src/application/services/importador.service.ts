@@ -1,8 +1,8 @@
-// ── Capa de Aplicación: Servicio de Importación Catastral ────────────────────
 import type { IImportadorRepository } from "@/domain/ports/importador.repository";
 import type {
   ImportacionRegistro,
   ImportacionResultado,
+  OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 import { importadorRepository } from "@/infrastructure/repositories/importador.repository.impl";
 
@@ -10,15 +10,17 @@ export class ImportadorService {
   constructor(private readonly repository: IImportadorRepository) {}
 
   async simularImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado> {
-    return this.repository.simularImportacion(registros);
+    return this.repository.simularImportacion(registros, opciones);
   }
 
   async guardarImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado> {
-    return this.repository.guardarImportacion(registros);
+    return this.repository.guardarImportacion(registros, opciones);
   }
 
   async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {

@@ -2,14 +2,17 @@
 import type {
   ImportacionRegistro,
   ImportacionResultado,
+  OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 
 export interface IImportadorRepository {
   simularImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado>;
   guardarImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado>;
   parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]>;
   parsearXML(contenido: string): Promise<ImportacionRegistro[]>;

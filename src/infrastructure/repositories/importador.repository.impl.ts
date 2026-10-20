@@ -4,6 +4,7 @@ import type { IImportadorRepository } from "@/domain/ports/importador.repository
 import type {
   ImportacionRegistro,
   ImportacionResultado,
+  OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 import {
   parsearExcel as parserExcel,
@@ -14,12 +15,13 @@ import {
 
 export class ImportadorRepositoryImpl implements IImportadorRepository {
   async simularImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado> {
     const res = await fetch("/api/v1/catastro/simular", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registros }),
+      body: JSON.stringify({ registros, ...(opciones || {}) }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
@@ -29,12 +31,13 @@ export class ImportadorRepositoryImpl implements IImportadorRepository {
   }
 
   async guardarImportacion(
-    registros: ImportacionRegistro[]
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado> {
     const res = await fetch("/api/v1/catastro/importar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ registros }),
+      body: JSON.stringify({ registros, ...(opciones || {}) }),
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));

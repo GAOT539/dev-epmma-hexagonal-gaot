@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ChevronDown,
   ChevronUp,
+  Plus,
 } from "lucide-react";
 import Link from "next/link";
 import { importadorService } from "@/application/services/importador.service";
@@ -23,6 +24,7 @@ import type { Nave } from "@/domain/models/nave.model";
 import type {
   ImportacionRegistro,
   ImportacionResultado,
+  OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
 import {
@@ -48,6 +50,9 @@ export default function IngresoCatastroPage() {
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [parseando, setParseando] = useState(false);
   const [procesando, setProcesando] = useState(false);
+  const [opcionesImportacion, setOpcionesImportacion] = useState<OpcionesImportacion>({});
+  const [naveManualSeleccionada, setNaveManualSeleccionada] = useState<string>("");
+  const [nombreNuevaNaveInput, setNombreNuevaNaveInput] = useState<string>("");
 
   useEffect(() => {
     naveService.obtenerNaves().then(setNaves);
@@ -147,8 +152,17 @@ export default function IngresoCatastroPage() {
       }
 
       setRegistros(parsed);
+      setOpcionesImportacion({});
       const sim = await importadorService.simularImportacion(parsed);
       setAnalisis(sim);
+      if (sim.reconciliacion?.navesDisponibles && sim.reconciliacion.navesDisponibles.length > 0) {
+        setNaveManualSeleccionada(sim.reconciliacion.navesDisponibles[0].id);
+      }
+      setNombreNuevaNaveInput(
+        sim.reconciliacion?.naveDetectada && sim.reconciliacion.naveDetectada !== "NO IDENTIFICADA"
+          ? sim.reconciliacion.naveDetectada
+          : ""
+      );
       setPaso("preview");
       toast.success(`${parsed.length} comerciantes detectados correctamente.`);
     } catch (error) {
@@ -171,7 +185,7 @@ export default function IngresoCatastroPage() {
   async function handleConfirmarImportacion() {
     setProcesando(true);
     try {
-      const res = await importadorService.guardarImportacion(registros);
+      const res = await importadorService.guardarImportacion(registros, opcionesImportacion);
       setResultado(res);
       setPaso("resultado");
 
@@ -193,6 +207,9 @@ export default function IngresoCatastroPage() {
     setRegistros([]);
     setResultado(null);
     setAnalisis(null);
+    setOpcionesImportacion({});
+    setNaveManualSeleccionada("");
+    setNombreNuevaNaveInput("");
     setArchivoNombre("");
     setPaso("cargar");
   }
@@ -329,88 +346,203 @@ export default function IngresoCatastroPage() {
               </button>
             </div>
 
-            {/* Resumen de Reconciliación Mensual */}
+            {/* Resumen de Reconciliación Mensual o Alerta de Selección Manual */}
             {analisis?.reconciliacion && (
-              <div className="p-4 sm:p-5 border-b border-institucional-whiteSmokeBlack/15 bg-slate-50/70 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Building2 size={18} className="text-institucional-green" />
-                    <span className="font-bold text-sm text-base-eerieBlack">
-                      Reconciliación: {analisis.reconciliacion.naveDetectada}
-                    </span>
-                    {analisis.reconciliacion.esNaveNueva ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
-                        Se creará como Nueva Nave
+              analisis.reconciliacion.naveNoEncontrada ? (
+                <div className="p-5 border-b border-amber-300 bg-amber-50/95 space-y-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 rounded-xl bg-amber-100 border border-amber-300 text-amber-800 shrink-0">
+                      <AlertCircle size={22} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-base font-bold text-amber-950 uppercase tracking-wide">
+                        NAVE NO ENCONTRADA — SELECCIONE MANUAL
+                      </h3>
+                      <p className="text-xs text-amber-900 mt-1">
+                        No se pudo identificar una nave registrada en el sistema que coincida con{" "}
+                        <strong>&quot;{analisis.reconciliacion.naveDetectada}&quot;</strong>. Seleccione una nave existente para reconciliar sus puestos o cree una nueva nave para el mercado.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                    {/* Opción 1: Seleccionar Nave Existente */}
+                    <div className="rounded-xl border border-amber-200 bg-base-white p-4 shadow-2xs flex flex-col justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-base-eerieBlack uppercase tracking-wider flex items-center gap-1.5">
+                          <Building2 size={15} className="text-institucional-green" />
+                          Opción 1: Reconciliar en Nave Existente
+                        </h4>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Vincula y actualiza los comerciantes en los puestos fijos de una nave registrada:
+                        </p>
+                        <select
+                          value={naveManualSeleccionada}
+                          onChange={(e) => setNaveManualSeleccionada(e.target.value)}
+                          className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xs focus:border-institucional-green focus:outline-hidden"
+                        >
+                          {analisis.reconciliacion.navesDisponibles?.map((n) => (
+                            <option key={n.id} value={n.id}>
+                              {n.nombre} ({n.cantidadPuestos} puestos)
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          if (!naveManualSeleccionada) return;
+                          setParseando(true);
+                          try {
+                            const opc = { naveIdManual: naveManualSeleccionada };
+                            setOpcionesImportacion(opc);
+                            const sim = await importadorService.simularImportacion(registros, opc);
+                            setAnalisis(sim);
+                            toast.success(`Nave seleccionada: ${sim.reconciliacion?.naveDetectada}`);
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Error al reconciliar con la nave seleccionada.");
+                          } finally {
+                            setParseando(false);
+                          }
+                        }}
+                        disabled={parseando || !naveManualSeleccionada}
+                        className="w-full bg-institucional-green text-white hover:bg-acento-verdeOliva1 text-xs font-semibold"
+                      >
+                        Seleccionar esta Nave
+                      </Button>
+                    </div>
+
+                    {/* Opción 2: Crear Nueva Nave */}
+                    <div className="rounded-xl border border-amber-200 bg-base-white p-4 shadow-2xs flex flex-col justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-bold text-base-eerieBlack uppercase tracking-wider flex items-center gap-1.5">
+                          <Plus size={15} className="text-amber-600" />
+                          Opción 2: Crear Nueva Nave
+                        </h4>
+                        <p className="text-xs text-gray-600 mt-1">
+                          Crea la nave en la base de datos junto con todos los puestos del archivo ({registros.length} puestos):
+                        </p>
+                        <input
+                          type="text"
+                          placeholder="Nombre de la nueva nave (ej. NAVE B, NAVE TEXTILES)"
+                          value={nombreNuevaNaveInput}
+                          onChange={(e) => setNombreNuevaNaveInput(e.target.value)}
+                          className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xs focus:border-institucional-green focus:outline-hidden uppercase"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={async () => {
+                          const nombreLimpio = nombreNuevaNaveInput.trim();
+                          if (!nombreLimpio) {
+                            toast.error("Ingrese el nombre para la nueva nave.");
+                            return;
+                          }
+                          setParseando(true);
+                          try {
+                            const opc = { crearNuevaNave: true, nuevoNombreNave: nombreLimpio };
+                            setOpcionesImportacion(opc);
+                            const sim = await importadorService.simularImportacion(registros, opc);
+                            setAnalisis(sim);
+                            toast.success(`Vista previa para crear la nueva nave: ${nombreLimpio}`);
+                          } catch (err) {
+                            console.error(err);
+                            toast.error("Error al preparar la creación de la nueva nave.");
+                          } finally {
+                            setParseando(false);
+                          }
+                        }}
+                        disabled={parseando || !nombreNuevaNaveInput.trim()}
+                        className="w-full bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold"
+                      >
+                        Crear Nueva Nave
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 sm:p-5 border-b border-institucional-whiteSmokeBlack/15 bg-slate-50/70 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Building2 size={18} className="text-institucional-green" />
+                      <span className="font-bold text-sm text-base-eerieBlack">
+                        Reconciliación: {analisis.reconciliacion.naveDetectada}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                        Nave Existente (Actualización Mensual)
-                      </span>
+                      {analisis.reconciliacion.esNaveNueva ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-300">
+                          Se creará como Nueva Nave
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                          Nave Existente (Actualización Mensual)
+                        </span>
+                      )}
+                    </div>
+                    {analisis.reconciliacion.cambiosDetectados.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setMostrarCambios(!mostrarCambios)}
+                        className="text-xs text-institucional-green hover:underline font-medium inline-flex items-center gap-1"
+                      >
+                        <span>{mostrarCambios ? "Ocultar detalle de cambios" : "Ver detalle de cambios"}</span>
+                        {mostrarCambios ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                      </button>
                     )}
                   </div>
-                  {analisis.reconciliacion.cambiosDetectados.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => setMostrarCambios(!mostrarCambios)}
-                      className="text-xs text-institucional-green hover:underline font-medium inline-flex items-center gap-1"
-                    >
-                      <span>{mostrarCambios ? "Ocultar detalle de cambios" : "Ver detalle de cambios"}</span>
-                      {mostrarCambios ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                    </button>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="rounded-lg bg-base-white p-3 border border-institucional-whiteSmokeBlack/15 shadow-sm">
+                      <p className="text-xs font-medium text-gray-500">Capacidad Nave</p>
+                      <p className="text-lg font-bold text-base-eerieBlack">{analisis.reconciliacion.capacidadNave} puestos</p>
+                    </div>
+                    <div className="rounded-lg bg-base-white p-3 border border-emerald-200/60 shadow-sm">
+                      <p className="text-xs font-medium text-emerald-700">Ocupados en Archivo</p>
+                      <p className="text-lg font-bold text-emerald-700">{analisis.reconciliacion.totalOcupados}</p>
+                    </div>
+                    <div className="rounded-lg bg-base-white p-3 border border-blue-200/60 shadow-sm">
+                      <p className="text-xs font-medium text-acento-azul1">Vacantes Resultantes</p>
+                      <p className="text-lg font-bold text-acento-azul1">{analisis.reconciliacion.totalVacantes}</p>
+                    </div>
+                    <div className="rounded-lg bg-base-white p-3 border border-amber-200/60 shadow-sm">
+                      <p className="text-xs font-medium text-amber-700">Cambios Detectados</p>
+                      <p className="text-lg font-bold text-amber-700">{analisis.reconciliacion.cambiosDetectados.length}</p>
+                    </div>
+                  </div>
+
+                  {mostrarCambios && analisis.reconciliacion.cambiosDetectados.length > 0 && (
+                    <div className="mt-2 rounded-lg bg-base-white border border-institucional-whiteSmokeBlack/20 p-3 max-h-48 overflow-y-auto space-y-2">
+                      <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                        <RefreshCw size={13} className="text-institucional-green" />
+                        <span>Modificaciones mensuales detectadas ({analisis.reconciliacion.cambiosDetectados.length}):</span>
+                      </div>
+                      {analisis.reconciliacion.cambiosDetectados.map((c, idx) => (
+                        <div
+                          key={idx}
+                          className="text-xs flex items-start gap-2 p-2 rounded bg-slate-50 border border-slate-200/70"
+                        >
+                          <span
+                            className={`font-semibold px-1.5 py-0.5 rounded text-[10px] shrink-0 ${
+                              c.tipo === "REEMPLAZO_OCUPANTE"
+                                ? "bg-purple-100 text-purple-800 border border-purple-200"
+                                : c.tipo === "CAMBIO_PUESTO"
+                                ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                : c.tipo === "VACANTE"
+                                ? "bg-gray-100 text-gray-700 border border-gray-300"
+                                : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                            }`}
+                          >
+                            {c.tipo}
+                          </span>
+                          <div className="flex-1 text-gray-700">
+                            <span className="font-semibold text-gray-900">Puesto {c.puesto}:</span> {c.detalle}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div className="rounded-lg bg-base-white p-3 border border-institucional-whiteSmokeBlack/15 shadow-sm">
-                    <p className="text-xs font-medium text-gray-500">Capacidad Nave</p>
-                    <p className="text-lg font-bold text-base-eerieBlack">{analisis.reconciliacion.capacidadNave} puestos</p>
-                  </div>
-                  <div className="rounded-lg bg-base-white p-3 border border-emerald-200/60 shadow-sm">
-                    <p className="text-xs font-medium text-emerald-700">Ocupados en Archivo</p>
-                    <p className="text-lg font-bold text-emerald-700">{analisis.reconciliacion.totalOcupados}</p>
-                  </div>
-                  <div className="rounded-lg bg-base-white p-3 border border-blue-200/60 shadow-sm">
-                    <p className="text-xs font-medium text-acento-azul1">Vacantes Resultantes</p>
-                    <p className="text-lg font-bold text-acento-azul1">{analisis.reconciliacion.totalVacantes}</p>
-                  </div>
-                  <div className="rounded-lg bg-base-white p-3 border border-amber-200/60 shadow-sm">
-                    <p className="text-xs font-medium text-amber-700">Cambios Detectados</p>
-                    <p className="text-lg font-bold text-amber-700">{analisis.reconciliacion.cambiosDetectados.length}</p>
-                  </div>
-                </div>
-
-                {mostrarCambios && analisis.reconciliacion.cambiosDetectados.length > 0 && (
-                  <div className="mt-2 rounded-lg bg-base-white border border-institucional-whiteSmokeBlack/20 p-3 max-h-48 overflow-y-auto space-y-2">
-                    <div className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                      <RefreshCw size={13} className="text-institucional-green" />
-                      <span>Modificaciones mensuales detectadas ({analisis.reconciliacion.cambiosDetectados.length}):</span>
-                    </div>
-                    {analisis.reconciliacion.cambiosDetectados.map((c, idx) => (
-                      <div
-                        key={idx}
-                        className="text-xs flex items-start gap-2 p-2 rounded bg-slate-50 border border-slate-200/70"
-                      >
-                        <span
-                          className={`font-semibold px-1.5 py-0.5 rounded text-[10px] shrink-0 ${
-                            c.tipo === "REEMPLAZO_OCUPANTE"
-                              ? "bg-purple-100 text-purple-800 border border-purple-200"
-                              : c.tipo === "CAMBIO_PUESTO"
-                              ? "bg-blue-100 text-blue-800 border border-blue-200"
-                              : c.tipo === "VACANTE"
-                              ? "bg-gray-100 text-gray-700 border border-gray-300"
-                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
-                          }`}
-                        >
-                          {c.tipo}
-                        </span>
-                        <div className="flex-1 text-gray-700">
-                          <span className="font-semibold text-gray-900">Puesto {c.puesto}:</span> {c.detalle}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              )
             )}
 
             {/* Tabla con scroll interno */}
@@ -462,7 +594,7 @@ export default function IngresoCatastroPage() {
                 </Button>
                 <Button
                   onClick={() => setConfirmModalOpen(true)}
-                  disabled={procesando}
+                  disabled={procesando || Boolean(analisis?.reconciliacion?.naveNoEncontrada)}
                   className="w-full sm:w-auto bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold shadow-sm"
                 >
                   {procesando ? (

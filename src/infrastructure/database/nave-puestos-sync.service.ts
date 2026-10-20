@@ -1,6 +1,14 @@
 // ── Servicio de Auto-Reconciliación y Sincronización de Puestos de Nave en BD ──
 
 import { prisma } from "./prisma";
+export {
+  descomponerCodigoPuesto,
+  sonCodigosPuestosEquivalentes,
+  normalizarNombreCompleto,
+  sonMismoContribuyente,
+  inferirNaveDesdePuesto,
+} from "./catastro-reconciliacion.service";
+import { sonCodigosPuestosEquivalentes } from "./catastro-reconciliacion.service";
 
 /**
  * Reconcilia y garantiza la integridad estricta de la tabla `puestos` de una nave:
@@ -58,16 +66,20 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
 
   // ── Paso A: Garantizar que todo comerciante activo de la nave tenga su registro en puestos ──
   for (const com of comerciantes) {
+    if (!com.puestoId || com.puestoId === "S/N" || com.puestoId.trim().length === 0) {
+      continue;
+    }
     const tienePuesto = puestos.some((p) => p.comercianteId === com.idInterno);
     if (!tienePuesto) {
-      const codigoComerciante = (com.puestoId || "").trim().toUpperCase();
+      const codigoComerciante = com.puestoId.trim().toUpperCase();
 
       // Buscar si hay un puesto en la nave con el mismo código que esté "Vacante" y sin comerciante
       const puestoVacante = puestos.find(
         (p) =>
           p.estado === "Vacante" &&
           !p.comercianteId &&
-          p.codigo.trim().toUpperCase() === codigoComerciante
+          (p.codigo.trim().toUpperCase() === codigoComerciante ||
+            sonCodigosPuestosEquivalentes(p.codigo, codigoComerciante))
       );
 
       if (puestoVacante) {
