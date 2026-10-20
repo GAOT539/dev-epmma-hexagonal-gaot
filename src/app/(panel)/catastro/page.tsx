@@ -91,13 +91,17 @@ function ComercianteFormDialog({
 
     setGuardando(true);
     try {
+      const naveSeleccionadaObj = naves.find((n) => n.id === naveId);
+      const nombreNave = naveSeleccionadaObj?.nombre || naveId;
+
       if (isEdit && comerciante) {
         await comercianteService.actualizarComerciante(comerciante.idInterno, {
           ciu: ciu.trim(),
           contribuyente: contribuyente.trim(),
           actividad: actividad.trim(),
           ...(cedula.trim() && { cedula: cedula.trim() }),
-          ...(puesto.trim() && { puestoId: puesto.trim(), naveId }),
+          ...(puesto.trim() && { puestoId: puesto.trim() }),
+          ...(nombreNave && { nave: nombreNave }),
         });
         toast.success("Comerciante actualizado", {
           description: `${contribuyente} editado correctamente.`,
@@ -113,6 +117,7 @@ function ComercianteFormDialog({
           contribuyente: contribuyente.trim(),
           actividad: actividad.trim(),
           puestoId: puesto.trim(),
+          nave: nombreNave,
           cedula: cedula.trim() || "1800000000",
           estadoRegistro: "Habilitado",
         });
@@ -123,8 +128,9 @@ function ComercianteFormDialog({
 
       onSave();
       onClose();
-    } catch {
-      setError("Ocurrió un error al guardar los datos.");
+    } catch (err: unknown) {
+      const mensaje = err instanceof Error ? err.message : "Ocurrió un error al guardar los datos.";
+      setError(mensaje);
     } finally {
       setGuardando(false);
     }
@@ -409,14 +415,11 @@ export default function TicPage() {
 
   async function confirmDelete() {
     if (!deleteTarget) return;
-    
-    // Soft Delete: en lugar de eliminar, deshabilitamos
-    await comercianteService.actualizarComerciante(deleteTarget.idInterno, {
-      deshabilitadoPor: user ? `${user.nombres} ${user.apellidos}` : "Sistema"
-    });
-    
+
+    await comercianteService.eliminarComerciante(deleteTarget.idInterno);
+
     toast.success("Comerciante deshabilitado", {
-      description: `${deleteTarget.contribuyente} ha sido deshabilitado.`,
+      description: `${deleteTarget.contribuyente} ha sido deshabilitado y su puesto liberado.`,
     });
     setDeleteTarget(null);
     setRefreshKey((k) => k + 1);

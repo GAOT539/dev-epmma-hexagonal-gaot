@@ -366,6 +366,8 @@ export function reconciliarCatastroNaveExistente(
   });
 
   // ── PASO 1: Comparar Contribuyentes Existentes en la Sección Participante ─────
+
+  // Subpaso 1A: Mismo Contribuyente que permanece en su MISMO Puesto
   for (let idx = 0; idx < registros.length; idx++) {
     const reg = registros[idx];
     const candidatos = comerciantesNave.filter(
@@ -374,92 +376,116 @@ export function reconciliarCatastroNaveExistente(
         sonMismoContribuyente(c, { contribuyente: reg.nombre, cedula: reg.cedula })
     );
 
-    if (candidatos.length > 0) {
-      let comExistente = candidatos.find((c) =>
-        sonCodigosPuestosEquivalentes(c.puestoId || "", reg.puesto)
-      );
-      if (!comExistente) {
-        comExistente = candidatos[0];
+    if (candidatos.length === 0) continue;
+
+    // Buscar si algún candidato ya ocupa o tiene asignado este mismo puesto
+    let comMismoPuesto: ComercianteNaveBD | null = null;
+    let puestoActualMatch: PuestoNaveBD | null = null;
+
+    for (const cand of candidatos) {
+      const pActual = puestosNaveParticipantes.find((p) => p.comercianteId === cand.idInterno);
+      if (
+        (pActual && sonCodigosPuestosEquivalentes(pActual.codigo, reg.puesto)) ||
+        sonCodigosPuestosEquivalentes(cand.puestoId || "", reg.puesto)
+      ) {
+        comMismoPuesto = cand;
+        puestoActualMatch = pActual || puestosNaveParticipantes.find((p) => sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)) || null;
+        break;
       }
-      // Puesto actual del comerciante en la nave
-      const puestoActual = puestosNaveParticipantes.find((p) => p.comercianteId === comExistente.idInterno);
-      // Puesto al que viene asignado en el nuevo archivo
-      const puestoNuevoArchivo = puestosNaveParticipantes.find((p) =>
-        sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
-      );
+    }
 
-      const puestoDestino = puestoNuevoArchivo || puestoActual;
+    if (comMismoPuesto && puestoActualMatch) {
+      const puestoDestino =
+        puestosNaveParticipantes.find((p) =>
+          sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
+        ) || puestoActualMatch;
 
-      if (puestoDestino) {
-        const esMismoPuesto =
-          puestoActual &&
-          (puestoActual.id === puestoDestino.id ||
-            sonCodigosPuestosEquivalentes(puestoActual.codigo, reg.puesto));
+      const cambioAct =
+        comMismoPuesto.actividad.toUpperCase() !== (reg.actividad || "General").toUpperCase();
+      const cambioCiu = comMismoPuesto.ciu !== reg.ciu && reg.ciu !== "S/N";
 
-        if (esMismoPuesto) {
-          // Caso 1.1: Mismo puesto
-          const cambioAct =
-            comExistente.actividad.toUpperCase() !== (reg.actividad || "General").toUpperCase();
-          const cambioCiu = comExistente.ciu !== reg.ciu && reg.ciu !== "S/N";
-
-          if (cambioAct || cambioCiu) {
-            cambiosDetectados.push({
-              tipo: "ACTUALIZACION",
-              puesto: puestoDestino.codigo,
-              anterior: `${comExistente.contribuyente} (${comExistente.actividad})`,
-              nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
-              detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${puestoDestino.codigo}`,
-            });
-          }
-
-          puestosAsignadosIds.add(puestoDestino.id);
-          comerciantesProcesadosIds.add(comExistente.idInterno);
-          registrosProcesadosIndices.add(idx);
-
-          asignacionesOcupar.push({
-            puestoId: puestoDestino.id,
-            puestoCodigo: puestoDestino.codigo,
-            comercianteId: comExistente.idInterno,
-            esNuevoComerciante: false,
-            datosComerciante: {
-              ciu: reg.ciu || comExistente.ciu || "S/N",
-              cedula: reg.cedula || comExistente.cedula,
-              contribuyente: reg.nombre || comExistente.contribuyente,
-              actividad: reg.actividad || comExistente.actividad || "General",
-              puestoId: puestoDestino.codigo,
-              nave: nave.nombre,
-            },
-          });
-        } else if (puestoActual && puestoDestino && puestoActual.id !== puestoDestino.id) {
-          // Caso 1.2: Cambio de puesto
-          cambiosDetectados.push({
-            tipo: "CAMBIO_PUESTO",
-            puesto: puestoDestino.codigo,
-            anterior: puestoActual.codigo,
-            nuevo: puestoDestino.codigo,
-            detalle: `${comExistente.contribuyente} pasó del puesto ${puestoActual.codigo} al puesto ${puestoDestino.codigo}`,
-          });
-
-          puestosAsignadosIds.add(puestoDestino.id);
-          comerciantesProcesadosIds.add(comExistente.idInterno);
-          registrosProcesadosIndices.add(idx);
-
-          asignacionesOcupar.push({
-            puestoId: puestoDestino.id,
-            puestoCodigo: puestoDestino.codigo,
-            comercianteId: comExistente.idInterno,
-            esNuevoComerciante: false,
-            datosComerciante: {
-              ciu: reg.ciu || comExistente.ciu || "S/N",
-              cedula: reg.cedula || comExistente.cedula,
-              contribuyente: reg.nombre || comExistente.contribuyente,
-              actividad: reg.actividad || comExistente.actividad || "General",
-              puestoId: puestoDestino.codigo,
-              nave: nave.nombre,
-            },
-          });
-        }
+      if (cambioAct || cambioCiu) {
+        cambiosDetectados.push({
+          tipo: "ACTUALIZACION",
+          puesto: puestoDestino.codigo,
+          anterior: `${comMismoPuesto.contribuyente} (${comMismoPuesto.actividad})`,
+          nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
+          detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${puestoDestino.codigo}`,
+        });
       }
+
+      puestosAsignadosIds.add(puestoDestino.id);
+      comerciantesProcesadosIds.add(comMismoPuesto.idInterno);
+      registrosProcesadosIndices.add(idx);
+
+      asignacionesOcupar.push({
+        puestoId: puestoDestino.id,
+        puestoCodigo: puestoDestino.codigo,
+        comercianteId: comMismoPuesto.idInterno,
+        esNuevoComerciante: false,
+        datosComerciante: {
+          ciu: reg.ciu || comMismoPuesto.ciu || "S/N",
+          cedula: reg.cedula || comMismoPuesto.cedula,
+          contribuyente: reg.nombre || comMismoPuesto.contribuyente,
+          actividad: reg.actividad || comMismoPuesto.actividad || "General",
+          puestoId: puestoDestino.codigo,
+          nave: nave.nombre,
+        },
+      });
+    }
+  }
+
+  // Subpaso 1B: Mismo Contribuyente que realmente CAMBIÓ de Puesto
+  for (let idx = 0; idx < registros.length; idx++) {
+    if (registrosProcesadosIndices.has(idx)) continue;
+    const reg = registros[idx];
+
+    const candidatos = comerciantesNave.filter(
+      (c) =>
+        !comerciantesProcesadosIds.has(c.idInterno) &&
+        sonMismoContribuyente(c, { contribuyente: reg.nombre, cedula: reg.cedula })
+    );
+
+    if (candidatos.length === 0) continue;
+
+    const comCambio = candidatos[0];
+    const puestoActual = puestosNaveParticipantes.find((p) => p.comercianteId === comCambio.idInterno);
+    const puestoNuevoArchivo = puestosNaveParticipantes.find((p) =>
+      sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
+    );
+
+    if (
+      puestoActual &&
+      puestoNuevoArchivo &&
+      puestoActual.id !== puestoNuevoArchivo.id &&
+      !puestosAsignadosIds.has(puestoNuevoArchivo.id)
+    ) {
+      cambiosDetectados.push({
+        tipo: "CAMBIO_PUESTO",
+        puesto: puestoNuevoArchivo.codigo,
+        anterior: puestoActual.codigo,
+        nuevo: puestoNuevoArchivo.codigo,
+        detalle: `${comCambio.contribuyente} pasó del puesto ${puestoActual.codigo} al puesto ${puestoNuevoArchivo.codigo}`,
+      });
+
+      puestosAsignadosIds.add(puestoNuevoArchivo.id);
+      comerciantesProcesadosIds.add(comCambio.idInterno);
+      registrosProcesadosIndices.add(idx);
+
+      asignacionesOcupar.push({
+        puestoId: puestoNuevoArchivo.id,
+        puestoCodigo: puestoNuevoArchivo.codigo,
+        comercianteId: comCambio.idInterno,
+        esNuevoComerciante: false,
+        datosComerciante: {
+          ciu: reg.ciu || comCambio.ciu || "S/N",
+          cedula: reg.cedula || comCambio.cedula,
+          contribuyente: reg.nombre || comCambio.contribuyente,
+          actividad: reg.actividad || comCambio.actividad || "General",
+          puestoId: puestoNuevoArchivo.codigo,
+          nave: nave.nombre,
+        },
+      });
     }
   }
 

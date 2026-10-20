@@ -11,7 +11,7 @@ export interface Usuario {
   rol: Rol;
   mustChangePassword: boolean;
   debeCambiarPassword?: boolean;
-  /** Hash simulado – en mock simplemente comparamos strings */
+  /** Hash criptográfico bcrypt de la contraseña del usuario */
   passwordHash: string;
   /** Naves asignadas al supervisor (solo aplica para rol SUPERVISOR) */
   navesAsignadas?: string[];

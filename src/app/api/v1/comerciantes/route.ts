@@ -128,6 +128,46 @@ export async function POST(request: Request) {
 
     const cleanCedula = String(cedula).trim();
 
+    // 1. Resolver la entidad Nave por ID o Nombre
+    let naveObj = null;
+    if (nave) {
+      const naveLimpia = String(nave).trim();
+      naveObj = await prisma.nave.findFirst({
+        where: {
+          OR: [{ id: naveLimpia }, { nombre: naveLimpia }],
+        },
+      });
+    }
+
+    const nombreNaveFinal = naveObj ? naveObj.nombre : (nave ? String(nave).trim() : null);
+
+    // 2. Si viene puestoId, verificar que no esté ya ocupado en esta nave por otro comerciante activo
+    if (puestoId) {
+      const codigoBuscado = String(puestoId).trim();
+
+      const puestoExistente = await prisma.puesto.findFirst({
+        where: {
+          ...(naveObj ? { naveId: naveObj.id } : {}),
+          OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
+        },
+        include: { comerciante: true },
+      });
+
+      if (
+        puestoExistente &&
+        puestoExistente.estado === "Ocupado" &&
+        puestoExistente.comerciante &&
+        puestoExistente.comerciante.estadoRegistro === "Habilitado"
+      ) {
+        return NextResponse.json(
+          {
+            error: `El puesto ${puestoExistente.codigo} ya se encuentra ocupado en esta nave por ${puestoExistente.comerciante.contribuyente}.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const resultado = await prisma.$transaction(async (tx) => {
       // 1. Crear el comerciante
       const nuevo = await tx.comerciante.create({
@@ -137,7 +177,7 @@ export async function POST(request: Request) {
           contribuyente: String(contribuyente).trim(),
           actividad: actividad ? String(actividad).trim() : "General",
           puestoId: puestoId ? String(puestoId).trim() : null,
-          nave: nave ? String(nave).trim() : null,
+          nave: nombreNaveFinal,
           estadoRegistro: (estadoRegistro as EstadoComerciante) || "Habilitado",
           creadoPor: creadoPor ? String(creadoPor).trim() : null,
         },
@@ -147,31 +187,12 @@ export async function POST(request: Request) {
       if (puestoId) {
         const codigoBuscado = String(puestoId).trim();
 
-        let naveObj = null;
-        if (nave) {
-          const naveLimpia = String(nave).trim();
-          naveObj = await tx.nave.findFirst({
-            where: {
-              OR: [{ id: naveLimpia }, { nombre: naveLimpia }],
-            },
-          });
-        }
-
-        let puestoObj = null;
-        if (naveObj) {
-          puestoObj = await tx.puesto.findFirst({
-            where: {
-              naveId: naveObj.id,
-              OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
-            },
-          });
-        } else {
-          puestoObj = await tx.puesto.findFirst({
-            where: {
-              OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
-            },
-          });
-        }
+        const puestoObj = await tx.puesto.findFirst({
+          where: {
+            ...(naveObj ? { naveId: naveObj.id } : {}),
+            OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
+          },
+        });
 
         if (puestoObj) {
           // Ocupar puesto existente
@@ -192,6 +213,21 @@ export async function POST(request: Request) {
               comercianteId: nuevo.idInterno,
             },
           });
+
+          // Sincronizar cantidadPuestos y limitePuestos de la nave si el nuevo puesto excede el límite
+          const totalPuestosNave = await tx.puesto.count({
+            where: { naveId: naveObj.id },
+          });
+
+          if (totalPuestosNave > naveObj.cantidadPuestos) {
+            await tx.nave.update({
+              where: { id: naveObj.id },
+              data: {
+                cantidadPuestos: totalPuestosNave,
+                limitePuestos: Math.max(naveObj.limitePuestos, totalPuestosNave),
+              },
+            });
+          }
         }
       }
 
@@ -205,6 +241,7 @@ export async function POST(request: Request) {
     return NextResponse.json(resultado, { status: 201 });
   } catch (error) {
     console.error("Error en POST /api/v1/comerciantes:", error);
-    return NextResponse.json({ error: "Error interno al crear comerciante." }, { status: 500 });
+    const mensaje = error instanceof Error ? error.message : "Error interno al crear comerciante.";
+    return NextResponse.json({ error: mensaje }, { status: 500 });
   }
 }

@@ -41,10 +41,66 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const puestoAnterior = actual.puestoId;
-    const puestoNuevo = body.puestoId !== undefined ? body.puestoId : actual.puestoId;
-    const naveNueva = body.nave !== undefined ? body.nave : actual.nave;
+    const rawNave = body.nave !== undefined ? body.nave : (body.naveId !== undefined ? body.naveId : actual.nave);
+    let naveObj = null;
+    if (rawNave) {
+      const naveTermino = String(rawNave).trim();
+      naveObj = await prisma.nave.findFirst({
+        where: {
+          OR: [{ id: naveTermino }, { nombre: naveTermino }],
+        },
+      });
+    }
+    const nombreNaveFinal = naveObj ? naveObj.nombre : (rawNave ? String(rawNave).trim() : actual.nave);
+
+    const esDeshabilitacion =
+      (body.deshabilitadoPor !== undefined && body.deshabilitadoPor !== null && String(body.deshabilitadoPor).trim().length > 0) ||
+      body.estadoRegistro === "Deshabilitado";
+
+    const esHabilitacion =
+      body.deshabilitadoPor === null ||
+      body.deshabilitadoPor === "" ||
+      body.estadoRegistro === "Habilitado";
+
+    const nuevoEstado: EstadoComerciante = esDeshabilitacion
+      ? "Deshabilitado"
+      : esHabilitacion
+      ? "Habilitado"
+      : (body.estadoRegistro as EstadoComerciante) || actual.estadoRegistro;
+
+    const deshabilitadoPorFinal = esDeshabilitacion
+      ? (body.deshabilitadoPor ? String(body.deshabilitadoPor).trim() : actual.deshabilitadoPor || "Sistema")
+      : (esHabilitacion ? null : actual.deshabilitadoPor);
+
+    const puestoNuevo = esDeshabilitacion
+      ? null
+      : (body.puestoId !== undefined ? body.puestoId : actual.puestoId);
 
     const actualizado = await prisma.$transaction(async (tx) => {
+      // Si la petición solicita deshabilitar al comerciante
+      if (esDeshabilitacion) {
+        const com = await tx.comerciante.update({
+          where: { idInterno: id },
+          data: {
+            estadoRegistro: "Deshabilitado",
+            deshabilitadoPor: deshabilitadoPorFinal,
+            puestoId: null,
+            modificadoPor: body.modificadoPor ? String(body.modificadoPor).trim() : actual.modificadoPor,
+          },
+        });
+
+        // Liberar su puesto en la nave pasando a estado Vacante
+        await tx.puesto.updateMany({
+          where: { comercianteId: id },
+          data: {
+            estado: "Vacante",
+            comercianteId: null,
+          },
+        });
+
+        return com;
+      }
+
       // 1. Actualizar datos del comerciante
       const com = await tx.comerciante.update({
         where: { idInterno: id },
@@ -54,8 +110,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
           contribuyente: body.contribuyente !== undefined ? String(body.contribuyente).trim() : actual.contribuyente,
           actividad: body.actividad !== undefined ? String(body.actividad).trim() : actual.actividad,
           puestoId: puestoNuevo,
-          nave: naveNueva,
-          estadoRegistro: body.estadoRegistro ? (body.estadoRegistro as EstadoComerciante) : actual.estadoRegistro,
+          nave: nombreNaveFinal,
+          estadoRegistro: nuevoEstado,
+          deshabilitadoPor: deshabilitadoPorFinal,
           modificadoPor: body.modificadoPor ? String(body.modificadoPor).trim() : actual.modificadoPor,
         },
       });
@@ -63,28 +120,11 @@ export async function PUT(request: Request, { params }: RouteParams) {
       // 2. Sincronización bidireccional de puesto entre /catastro y /naves
       const puestoNuevoNormalizado = puestoNuevo ? String(puestoNuevo).trim().toUpperCase() : null;
 
-      if (puestoNuevoNormalizado !== puestoAnterior || naveNueva !== actual.nave) {
+      if (puestoNuevoNormalizado !== puestoAnterior || nombreNaveFinal !== actual.nave) {
         // Buscar el puesto que actualmente ocupa este comerciante
         const puestoActual = await tx.puesto.findFirst({
           where: { comercianteId: id },
         });
-
-        // Determinar nave destino
-        let naveObj = null;
-        if (naveNueva) {
-          naveObj = await tx.nave.findFirst({
-            where: {
-              OR: [{ id: naveNueva }, { nombre: naveNueva }],
-            },
-          });
-        }
-        if (!naveObj && actual.nave) {
-          naveObj = await tx.nave.findFirst({
-            where: {
-              OR: [{ id: actual.nave }, { nombre: actual.nave }],
-            },
-          });
-        }
 
         if (puestoActual && naveObj && puestoActual.naveId === naveObj.id && puestoNuevoNormalizado) {
           // Permanece en la misma nave
