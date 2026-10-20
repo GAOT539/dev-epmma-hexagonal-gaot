@@ -6,6 +6,7 @@ import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
 import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
+  esCodigoTipoBodegaOLocal,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function POST(request: Request) {
@@ -15,6 +16,7 @@ export async function POST(request: Request) {
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
+    const modoUnificacion: "UNIFICAR" | "SEPARAR" = body.modoUnificacion || "UNIFICAR";
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -43,6 +45,8 @@ export async function POST(request: Request) {
     if (exitosos === 0) {
       return NextResponse.json({ exitosos: 0, errores });
     }
+
+    const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
 
     // 1. Detección o Selección de Nave
     let naveExistente = null;
@@ -81,7 +85,12 @@ export async function POST(request: Request) {
         }
       }
 
-      if (naveDetectada) {
+      // Si el usuario eligió separar como nave independiente (ej. BODEGA NAVE H vs NAVE H)
+      if (modoUnificacion === "SEPARAR" && naveDetectada && contieneBodegas && !naveDetectada.startsWith("BODEGA")) {
+        naveDetectada = `BODEGA ${naveDetectada}`;
+      }
+
+      if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
         naveExistente = await prisma.nave.findFirst({
           where: {
             OR: [
@@ -113,13 +122,15 @@ export async function POST(request: Request) {
           capacidadNave: 0,
           totalOcupados: 0,
           totalVacantes: 0,
+          esArchivoBodegas: contieneBodegas,
+          modoUnificacion,
           cambiosDetectados: [],
         },
       });
     }
 
     // 3. Si se solicita crear una nueva nave
-    if (crearNuevaNave) {
+    if (crearNuevaNave || (!naveExistente && modoUnificacion === "SEPARAR")) {
       const nombreFinal = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").trim().toUpperCase();
       const capacidadNave = registros.length;
       return NextResponse.json({
@@ -132,17 +143,19 @@ export async function POST(request: Request) {
           capacidadNave,
           totalOcupados: capacidadNave,
           totalVacantes: 0,
+          esArchivoBodegas: contieneBodegas,
+          modoUnificacion,
           cambiosDetectados: registros.map((r) => ({
             tipo: "NUEVO" as const,
             puesto: r.puesto || "-",
             nuevo: r.nombre,
-            detalle: `Nuevo comerciante ${r.nombre} asignado al puesto ${r.puesto || "-"}`,
+            detalle: `Nuevo comerciante ${r.nombre} asignado a ${r.puesto || "-"} en ${nombreFinal}`,
           })),
         },
       });
     }
 
-    // 4. Reconciliación estricta para Nave Existente
+    // 4. Reconciliación con Soporte de Subconjuntos para Nave Existente
     const puestosNave = naveExistente!.puestos;
     const comerciantesNave = await prisma.comerciante.findMany({
       where: {
@@ -165,7 +178,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       exitosos,
       errores,
-      reconciliacion: resultadoReconciliacion.reconciliacion,
+      reconciliacion: {
+        ...resultadoReconciliacion.reconciliacion,
+        modoUnificacion,
+      },
     });
   } catch (error) {
     console.error("Error en POST /api/v1/catastro/simular:", error);

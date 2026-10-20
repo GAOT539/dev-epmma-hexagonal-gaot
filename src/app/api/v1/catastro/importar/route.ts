@@ -8,6 +8,7 @@ import { sincronizarPuestosDeNaveEnBD } from "@/infrastructure/database/nave-pue
 import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
+  esCodigoTipoBodegaOLocal,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 export async function POST(request: Request) {
@@ -17,6 +18,7 @@ export async function POST(request: Request) {
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
+    const modoUnificacion: "UNIFICAR" | "SEPARAR" = body.modoUnificacion || "UNIFICAR";
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
 
     // 1. Detección o Selección de Nave
     let naveExistente = null;
@@ -61,7 +65,12 @@ export async function POST(request: Request) {
         }
       }
 
-      if (naveDetectada) {
+      // Si el usuario eligió separar como nave independiente (ej. BODEGA NAVE H vs NAVE H)
+      if (modoUnificacion === "SEPARAR" && naveDetectada && contieneBodegas && !naveDetectada.startsWith("BODEGA")) {
+        naveDetectada = `BODEGA ${naveDetectada}`;
+      }
+
+      if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
         naveExistente = await prisma.nave.findFirst({
           where: {
             OR: [
@@ -75,7 +84,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave
-    if (!naveExistente && !crearNuevaNave) {
+    if (!naveExistente && !crearNuevaNave && modoUnificacion !== "SEPARAR") {
       return NextResponse.json(
         {
           exitosos: 0,
@@ -92,7 +101,7 @@ export async function POST(request: Request) {
     }
 
     // ── CASO A: Crear Nueva Nave ──────────────────────────────────────────────
-    if (crearNuevaNave && !naveExistente) {
+    if ((crearNuevaNave || modoUnificacion === "SEPARAR") && !naveExistente) {
       const nombreNueva = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").trim().toUpperCase();
       const idSlug =
         nombreNueva
@@ -102,8 +111,8 @@ export async function POST(request: Request) {
           .replace(/[^a-z0-9]+/g, "-")
           .replace(/^-+|-+$/g, "") || `nave-${Date.now()}`;
 
-      const totalRegistros = registros.length;
-      const capacidad = Math.max(totalRegistros, 100);
+      // Capacidad EXACTA a los registros reales (CERO '100' forzado)
+      const capacidad = registros.length;
 
       const resultadoCreacion = await prisma.$transaction(async (tx) => {
         // 1. Crear Nave
@@ -118,23 +127,24 @@ export async function POST(request: Request) {
           },
         });
 
-        // 2. Crear plano espacial inicial 12x12 vacío
+        // 2. Crear plano espacial inicial vacío acorde a la dimensión
         const celdasPlano = [];
-        for (let r = 0; r < 12; r++) {
-          for (let c = 0; c < 12; c++) {
+        const dim = Math.max(8, Math.ceil(Math.sqrt(capacidad) + 2));
+        for (let r = 0; r < dim; r++) {
+          for (let c = 0; c < dim; c++) {
             celdasPlano.push({ fila: r, columna: c, tipo: "VACIO", rowSpan: 1, colSpan: 1 });
           }
         }
         await tx.planoNave.create({
           data: {
             naveId: nuevaNave.id,
-            filas: 12,
-            columnas: 12,
+            filas: dim,
+            columnas: dim,
             planoJson: celdasPlano,
           },
         });
 
-        // 3. Crear puestos y comerciantes
+        // 3. Crear puestos y comerciantes reales
         let exitosos = 0;
         const errores: { fila: number; mensaje: string }[] = [];
 
@@ -200,13 +210,14 @@ export async function POST(request: Request) {
           esNaveNueva: true,
           capacidadNave: capacidad,
           totalOcupados: resultadoCreacion.exitosos,
-          totalVacantes: Math.max(0, capacidad - resultadoCreacion.exitosos),
+          totalVacantes: 0,
           cambiosDetectados: [],
+          modoUnificacion,
         },
       });
     }
 
-    // ── CASO B: Reconciliación en Nave Existente (Puestos Inmutables) ──────────
+    // ── CASO B: Reconciliación con Soporte de Subconjuntos en Nave Existente ───
     const puestosNave = naveExistente!.puestos;
     const comerciantesNave = await prisma.comerciante.findMany({
       where: {
@@ -243,19 +254,18 @@ export async function POST(request: Request) {
         });
       }
 
-      // 2. Procesar asignaciones a puestos (Mantiene Puesto.codigo inmutable)
+      // 2. Procesar asignaciones a puestos (existentes o agregados)
       for (const asig of asignacionesOcupar) {
         let comercianteIdFinal = asig.comercianteId;
 
         if (asig.esNuevoComerciante) {
-          // Crear nuevo comerciante en la base de datos
           const nuevoCom = await tx.comerciante.create({
             data: {
               ciu: asig.datosComerciante.ciu,
               cedula: asig.datosComerciante.cedula,
               contribuyente: asig.datosComerciante.contribuyente,
               actividad: asig.datosComerciante.actividad,
-              puestoId: asig.puestoCodigo, // Siempre el código oficial del puesto de la nave
+              puestoId: asig.puestoCodigo,
               nave: asig.datosComerciante.nave,
               estadoRegistro: "Habilitado",
               creadoPor: "importador-reconciliacion",
@@ -263,14 +273,13 @@ export async function POST(request: Request) {
           });
           comercianteIdFinal = nuevoCom.idInterno;
         } else {
-          // Actualizar datos del comerciante existente
           await tx.comerciante.update({
             where: { idInterno: asig.comercianteId },
             data: {
               ciu: asig.datosComerciante.ciu,
               contribuyente: asig.datosComerciante.contribuyente,
               actividad: asig.datosComerciante.actividad,
-              puestoId: asig.puestoCodigo, // Siempre el código oficial del puesto de la nave
+              puestoId: asig.puestoCodigo,
               nave: asig.datosComerciante.nave,
               estadoRegistro: "Habilitado",
               modificadoPor: "importador-reconciliacion",
@@ -278,15 +287,40 @@ export async function POST(request: Request) {
           });
         }
 
-        // Vincular el puesto sin alterar su código
-        await tx.puesto.update({
-          where: { id: asig.puestoId },
-          data: {
-            estado: "Ocupado",
-            comercianteId: comercianteIdFinal,
-          },
-        });
+        if (asig.esNuevoPuesto) {
+          // Crear el puesto nuevo sin tocar los existentes
+          await tx.puesto.create({
+            data: {
+              id: asig.puestoId,
+              codigo: asig.puestoCodigo,
+              naveId: naveExistente!.id,
+              estado: "Ocupado",
+              comercianteId: comercianteIdFinal,
+            },
+          });
+        } else {
+          // Vincular el puesto existente sin alterar su código
+          await tx.puesto.update({
+            where: { id: asig.puestoId },
+            data: {
+              estado: "Ocupado",
+              comercianteId: comercianteIdFinal,
+            },
+          });
+        }
       }
+
+      // Actualizar la capacidad exacta de la nave al total real de sus puestos
+      const totalPuestosEnNave = await tx.puesto.count({
+        where: { naveId: naveExistente!.id },
+      });
+      await tx.nave.update({
+        where: { id: naveExistente!.id },
+        data: {
+          cantidadPuestos: totalPuestosEnNave,
+          limitePuestos: totalPuestosEnNave,
+        },
+      });
     });
 
     await sincronizarPuestosDeNaveEnBD(naveExistente!.id);
@@ -295,8 +329,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       exitosos: asignacionesOcupar.length,
       errores: [],
-      mensaje: `Reconciliación completada para ${naveExistente!.nombre}: ${asignacionesOcupar.length} puestos actualizados e inmutables.`,
-      reconciliacion,
+      mensaje: `Reconciliación completada para ${naveExistente!.nombre}: ${asignacionesOcupar.length} puestos actualizados e inmutables. Capacidad total: ${reconciliacion.capacidadNave}.`,
+      reconciliacion: {
+        ...reconciliacion,
+        modoUnificacion,
+      },
     });
   } catch (error) {
     console.error("Error en POST /api/v1/catastro/importar:", error);

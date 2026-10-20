@@ -77,12 +77,15 @@ export interface ReconciliacionResumen {
   cambiosDetectados: CambioReconciliacion[];
   naveNoEncontrada?: boolean;
   navesDisponibles?: Array<{ id: string; nombre: string; cantidadPuestos: number }>;
+  esArchivoBodegas?: boolean;
+  modoUnificacion?: "UNIFICAR" | "SEPARAR";
 }
 
 export interface OpcionesImportacion {
   naveIdManual?: string;
   crearNuevaNave?: boolean;
   nuevoNombreNave?: string;
+  modoUnificacion?: "UNIFICAR" | "SEPARAR";
 }
 
 export interface ImportacionResultado {

@@ -1176,8 +1176,8 @@ export function analizarReconciliacion(
 
   if (!naveEncontrada) {
     const totalOcupados = registros.length;
-    const capacidadNave = Math.max(totalOcupados, 100);
-    const totalVacantes = Math.max(0, capacidadNave - totalOcupados);
+    const capacidadNave = totalOcupados;
+    const totalVacantes = 0;
     const cambiosDetectados: CambioReconciliacion[] = registros.map((r) => ({
       tipo: "NUEVO",
       puesto: r.puesto || "-",

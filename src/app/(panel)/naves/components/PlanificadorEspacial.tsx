@@ -1158,7 +1158,7 @@ export function PlanificadorEspacial({
             ) : (
               <div className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
-                <span className="font-mono font-bold text-emerald-300 truncate">
+                <span className="font-mono font-bold text-emerald-300 whitespace-normal break-words leading-tight">
                   Puesto: {proximoPuestoRapido.codigo}
                 </span>
               </div>
@@ -1296,7 +1296,6 @@ export function PlanificadorEspacial({
                         : null;
 
                     const esVacante = Boolean(coincidencia?.esVacante);
-                    const comerciante = coincidencia?.comerciante;
 
                     const estiloZona = getColorZonaClasses(
                       celda.colorZona,
@@ -1332,11 +1331,7 @@ export function PlanificadorEspacial({
                           cSpan
                         )}] ${
                           celda.tipo === "PUESTO"
-                            ? `Puesto: ${celda.codigoPuesto || "S/N"} ${
-                                comerciante
-                                  ? `- ${comerciante.contribuyente}`
-                                  : "(Vacante)"
-                              }`
+                            ? `Puesto: ${celda.codigoPuesto || coincidencia?.codigoReal || "S/N"}`
                             : celda.texto || celda.tipo
                         }`}
                         onKeyDown={(e) => {

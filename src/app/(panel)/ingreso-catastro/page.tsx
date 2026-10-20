@@ -51,6 +51,7 @@ export default function IngresoCatastroPage() {
   const [parseando, setParseando] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [opcionesImportacion, setOpcionesImportacion] = useState<OpcionesImportacion>({});
+  const [modoUnificacion, setModoUnificacion] = useState<"UNIFICAR" | "SEPARAR">("UNIFICAR");
   const [naveManualSeleccionada, setNaveManualSeleccionada] = useState<string>("");
   const [nombreNuevaNaveInput, setNombreNuevaNaveInput] = useState<string>("");
 
@@ -63,69 +64,104 @@ export default function IngresoCatastroPage() {
     [naves, user]
   );
 
-  async function procesarArchivo(file: File) {
-    setArchivoNombre(file.name);
-    const extension = file.name.split(".").pop()?.toLowerCase();
+  async function procesarArchivos(files: File[]) {
+    if (!files || files.length === 0) return;
+    if (files.length === 1) {
+      setArchivoNombre(files[0].name);
+    } else {
+      setArchivoNombre(`${files.length} archivos combinados (${files.map((f) => f.name).join(", ")})`);
+    }
+
     setParseando(true);
 
     try {
-      let parsed: ImportacionRegistro[] = [];
+      let todosParsed: ImportacionRegistro[] = [];
+      let naveInferidaGlobal: string | null = null;
 
-      if (extension === "xlsx" || extension === "xls") {
-        const buffer = await file.arrayBuffer();
-        parsed = await importadorService.parsearExcel(buffer);
-      } else if (extension === "csv" || extension === "txt") {
-        const texto = await file.text();
-        parsed = await importadorService.parsearCSV(texto);
-      } else if (extension === "xml") {
-        const texto = await file.text();
-        parsed = await importadorService.parsearXML(texto);
-      } else {
-        toast.error("Formato no soportado. Cargue un archivo .xlsx, .xls, .csv o .xml");
-        return;
-      }
+      for (const file of files) {
+        const extension = file.name.split(".").pop()?.toLowerCase();
+        let parsed: ImportacionRegistro[] = [];
 
-      if (parsed.length === 0) {
-        toast.error("No se detectaron comerciantes válidos con cédula en el archivo.");
-        return;
-      }
-
-      // Inferencia de nave desde código de puesto o nombre de archivo si no está definida
-      const nombreArchivoUpper = file.name.toUpperCase();
-      let naveDesdeArchivo: string | null = null;
-      if (nombreArchivoUpper.includes("ROPA")) naveDesdeArchivo = "NAVE ROPA";
-      else if (nombreArchivoUpper.includes("CF")) naveDesdeArchivo = "NAVE CF";
-      else if (nombreArchivoUpper.includes("FLORES")) naveDesdeArchivo = "NAVE FLORES";
-      else if (/\bNAVE[_\s-]*([A-Z0-9]+)\b/.test(nombreArchivoUpper)) {
-        const m = nombreArchivoUpper.match(/\bNAVE[_\s-]*([A-Z0-9]+)\b/);
-        if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
-      }
-
-      parsed = parsed.map((reg) => {
-        let naveReg = reg.nave?.trim().toUpperCase();
-        if (!naveReg || naveReg === "NO DEFINIDA") {
-          const upperPuesto = (reg.puesto || "").toUpperCase();
-          if (upperPuesto.includes("ZCF-")) naveReg = "NAVE CF";
-          else if (upperPuesto.includes("N-A-") || upperPuesto.includes("N-A")) naveReg = "NAVE A";
-          else if (upperPuesto.includes("N-E-") || upperPuesto.includes("N-E")) naveReg = "NAVE E";
-          else {
-            const match = upperPuesto.match(/\bN-([A-ZÑ0-9]+)-/);
-            if (match && match[1]) naveReg = `NAVE ${match[1]}`;
-            else if (naveDesdeArchivo) naveReg = naveDesdeArchivo;
-            else naveReg = "NAVE A";
-          }
+        if (extension === "xlsx" || extension === "xls") {
+          const buffer = await file.arrayBuffer();
+          parsed = await importadorService.parsearExcel(buffer);
+        } else if (extension === "csv" || extension === "txt") {
+          const texto = await file.text();
+          parsed = await importadorService.parsearCSV(texto);
+        } else if (extension === "xml") {
+          const texto = await file.text();
+          parsed = await importadorService.parsearXML(texto);
+        } else {
+          toast.error(`Formato no soportado en ${file.name}.`);
+          continue;
         }
-        return {
-          ...reg,
-          nave: naveReg,
-        };
-      });
+
+        // Inferencia de nave desde código de puesto o nombre de archivo si no está definida
+        const nombreArchivoUpper = file.name.toUpperCase();
+        let naveDesdeArchivo: string | null = null;
+        if (nombreArchivoUpper.includes("ROPA")) naveDesdeArchivo = "NAVE ROPA";
+        else if (nombreArchivoUpper.includes("CF")) naveDesdeArchivo = "NAVE CF";
+        else if (nombreArchivoUpper.includes("FLORES")) naveDesdeArchivo = "NAVE FLORES";
+        else if (/\bNAVE[_\s-]*([A-Z0-9]+)\b/.test(nombreArchivoUpper)) {
+          const m = nombreArchivoUpper.match(/\bNAVE[_\s-]*([A-Z0-9]+)\b/);
+          if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
+        }
+
+        if (naveDesdeArchivo && !naveInferidaGlobal) {
+          naveInferidaGlobal = naveDesdeArchivo;
+        }
+
+        const procesados = parsed.map((reg) => {
+          let naveReg = reg.nave?.trim().toUpperCase();
+          if (!naveReg || naveReg === "NO DEFINIDA") {
+            const upperPuesto = (reg.puesto || "").toUpperCase();
+            if (upperPuesto.includes("ZCF-")) naveReg = "NAVE CF";
+            else {
+              const match =
+                upperPuesto.match(/^N-(?:([A-ZÑ0-9]+)-([A-Z0-9-]+)|([A-Z0-9-]+)-([A-ZÑ]))(?:[\s*].*)?$/i) ||
+                upperPuesto.match(/\bN-(?:([A-ZÑ0-9]+)-([A-Z0-9-]+)|([A-Z0-9-]+)-([A-ZÑ]))\b/i);
+              if (match) {
+                const letra = (match[1] || match[4] || "").toUpperCase();
+                if (letra) naveReg = `NAVE ${letra}`;
+              } else if (naveDesdeArchivo) {
+                naveReg = naveDesdeArchivo;
+              } else if (naveInferidaGlobal) {
+                naveReg = naveInferidaGlobal;
+              } else {
+                naveReg = "NO DEFINIDA";
+              }
+            }
+          }
+          if (naveReg && naveReg !== "NO DEFINIDA" && !naveInferidaGlobal) {
+            naveInferidaGlobal = naveReg;
+          }
+          return {
+            ...reg,
+            nave: naveReg,
+          };
+        });
+
+        todosParsed.push(...procesados);
+      }
+
+      if (todosParsed.length === 0) {
+        toast.error("No se detectaron comerciantes válidos con cédula en los archivos seleccionados.");
+        return;
+      }
+
+      // Si se infirió una nave global común para los archivos combinados (ej. NAVE H de Bodega Nave H.xls y Puestos Nave H.xls)
+      if (naveInferidaGlobal) {
+        todosParsed = todosParsed.map((r) => ({
+          ...r,
+          nave: (!r.nave || r.nave === "NO DEFINIDA") ? naveInferidaGlobal! : r.nave,
+        }));
+      }
 
       // Validación estricta de aislamiento de naves para el rol SUPERVISOR
       if (user?.rol === "SUPERVISOR") {
         const navesDetectadas = Array.from(
           new Set(
-            parsed
+            todosParsed
               .map((p) => (p.nave || "").trim().toUpperCase())
               .filter(Boolean)
           )
@@ -151,9 +187,11 @@ export default function IngresoCatastroPage() {
         }
       }
 
-      setRegistros(parsed);
-      setOpcionesImportacion({});
-      const sim = await importadorService.simularImportacion(parsed);
+      setRegistros(todosParsed);
+      setModoUnificacion("UNIFICAR");
+      const opcInicial: OpcionesImportacion = { modoUnificacion: "UNIFICAR" };
+      setOpcionesImportacion(opcInicial);
+      const sim = await importadorService.simularImportacion(todosParsed, opcInicial);
       setAnalisis(sim);
       if (sim.reconciliacion?.navesDisponibles && sim.reconciliacion.navesDisponibles.length > 0) {
         setNaveManualSeleccionada(sim.reconciliacion.navesDisponibles[0].id);
@@ -164,10 +202,10 @@ export default function IngresoCatastroPage() {
           : ""
       );
       setPaso("preview");
-      toast.success(`${parsed.length} comerciantes detectados correctamente.`);
+      toast.success(`${todosParsed.length} comerciantes detectados correctamente.`);
     } catch (error) {
-      console.error("Error al procesar el archivo:", error);
-      toast.error("Error al interpretar el archivo. Verifique el formato e intente nuevamente.");
+      console.error("Error al procesar archivos:", error);
+      toast.error("Error al interpretar los archivos. Verifique el formato e intente nuevamente.");
     } finally {
       setParseando(false);
     }
@@ -176,9 +214,9 @@ export default function IngresoCatastroPage() {
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) {
-      procesarArchivo(file);
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      procesarArchivos(Array.from(files));
     }
   }
 
@@ -208,6 +246,7 @@ export default function IngresoCatastroPage() {
     setResultado(null);
     setAnalisis(null);
     setOpcionesImportacion({});
+    setModoUnificacion("UNIFICAR");
     setNaveManualSeleccionada("");
     setNombreNuevaNaveInput("");
     setArchivoNombre("");
@@ -305,16 +344,17 @@ export default function IngresoCatastroPage() {
                 </p>
                 <label className="mt-5 cursor-pointer">
                   <span className="inline-flex items-center gap-2 rounded-lg bg-institucional-green px-5 py-2.5 text-xs font-semibold text-base-white shadow-sm transition-colors hover:bg-acento-verdeOliva1">
-                    <FileSpreadsheet size={15} /> Seleccionar archivo desde el equipo
+                    <FileSpreadsheet size={15} /> Seleccionar uno o varios archivos desde el equipo
                   </span>
                   <input
                     type="file"
+                    multiple
                     accept=".xlsx,.xls,.csv,.xml"
                     className="hidden"
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        procesarArchivo(file);
+                      const files = e.target.files;
+                      if (files && files.length > 0) {
+                        procesarArchivos(Array.from(files));
                       }
                     }}
                   />
@@ -490,6 +530,66 @@ export default function IngresoCatastroPage() {
                       </button>
                     )}
                   </div>
+
+                  {/* Selector de Modo: Unificar vs Separar Nave para Bodegas */}
+                  {analisis.reconciliacion.esArchivoBodegas && (
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-300/80">
+                      <div className="text-xs">
+                        <span className="font-bold text-gray-800 uppercase tracking-wide">
+                          Modo de Conciliación de Bodegas / Locales:
+                        </span>
+                        <p className="text-[11px] text-gray-600 mt-0.5">
+                          Elija si desea mantener bodegas y puestos juntos en la misma nave o administrarlos como naves separadas.
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-lg border border-slate-300/70 shadow-2xs">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setModoUnificacion("UNIFICAR");
+                            const opc: OpcionesImportacion = { ...opcionesImportacion, modoUnificacion: "UNIFICAR" };
+                            setOpcionesImportacion(opc);
+                            setParseando(true);
+                            try {
+                              const sim = await importadorService.simularImportacion(registros, opc);
+                              setAnalisis(sim);
+                            } finally {
+                              setParseando(false);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                            modoUnificacion === "UNIFICAR"
+                              ? "bg-institucional-green text-white shadow-2xs"
+                              : "text-gray-700 hover:text-black hover:bg-slate-100"
+                          }`}
+                        >
+                          1. Unificar en {analisis.reconciliacion.naveDetectada.replace(/^BODEGA\s+/, "")} (Bodegas + Puestos)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setModoUnificacion("SEPARAR");
+                            const opc: OpcionesImportacion = { ...opcionesImportacion, modoUnificacion: "SEPARAR" };
+                            setOpcionesImportacion(opc);
+                            setParseando(true);
+                            try {
+                              const sim = await importadorService.simularImportacion(registros, opc);
+                              setAnalisis(sim);
+                            } finally {
+                              setParseando(false);
+                            }
+                          }}
+                          className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
+                            modoUnificacion === "SEPARAR"
+                              ? "bg-institucional-green text-white shadow-2xs"
+                              : "text-gray-700 hover:text-black hover:bg-slate-100"
+                          }`}
+                        >
+                          2. Separar como nave independiente (BODEGA {analisis.reconciliacion.naveDetectada.replace(/^BODEGA\s+/, "")})
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     <div className="rounded-lg bg-base-white p-3 border border-institucional-whiteSmokeBlack/15 shadow-sm">

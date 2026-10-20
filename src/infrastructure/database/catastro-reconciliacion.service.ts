@@ -11,10 +11,42 @@ export interface ComponentesCodigoPuesto {
   tokenFinal: string;
   numeroBase: string;
   sufijoAlfanumerico: string;
+  esRangoCompuesto?: boolean;
+  rangoNormalizado?: string;
 }
 
 /**
- * Infiere el nombre estándar de la nave (ej. "NAVE A", "NAVE CF", "NAVE E") a partir de un código de puesto
+ * Distingue de forma inteligente entre Códigos de Bodegas/Locales y Códigos Numéricos de Puestos:
+ * - Bodegas/Locales: Inician con BODEGA, CUBICULO, NUCLEO, LOCAL, ZCF o tienen formato con prefijo/sufijo de nave (N-H-01, N-02A-H).
+ * - Puestos Numéricos: "001", "058-063", "125", "4A", "7".
+ */
+export function esCodigoTipoBodegaOLocal(codigo: string): boolean {
+  if (!codigo) return false;
+  const upper = codigo.trim().toUpperCase();
+
+  if (
+    upper.startsWith("BODEGA") ||
+    upper.startsWith("CUBICULO") ||
+    upper.startsWith("CUBÍCULO") ||
+    upper.startsWith("NUCLEO") ||
+    upper.startsWith("NÚCLEO") ||
+    upper.startsWith("LOCAL") ||
+    upper.startsWith("ZCF")
+  ) {
+    return true;
+  }
+
+  // Formato con prefijo o sufijo de nave (ej. N-H-01, N-02A-H, N-A-01, N-E-04)
+  if (/^N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])(?:[\s*].*)?$/i.test(upper)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Infiere el nombre estándar de la nave (ej. "NAVE H", "NAVE A", "NAVE CF") a partir de un código de puesto
+ * Reconoce tanto prefijo de nave (N-H-01) como sufijo de nave al final (N-02A-H).
  */
 export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   if (!codigoPuesto) return null;
@@ -22,10 +54,23 @@ export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
     return "NAVE CF";
   }
-  const matchN = upper.match(/\bN-([A-ZÑ0-9]+)-/);
-  if (matchN && matchN[1]) {
-    return `NAVE ${matchN[1]}`;
+
+  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A) donde la nave es letra al final y el puesto empieza por dígito
+  const matchNaveFin =
+    upper.match(/^N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?:[\s*].*)?$/i) ||
+    upper.match(/\bN-([0-9]+[A-Z0-9]*)-([A-ZÑ])\b/i);
+  if (matchNaveFin) {
+    return `NAVE ${matchNaveFin[2].toUpperCase()}`;
   }
+
+  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-E-04, N-CF-01)
+  const matchNaveIni =
+    upper.match(/^N-([A-ZÑ]+)-([A-Z0-9-]+)(?:[\s*].*)?$/i) ||
+    upper.match(/\bN-([A-ZÑ]+)-([A-Z0-9-]+)\b/i);
+  if (matchNaveIni) {
+    return `NAVE ${matchNaveIni[1].toUpperCase()}`;
+  }
+
   const matchNave = upper.match(/\bNAVE\s+([A-ZÑ0-9]+)\b/);
   if (matchNave && matchNave[1]) {
     return `NAVE ${matchNave[1]}`;
@@ -36,12 +81,20 @@ export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
 /**
  * Normaliza y descompone cualquier código de puesto del mercado EP-EMA:
  * - Detecta categoría ("BODEGA", "CUBICULO", "NUCLEO")
+ * - Conserva íntegros los puestos compuestos de doble plaza (ej. "058-063", "079-095", "082-091")
  * - Limpia prefijos espaciales y descriptivos
  * - Separa estrictamente el número base del sufijo alfanumérico (ej. "01" vs "01A", "07" vs "07A")
  */
 export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto {
   if (!codigo) {
-    return { categoria: "", tokenFinal: "", numeroBase: "", sufijoAlfanumerico: "" };
+    return {
+      categoria: "",
+      tokenFinal: "",
+      numeroBase: "",
+      sufijoAlfanumerico: "",
+      esRangoCompuesto: false,
+      rangoNormalizado: "",
+    };
   }
 
   const upper = codigo.trim().toUpperCase().replace(/#/g, "").trim();
@@ -67,15 +120,41 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
     .replace(/\bLOCAL\b/g, "")
     .trim();
 
-  // Limpiar prefijo de nave (ej. "N-A-01" -> "01", "N-E-04A" -> "04A", "ZCF-04" -> "04")
-  token = token.replace(/^(?:N-[A-ZÑ0-9]+-|ZCF-)/i, "").trim();
+  // 3. Detectar puesto compuesto por rango (ej. "058-063", "079-095", "082-091", "58-63")
+  const matchRango = token.match(/^(\d+)-(\d+)$/);
+  if (matchRango) {
+    const n1 = parseInt(matchRango[1], 10);
+    const n2 = parseInt(matchRango[2], 10);
+    return {
+      categoria,
+      tokenFinal: token,
+      numeroBase: `${n1}-${n2}`,
+      sufijoAlfanumerico: "",
+      esRangoCompuesto: true,
+      rangoNormalizado: `${n1}-${n2}`,
+    };
+  }
+
+  // 4. Limpiar prefijo de nave o sufijo de nave:
+  // Formato N-02A-H (nave al final precedida por código que empieza por dígito)
+  const matchNaveFin = token.match(/^N-([0-9]+[A-Z0-9]*)-[A-ZÑ]$/i);
+  // Formato N-H-01 (nave al inicio seguida por código)
+  const matchNaveInicio = token.match(/^N-[A-ZÑ]+-(.+)$/i);
+  const matchZcf = token.match(/^ZCF-(.+)$/i);
+
+  if (matchNaveFin) {
+    token = matchNaveFin[1].trim();
+  } else if (matchNaveInicio) {
+    token = matchNaveInicio[1].trim();
+  } else if (matchZcf) {
+    token = matchZcf[1].trim();
+  }
 
   // Limpiar guiones o espacios iniciales/finales
   token = token.replace(/^[-_\s]+|[-_\s]+$/g, "").trim();
 
-  // 3. Extraer número base y sufijo alfanumérico estricto
-  // Coincide con número seguido opcionalmente de letras (ej. "01", "001", "01A", "7B")
-  const matchNum = token.match(/^(\d+)([A-ZÑ]*)$/i) || token.match(/(\d+)([A-ZÑ]*)$/i);
+  // 5. Extraer número base y sufijo alfanumérico estricto
+  const matchNum = token.match(/^(\d+)([A-ZÑ]*)$/i);
 
   let numeroBase = "";
   let sufijoAlfanumerico = "";
@@ -85,8 +164,13 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
     numeroBase = String(parseInt(rawNum, 10)); // sin ceros a la izquierda
     sufijoAlfanumerico = (matchNum[2] || "").toUpperCase().trim();
   } else {
-    // Si no contiene dígitos, el token completo es el sufijo
-    sufijoAlfanumerico = token.toUpperCase();
+    const matchNumEnToken = token.match(/(\d+)([A-ZÑ]*)$/i);
+    if (matchNumEnToken) {
+      numeroBase = String(parseInt(matchNumEnToken[1], 10));
+      sufijoAlfanumerico = (matchNumEnToken[2] || "").toUpperCase().trim();
+    } else {
+      sufijoAlfanumerico = token.toUpperCase();
+    }
   }
 
   return {
@@ -94,6 +178,8 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
     tokenFinal: token,
     numeroBase,
     sufijoAlfanumerico,
+    esRangoCompuesto: false,
+    rangoNormalizado: "",
   };
 }
 
@@ -101,6 +187,7 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
  * Regla de Oro de Comparación de Puestos:
  * - Dos códigos son equivalentes si tienen el mismo numeroBase Y exactamente el mismo sufijoAlfanumerico.
  * - "N-A-01" ("1", "") y "N-A-01A" ("1", "A") son ESTRICTAMENTE DIFERENTES.
+ * - Códigos dobles como "058-063" y "079-095" se conservan íntegros y no colisionan con puestos unitarios.
  * - Si ambos especifican categoría y difieren ("BODEGA" !== "CUBICULO"), no son equivalentes.
  */
 export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null): boolean {
@@ -114,6 +201,14 @@ export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null
 
   const d1 = descomponerCodigoPuesto(c1);
   const d2 = descomponerCodigoPuesto(c2);
+
+  // Si uno o ambos son rangos compuestos
+  if (d1.esRangoCompuesto || d2.esRangoCompuesto) {
+    if (d1.esRangoCompuesto && d2.esRangoCompuesto) {
+      return d1.rangoNormalizado === d2.rangoNormalizado;
+    }
+    return false;
+  }
 
   // Si ambos tienen número base
   if (d1.numeroBase && d2.numeroBase) {
@@ -160,8 +255,8 @@ export function normalizarNombreCompleto(nombre: string): string {
 
 /**
  * Comprueba si dos contribuyentes son la misma persona:
- * - Mismo nombre completo normalizado exacto, o
- * - Misma cédula válida
+ * - Misma cédula válida, o
+ * - Mismo nombre completo normalizado exacto
  */
 export function sonMismoContribuyente(
   com1: { contribuyente?: string; nombre?: string; cedula?: string },
@@ -205,12 +300,12 @@ export interface ComercianteNaveBD {
 
 export interface ResultadoReconciliacionEjecucion {
   reconciliacion: ReconciliacionResumen;
-  // Plan de acciones para persistencia en BD
   asignacionesOcupar: Array<{
     puestoId: string;
     puestoCodigo: string;
     comercianteId: string;
     esNuevoComerciante: boolean;
+    esNuevoPuesto?: boolean;
     datosComerciante: {
       ciu: string;
       cedula: string;
@@ -228,11 +323,10 @@ export interface ResultadoReconciliacionEjecucion {
 }
 
 /**
- * Algoritmo de Reconciliación Mensual en 4 Pasos para Naves Existentes:
- * Paso 1: Comparar contribuyentes existentes (mismo puesto -> ACTUALIZACION, distinto puesto -> CAMBIO_PUESTO)
- * Paso 2: Contribuyentes nuevos que reemplazan a salientes (Subpaso 2A por código, Subpaso 2B por deducción)
- * Paso 3: Puestos donde el contribuyente salió y nadie lo reemplazó (VACANTE)
- * Paso 4: Inmutabilidad de los códigos de puestos de la nave
+ * Algoritmo de Reconciliación Inteligente con Soporte para Subconjuntos (Bodegas vs Puestos):
+ * - Si entran solo Puestos Numéricos (ej. 122 puestos), las Bodegas existentes (ej. 4 bodegas) NO se tocan ni pasan a Vacante.
+ * - Si entran solo Bodegas, los Puestos Numéricos existentes NO se tocan.
+ * - Los nuevos puestos que no existían en la nave se agregan sumando a la capacidad real, NUNCA imponiendo 100 por defecto.
  */
 export function reconciliarCatastroNaveExistente(
   registros: ImportacionRegistro[],
@@ -248,7 +342,30 @@ export function reconciliarCatastroNaveExistente(
   const asignacionesOcupar: ResultadoReconciliacionEjecucion["asignacionesOcupar"] = [];
   const puestosAVacante: ResultadoReconciliacionEjecucion["puestosAVacante"] = [];
 
-  // ── PASO 1: Comparar Contribuyentes Existentes ─────────────────────────────
+  // ── Detección de Subconjunto de Registros Entrantes ──
+  const todosSonBodegas =
+    registros.length > 0 &&
+    registros.every((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
+  const todosSonPuestosNumericos =
+    registros.length > 0 &&
+    registros.every((r) => !esCodigoTipoBodegaOLocal(r.puesto || ""));
+
+  // Filtrar los puestos de la nave que participan en la reconciliación según la categoría entrante:
+  const puestosNaveParticipantes = puestosNave.filter((p) => {
+    if (todosSonBodegas) {
+      return esCodigoTipoBodegaOLocal(p.codigo);
+    }
+    if (todosSonPuestosNumericos) {
+      return !esCodigoTipoBodegaOLocal(p.codigo);
+    }
+    return true; // mixto: participan todos
+  });
+
+  const puestosNaveNoParticipantes = puestosNave.filter((p) => {
+    return !puestosNaveParticipantes.some((part) => part.id === p.id);
+  });
+
+  // ── PASO 1: Comparar Contribuyentes Existentes en la Sección Participante ─────
   for (let idx = 0; idx < registros.length; idx++) {
     const reg = registros[idx];
     const comExistente = comerciantesNave.find((c) =>
@@ -256,17 +373,16 @@ export function reconciliarCatastroNaveExistente(
     );
 
     if (comExistente) {
-      // Puesto que ocupa actualmente este comerciante en la nave
-      const puestoActual = puestosNave.find((p) => p.comercianteId === comExistente.idInterno);
+      // Puesto actual del comerciante en la nave
+      const puestoActual = puestosNaveParticipantes.find((p) => p.comercianteId === comExistente.idInterno);
       // Puesto al que viene asignado en el nuevo archivo
-      const puestoNuevoArchivo = puestosNave.find((p) =>
+      const puestoNuevoArchivo = puestosNaveParticipantes.find((p) =>
         sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
       );
 
       const puestoDestino = puestoNuevoArchivo || puestoActual;
 
       if (puestoDestino) {
-        // ¿Es el mismo puesto o cambió de puesto?
         const esMismoPuesto =
           puestoActual &&
           (puestoActual.id === puestoDestino.id ||
@@ -339,9 +455,9 @@ export function reconciliarCatastroNaveExistente(
     }
   }
 
-  // ── PASO 2: Contribuyentes Nuevos que Reemplazan a Salientes ───────────────
-  // Puestos libres en la nave (no asignados en Paso 1)
-  const puestosLibres = puestosNave.filter((p) => !puestosAsignadosIds.has(p.id));
+  // ── PASO 2: Contribuyentes Nuevos y Asignaciones ──────────────────────────
+  // Puestos libres en la sección participante
+  const puestosLibres = puestosNaveParticipantes.filter((p) => !puestosAsignadosIds.has(p.id));
 
   // Subpaso 2A: Coincidencia por código de puesto equivalente
   for (let idx = 0; idx < registros.length; idx++) {
@@ -358,7 +474,6 @@ export function reconciliarCatastroNaveExistente(
       puestosAsignadosIds.add(puestoMatch.id);
       registrosProcesadosIndices.add(idx);
 
-      // Comprobar si este puesto tenía un comerciante previo en la nave
       const comSaliente = puestoMatch.comercianteId
         ? comerciantesNave.find((c) => c.idInterno === puestoMatch.comercianteId)
         : null;
@@ -397,16 +512,15 @@ export function reconciliarCatastroNaveExistente(
     }
   }
 
-  // Subpaso 2B: Deducción directa para nuevos comerciantes restantes en puestos que quedaron vacantes
+  // Subpaso 2B: Asignar nuevos restantes a puestos libres existentes en la sección
   for (let idx = 0; idx < registros.length; idx++) {
     if (registrosProcesadosIndices.has(idx)) continue;
     if (puestosLibres.length === 0) break;
 
     const regNuevo = registros[idx];
-    // Preferir puestos que tenían ocupante saliente
     let idxPuestoDeduccion = puestosLibres.findIndex((p) => p.comercianteId !== null);
     if (idxPuestoDeduccion === -1) {
-      idxPuestoDeduccion = 0; // o el primer puesto vacante disponible
+      idxPuestoDeduccion = 0;
     }
 
     const puestoDeducido = puestosLibres[idxPuestoDeduccion];
@@ -451,9 +565,43 @@ export function reconciliarCatastroNaveExistente(
     });
   }
 
-  // ── PASO 3: Puestos donde el Contribuyente Salió y Nadie lo Reemplazó ──────
+  // Subpaso 2C: Si el archivo contiene más puestos de los existentes en esta sección,
+  // se agregan como PUESTOS NUEVOS sin descartar ni inventar vacantes artificiales.
+  for (let idx = 0; idx < registros.length; idx++) {
+    if (registrosProcesadosIndices.has(idx)) continue;
+    const regNuevo = registros[idx];
+    const nuevoPuestoId = crypto.randomUUID();
+    const codigoPuestoFinal = (regNuevo.puesto || `PUESTO-${idx + 1}`).trim().toUpperCase();
+
+    puestosAsignadosIds.add(nuevoPuestoId);
+    registrosProcesadosIndices.add(idx);
+
+    cambiosDetectados.push({
+      tipo: "NUEVO",
+      puesto: codigoPuestoFinal,
+      nuevo: regNuevo.nombre,
+      detalle: `Puesto ${codigoPuestoFinal}: Nuevo comerciante ${regNuevo.nombre} asignado`,
+    });
+
+    asignacionesOcupar.push({
+      puestoId: nuevoPuestoId,
+      puestoCodigo: codigoPuestoFinal,
+      comercianteId: crypto.randomUUID(),
+      esNuevoComerciante: true,
+      esNuevoPuesto: true,
+      datosComerciante: {
+        ciu: regNuevo.ciu || "S/N",
+        cedula: regNuevo.cedula,
+        contribuyente: regNuevo.nombre,
+        actividad: regNuevo.actividad || "General",
+        puestoId: codigoPuestoFinal,
+        nave: nave.nombre,
+      },
+    });
+  }
+
+  // ── PASO 3: Puestos de la Sección Participante que Quedan Vacantes ──────────
   for (const puestoRestante of puestosLibres) {
-    // Si tenía comerciante asignado o estaba ocupado, pasa a Vacante
     if (puestoRestante.comercianteId || puestoRestante.estado === "Ocupado") {
       const comSaliente = puestoRestante.comercianteId
         ? comerciantesNave.find((c) => c.idInterno === puestoRestante.comercianteId)
@@ -480,10 +628,22 @@ export function reconciliarCatastroNaveExistente(
     }
   }
 
-  // ── PASO 4: Inmutabilidad de Puestos y Resumen Final ───────────────────────
-  const totalOcupados = puestosAsignadosIds.size;
-  const capacidadNave = Math.max(nave.cantidadPuestos, totalOcupados);
-  const totalVacantes = Math.max(0, capacidadNave - totalOcupados);
+  // ── PASO 4: Conteo Real de Capacidad (Suma de Puestos Reales, Cero '100' Forzado) ──
+  const ocupadosParticipantes = puestosAsignadosIds.size;
+  const ocupadosNoParticipantes = puestosNaveNoParticipantes.filter(
+    (p) => p.estado === "Ocupado" || p.comercianteId !== null
+  ).length;
+
+  const totalOcupados = ocupadosParticipantes + ocupadosNoParticipantes;
+
+  // La capacidad total es la suma de los puestos de la sección no participante más los participantes
+  const vacantesParticipantes = puestosAVacante.length;
+  const vacantesNoParticipantes = puestosNaveNoParticipantes.filter(
+    (p) => p.estado === "Vacante" && !p.comercianteId
+  ).length;
+
+  const totalVacantes = vacantesParticipantes + vacantesNoParticipantes;
+  const capacidadNave = totalOcupados + totalVacantes;
 
   return {
     reconciliacion: {
@@ -493,6 +653,7 @@ export function reconciliarCatastroNaveExistente(
       totalOcupados,
       totalVacantes,
       cambiosDetectados,
+      esArchivoBodegas: todosSonBodegas,
     },
     asignacionesOcupar,
     puestosAVacante,

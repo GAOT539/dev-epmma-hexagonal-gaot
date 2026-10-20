@@ -212,7 +212,7 @@ function esCodigoEstandarizado(code: string): boolean {
   ) {
     return false;
   }
-  return /^(N-[A-ZÑ0-9-]+|ZCF-[A-Z0-9-]+)$/i.test(upper);
+  return /^(N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])|ZCF-[A-Z0-9-]+)$/i.test(upper);
 }
 
 function seleccionarMejorPuesto(candidatos: string[]): string {
@@ -247,15 +247,26 @@ export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
   if (upper.startsWith("ZCF-") || upper.includes("ZCF-")) {
     return "NAVE CF";
   }
-  if (upper.includes("N-A-") || upper.includes("N-A")) {
-    return "NAVE A";
+
+  // 1. Caso N-[Stall]-[Nave] (ej. N-02A-H, N-01-A) donde la nave es letra al final y el puesto empieza por dígito
+  const matchNaveFin =
+    upper.match(/^N-([0-9]+[A-Z0-9]*)-([A-ZÑ])(?:[\s*].*)?$/i) ||
+    upper.match(/\bN-([0-9]+[A-Z0-9]*)-([A-ZÑ])\b/i);
+  if (matchNaveFin) {
+    return `NAVE ${matchNaveFin[2].toUpperCase()}`;
   }
-  if (upper.includes("N-E-") || upper.includes("N-E")) {
-    return "NAVE E";
+
+  // 2. Caso N-[Nave]-[Stall] (ej. N-H-01, N-A-01, N-E-04, N-CF-01)
+  const matchNaveIni =
+    upper.match(/^N-([A-ZÑ]+)-([A-Z0-9-]+)(?:[\s*].*)?$/i) ||
+    upper.match(/\bN-([A-ZÑ]+)-([A-Z0-9-]+)\b/i);
+  if (matchNaveIni) {
+    return `NAVE ${matchNaveIni[1].toUpperCase()}`;
   }
-  const match = upper.match(/\bN-([A-ZÑ0-9]+)-/);
-  if (match && match[1]) {
-    return `NAVE ${match[1]}`;
+
+  const matchNave = upper.match(/\bNAVE\s+([A-ZÑ0-9]+)\b/);
+  if (matchNave && matchNave[1]) {
+    return `NAVE ${matchNave[1]}`;
   }
   return null;
 }
@@ -274,9 +285,23 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
     raw: false,
   });
 
+  const sheetNameUpper = (wb.SheetNames[0] || "").toUpperCase();
+  const esHojaBodegasLocales =
+    sheetNameUpper.includes("950") ||
+    sheetNameUpper.includes("BODEGA") ||
+    sheetNameUpper.includes("LOCAL");
+
+  const primerasFilas = rows.slice(0, 15);
+  const tieneCabeceraLocales = primerasFilas.some(
+    (r) =>
+      Array.isArray(r) &&
+      r.some((c) => String(c ?? "").toUpperCase().includes("LOCALES MERCADO MAYORISTA"))
+  );
+  const esReporteBodegasOLocales = esHojaBodegasLocales || tieneCabeceraLocales;
+
   const registros: ImportacionRegistro[] = [];
   let naveActual = "NO DEFINIDA";
-  let actividadActual = "GENERAL";
+  let actividadActual = esReporteBodegasOLocales ? "BODEGAS / LOCALES" : "GENERAL";
 
   // Mapeo dinámico de columnas desde la cabecera
   let colCiu = -1;
@@ -532,7 +557,9 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
       // Si una celda empieza con un código de bodega seguido de una nota o asterisco
       // (ej. "N-H-01 COBRO DE VALOR PENDIENTE DIC/2018" o "N-D-01*AGOSTO"),
       // extrae únicamente el código inicial antes del espacio o asterisco ("N-H-01", "N-D-01").
-      const bodegaMatch = strVal.match(/^(N-[A-ZÑ0-9-]+|ZCF-[A-Z0-9-]+)(?:[\s*].*)?$/i);
+      const bodegaMatch = strVal.match(
+        /^(N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])|ZCF-[A-Z0-9-]+)(?:[\s*].*)?$/i
+      );
       if (bodegaMatch) {
         strVal = bodegaMatch[1].toUpperCase();
       }
@@ -645,7 +672,7 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
         naveFila = naveInferida;
         naveActual = naveInferida;
       } else {
-        naveFila = "NAVE A";
+        naveFila = "NO DEFINIDA";
       }
     }
 
