@@ -8,23 +8,36 @@ import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliaci
 
 export async function GET() {
   try {
-    const navesExistentes = await prisma.nave.findMany({ select: { id: true } });
-    for (const n of navesExistentes) {
-      await sincronizarPuestosDeNaveEnBD(n.id);
+    const [navesRaw, supervisoresUsuarios] = await Promise.all([
+      prisma.nave.findMany({
+        include: { puestos: true },
+        orderBy: { creadoEn: "asc" },
+      }),
+      prisma.usuario.findMany({
+        where: { rol: "SUPERVISOR", estado: "Habilitado" },
+        select: { nombres: true, apellidos: true },
+      }),
+    ]);
+
+    // Solo sincronizar naves que presenten inconsistencias reales en memoria
+    let naves = navesRaw;
+    const navesDescuadradas = navesRaw.filter((n) => {
+      if (n.puestos.length !== n.cantidadPuestos) return true;
+      const hayOcupadoSinComerciante = n.puestos.some(
+        (p) => p.estado === "Ocupado" && !p.comercianteId
+      );
+      return hayOcupadoSinComerciante;
+    });
+
+    if (navesDescuadradas.length > 0) {
+      for (const d of navesDescuadradas) {
+        await sincronizarPuestosDeNaveEnBD(d.id);
+      }
+      naves = await prisma.nave.findMany({
+        include: { puestos: true },
+        orderBy: { creadoEn: "asc" },
+      });
     }
-
-    const naves = await prisma.nave.findMany({
-      include: {
-        puestos: true,
-      },
-      orderBy: { creadoEn: "asc" },
-    });
-
-    // Obtener supervisores disponibles desde usuarios habilitados
-    const supervisoresUsuarios = await prisma.usuario.findMany({
-      where: { rol: "SUPERVISOR", estado: "Habilitado" },
-      select: { nombres: true, apellidos: true },
-    });
 
     const nombresSupervisores = supervisoresUsuarios.map(
       (s) => `${s.nombres} ${s.apellidos}`.trim()

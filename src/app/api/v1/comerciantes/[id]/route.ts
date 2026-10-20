@@ -232,7 +232,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     });
 
     if (puestoNuevo) {
-      await asegurarAsistenciaInicialDelDia();
+      await asegurarAsistenciaInicialDelDia(undefined, true);
     }
 
     return NextResponse.json(actualizado);

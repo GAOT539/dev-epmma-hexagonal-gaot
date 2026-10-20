@@ -149,17 +149,29 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
   );
 
   // ── Paso A: Garantizar que todo comerciante activo de la nave tenga su registro en puestos ──
+  const candidatosIds = comerciantes
+    .filter((c) => c.puestoId && c.puestoId !== "S/N" && c.puestoId.trim().length > 0)
+    .map((c) => c.idInterno);
+
+  const puestosOcupadosEnBD = candidatosIds.length > 0
+    ? await prisma.puesto.findMany({
+        where: { comercianteId: { in: candidatosIds } },
+        select: { comercianteId: true },
+      })
+    : [];
+
+  const setComerciantesOcupadosEnBD = new Set(
+    puestosOcupadosEnBD.map((p) => p.comercianteId).filter(Boolean) as string[]
+  );
+
   for (const com of comerciantes) {
     if (!com.puestoId || com.puestoId === "S/N" || com.puestoId.trim().length === 0) {
       continue;
     }
     const tienePuesto = puestos.some((p) => p.comercianteId === com.idInterno);
     if (!tienePuesto) {
-      // Verificar previamente que este comerciante no esté ya asignado a ningún otro puesto en la base de datos
-      const puestoOcupadoEnBD = await prisma.puesto.findUnique({
-        where: { comercianteId: com.idInterno },
-      });
-      if (puestoOcupadoEnBD) {
+      // Verificar si ya está ocupado en la BD sin hacer consultas individuales repetitivas
+      if (setComerciantesOcupadosEnBD.has(com.idInterno)) {
         continue;
       }
 

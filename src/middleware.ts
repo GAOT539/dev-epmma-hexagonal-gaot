@@ -57,14 +57,57 @@ export async function middleware(request: NextRequest) {
   }
 
   // Verificar restricciones de rol por ruta
+  const method = request.method.toUpperCase();
+  const rol = payload.rol as string;
+
   for (const [routePrefix, allowedRoles] of Object.entries(ROLE_RESTRICTIONS)) {
     if (pathname.startsWith(routePrefix)) {
-      if (!allowedRoles.includes(payload.rol as string)) {
+      if (!allowedRoles.includes(rol)) {
         return NextResponse.json(
           { error: "Acceso denegado. No tiene permisos para esta operación." },
           { status: 403 }
         );
       }
+    }
+  }
+
+  // Refuerzo de validación por método y matriz oficial de roles
+  // 1. /api/v1/naves y /api/v1/comerciantes (POST, PUT, DELETE): solo SUPERADMIN y TIC
+  if (
+    (pathname.startsWith("/api/v1/naves") || pathname.startsWith("/api/v1/comerciantes")) &&
+    ["POST", "PUT", "DELETE"].includes(method)
+  ) {
+    if (!["SUPERADMIN", "TIC"].includes(rol)) {
+      return NextResponse.json(
+        { error: "Acceso denegado. Solo SUPERADMIN y TIC pueden modificar o registrar naves y comerciantes." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 2. /api/v1/catastro/simular y /api/v1/catastro/importar: solo SUPERADMIN, TIC y SUPERVISOR
+  if (
+    pathname.startsWith("/api/v1/catastro/simular") ||
+    pathname.startsWith("/api/v1/catastro/importar")
+  ) {
+    if (!["SUPERADMIN", "TIC", "SUPERVISOR"].includes(rol)) {
+      return NextResponse.json(
+        { error: "Acceso denegado. No tiene permisos para importar o simular catastro." },
+        { status: 403 }
+      );
+    }
+  }
+
+  // 3. /api/v1/asistencia (POST, DELETE): solo SUPERADMIN, TIC, JEFE_OPERATIVO y SUPERVISOR (DIRECTOR es solo lectura)
+  if (
+    pathname.startsWith("/api/v1/asistencia") &&
+    ["POST", "DELETE"].includes(method)
+  ) {
+    if (!["SUPERADMIN", "TIC", "JEFE_OPERATIVO", "SUPERVISOR"].includes(rol)) {
+      return NextResponse.json(
+        { error: "Acceso denegado. Su rol no tiene permisos para registrar o eliminar asistencia." },
+        { status: 403 }
+      );
     }
   }
 

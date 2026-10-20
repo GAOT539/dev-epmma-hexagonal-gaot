@@ -55,22 +55,17 @@ export async function POST(request: Request) {
 
     // 1. Buscar fechaOrigen (hacia atrás hasta 30 días)
     const fechaDestinoObj = parseISO(fechaHasta);
-    let fechaOrigen: string | null = null;
-
-    for (let i = 1; i <= 30; i++) {
-      const fCheck = format(subDays(fechaDestinoObj, i), "yyyy-MM-dd");
-      const conteo = await prisma.registroAsistencia.count({
-        where: {
-          fecha: fCheck,
-          comercianteId: { in: comercianteIds },
-        },
-      });
-
-      if (conteo > 0) {
-        fechaOrigen = fCheck;
-        break;
-      }
-    }
+    // 1. Encontrar la fecha de origen previa más cercana con registros existentes (hasta 30 días atrás) en 1 sola consulta indexada
+    const fechaLimiteInferior = format(subDays(fechaDestinoObj, 30), "yyyy-MM-dd");
+    const ultimoRegistroPrevio = await prisma.registroAsistencia.findFirst({
+      where: {
+        comercianteId: { in: comercianteIds },
+        fecha: { lt: fechaHasta, gte: fechaLimiteInferior },
+      },
+      orderBy: { fecha: "desc" },
+      select: { fecha: true },
+    });
+    const fechaOrigen = ultimoRegistroPrevio?.fecha ?? null;
 
     // Si no hay fecha previa, fechaOrigen es la misma fechaHasta
     const fechaBase = fechaOrigen || fechaHasta;
@@ -248,7 +243,7 @@ export async function POST(request: Request) {
         diasCubiertos: 1,
         totalPersistidos: nuevosDetalles.length,
       };
-    });
+    }, { maxWait: 15000, timeout: 60000 });
 
     return NextResponse.json(resultado);
   } catch (error) {

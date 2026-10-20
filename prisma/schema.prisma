@@ -124,6 +124,7 @@ model Puesto {
 
   @@index([naveId, codigo])
   @@index([naveId])
+  @@index([naveId, estado])
   @@map("puestos")
 }
 
@@ -148,6 +149,8 @@ model Comerciante {
 
   @@index([cedula])
   @@index([ciu])
+  @@index([estadoRegistro])
+  @@index([nave, estadoRegistro])
   @@map("comerciantes")
 }
 
@@ -173,6 +176,7 @@ model RegistroAsistencia {
   @@unique([comercianteId, fecha])
   @@index([fecha])
   @@index([puestoId])
+  @@index([fecha, puestoId])
   @@map("registros_asistencia")
 }
 
@@ -203,5 +207,6 @@ model SesionControlSupervisor {
   @@index([supervisorId])
   @@index([naveId])
   @@index([fechaJornada])
+  @@index([naveId, fechaJornada])
   @@map("sesiones_control_supervisor")
 }

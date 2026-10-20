@@ -8,6 +8,8 @@ declare global {
   var __epmma_cron_2am_initialized: boolean | undefined;
   var __epmma_last_2am_run_date: string | undefined;
   var __epmma_last_occupied_count: number | undefined;
+  var __epmma_last_sync_timestamp: number | undefined;
+  var __epmma_sync_in_flight: Promise<{ totalInicializados: number; fecha: string }> | undefined;
 }
 
 /**
@@ -44,7 +46,10 @@ export function obtenerHoraEcuador(): number {
  * NUNCA toca registros de fechas pasadas ni futuras, ni sobreescribe modificaciones
  * manuales realizadas en la jornada de hoy.
  */
-export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Promise<{
+export async function asegurarAsistenciaInicialDelDia(
+  fechaHoyStr?: string,
+  forzar: boolean = false
+): Promise<{
   totalInicializados: number;
   fecha: string;
 }> {
@@ -52,6 +57,38 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
   const hoyReal = obtenerFechaHoyEcuador();
   const hoyStr = fechaHoyStr && fechaHoyStr === hoyReal ? fechaHoyStr : hoyReal;
 
+  // 1. Fast-Path en memoria: Si no es forzado, la fecha coincide y pasaron < 60s de la última sincronización
+  const ahora = Date.now();
+  if (
+    !forzar &&
+    globalThis.__epmma_last_2am_run_date === hoyStr &&
+    globalThis.__epmma_last_sync_timestamp &&
+    ahora - globalThis.__epmma_last_sync_timestamp < 60_000
+  ) {
+    return { totalInicializados: 0, fecha: hoyStr };
+  }
+
+  // 2. Single-Flight Lock: Si ya hay una sincronización en vuelo y no es forzada, reutilizar la misma Promise
+  if (!forzar && globalThis.__epmma_sync_in_flight) {
+    return globalThis.__epmma_sync_in_flight;
+  }
+
+  const syncPromise = (async () => {
+    try {
+      return await ejecutarAsegurarAsistencia(hoyStr);
+    } finally {
+      globalThis.__epmma_sync_in_flight = undefined;
+    }
+  })();
+
+  globalThis.__epmma_sync_in_flight = syncPromise;
+  return syncPromise;
+}
+
+async function ejecutarAsegurarAsistencia(hoyStr: string): Promise<{
+  totalInicializados: number;
+  fecha: string;
+}> {
   // 1. Obtener todos los puestos ocupados con comerciantes habilitados
   const puestosOcupados = await prisma.puesto.findMany({
     where: {
@@ -67,6 +104,7 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
   });
 
   if (puestosOcupados.length === 0) {
+    globalThis.__epmma_last_sync_timestamp = Date.now();
     const hour = obtenerHoraEcuador();
     if (hour >= 2) {
       globalThis.__epmma_last_2am_run_date = hoyStr;
@@ -89,6 +127,7 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
 
   // Si todos los puestos ocupados ya tienen su registro hoy, finalizar en silencio sin escrituras innecesarias
   if (faltantes.length === 0) {
+    globalThis.__epmma_last_sync_timestamp = Date.now();
     const hour = obtenerHoraEcuador();
     if (hour >= 2) {
       globalThis.__epmma_last_2am_run_date = hoyStr;
@@ -178,6 +217,7 @@ export async function asegurarAsistenciaInicialDelDia(fechaHoyStr?: string): Pro
     }
   }
 
+  globalThis.__epmma_last_sync_timestamp = Date.now();
   const hour = obtenerHoraEcuador();
   if (hour >= 2) {
     globalThis.__epmma_last_2am_run_date = hoyStr;

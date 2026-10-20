@@ -262,24 +262,6 @@ export async function POST(request: Request) {
           ? `${userEjecutor.nombres} ${userEjecutor.apellidos}`
           : supervisorNombre || "Supervisor del Sistema";
 
-        // 2. Poblar nómina COMPLETA de la nave
-        const puestosOcupadosNave = await tx.puesto.findMany({
-          where: { naveId: nave.id, estado: "Ocupado" },
-          include: { comerciante: true },
-        });
-
-        const comIds = puestosOcupadosNave
-          .map((p) => p.comercianteId)
-          .filter((id): id is string => Boolean(id));
-
-        const registrosDia = await tx.registroAsistencia.findMany({
-          where: {
-            fecha,
-            comercianteId: { in: comIds },
-          },
-        });
-        const regMap = new Map(registrosDia.map((r) => [r.comercianteId, r]));
-
         const sesionExistente = await tx.sesionControlSupervisor.findFirst({
           where: {
             naveId: nave.id,
@@ -290,46 +272,94 @@ export async function POST(request: Request) {
         const detallesPrevios = Array.isArray(sesionExistente?.detallesComerciantes)
           ? (sesionExistente!.detallesComerciantes as unknown as DetalleComercianteControl[])
           : [];
-        const mapaPrevios = new Map(detallesPrevios.map((d) => [d.comercianteId, d]));
 
         const metodoModificado = sesionExistente?.esPersistencia
           ? "MODIFICADO_TRAS_PERSISTENCIA"
           : "MANUAL";
         const horaModificado = new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" });
 
-        const detallesFinales: DetalleComercianteControl[] = [];
+        let detallesFinales: DetalleComercianteControl[] = [];
 
-        for (const p of puestosOcupadosNave) {
-          const com = p.comerciante;
-          if (!com || com.estadoRegistro !== "Habilitado") continue;
+        if (sesionExistente && detallesPrevios.length > 0) {
+          // FAST-PATH: Si la sesión ya existe con nómina, actualizar solo el comerciante en memoria
+          let encontrado = false;
+          detallesFinales = detallesPrevios.map((d) => {
+            if (d.comercianteId === comercianteId) {
+              encontrado = true;
+              return {
+                ...d,
+                estado: estado as EstadoAsistencia,
+                metodo: metodoModificado,
+                horaRegistro: horaModificado,
+              };
+            }
+            return d;
+          });
 
-          if (com.idInterno === comercianteId) {
+          if (!encontrado) {
             detallesFinales.push({
               comercianteId,
-              ciu: com.ciu,
-              cedula: com.cedula,
-              contribuyente: com.contribuyente,
-              puesto: p.codigo,
+              ciu: comerciante.ciu,
+              cedula: comerciante.cedula,
+              contribuyente: comerciante.contribuyente,
+              puesto: puestoObj.codigo,
               estado: estado as EstadoAsistencia,
               metodo: metodoModificado,
               horaRegistro: horaModificado,
             });
-          } else {
-            const previo = mapaPrevios.get(com.idInterno);
-            if (previo) {
-              detallesFinales.push(previo);
-            } else {
-              const r = regMap.get(com.idInterno);
+          }
+        } else {
+          // SLOW-PATH: Cargar la nómina completa únicamente en la primera creación de la sesión del día
+          const puestosOcupadosNave = await tx.puesto.findMany({
+            where: { naveId: nave.id, estado: "Ocupado" },
+            include: { comerciante: true },
+          });
+
+          const comIds = puestosOcupadosNave
+            .map((p) => p.comercianteId)
+            .filter((id): id is string => Boolean(id));
+
+          const registrosDia = await tx.registroAsistencia.findMany({
+            where: {
+              fecha,
+              comercianteId: { in: comIds },
+            },
+          });
+          const regMap = new Map(registrosDia.map((r) => [r.comercianteId, r]));
+          const mapaPrevios = new Map(detallesPrevios.map((d) => [d.comercianteId, d]));
+
+          for (const p of puestosOcupadosNave) {
+            const com = p.comerciante;
+            if (!com || com.estadoRegistro !== "Habilitado") continue;
+
+            if (com.idInterno === comercianteId) {
               detallesFinales.push({
-                comercianteId: com.idInterno,
+                comercianteId,
                 ciu: com.ciu,
                 cedula: com.cedula,
                 contribuyente: com.contribuyente,
                 puesto: p.codigo,
-                estado: r?.estado ?? "Presente",
-                metodo: sesionExistente?.esPersistencia ? "PERSISTENCIA" : "MANUAL",
+                estado: estado as EstadoAsistencia,
+                metodo: metodoModificado,
                 horaRegistro: horaModificado,
               });
+            } else {
+              const previo = mapaPrevios.get(com.idInterno);
+              if (previo) {
+                detallesFinales.push(previo);
+              } else {
+                const r = regMap.get(com.idInterno);
+                detallesFinales.push({
+                  comercianteId: com.idInterno,
+                  ciu: com.ciu,
+                  cedula: com.cedula,
+                  contribuyente: com.contribuyente,
+                  puesto: p.codigo,
+                  estado: r?.estado ?? "Presente",
+                  metodo: sesionExistente?.esPersistencia ? "PERSISTENCIA" : "MANUAL",
+                  horaRegistro: horaModificado,
+                });
+              }
             }
           }
         }
@@ -387,7 +417,7 @@ export async function POST(request: Request) {
       }
 
       return reg;
-    });
+    }, { maxWait: 10000, timeout: 30000 });
 
     return NextResponse.json({ success: true, registro: registroActualizado });
   } catch (error) {

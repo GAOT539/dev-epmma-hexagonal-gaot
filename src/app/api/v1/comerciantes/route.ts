@@ -265,7 +265,7 @@ export async function POST(request: Request) {
     });
 
     if (puestoId) {
-      await asegurarAsistenciaInicialDelDia();
+      await asegurarAsistenciaInicialDelDia(undefined, true);
     }
 
     return NextResponse.json(resultado, { status: 201 });

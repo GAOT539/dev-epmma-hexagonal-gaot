@@ -2,6 +2,8 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
+import type { Prisma } from "@prisma/client";
+import crypto from "crypto";
 import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import {
@@ -166,9 +168,11 @@ export async function POST(request: Request) {
           },
         });
 
-        // 3. Crear puestos y comerciantes reales
+        // 3. Crear puestos y comerciantes reales por lotes
         let exitosos = 0;
         const errores: { fila: number; mensaje: string }[] = [];
+        const comerciantesBatch: Prisma.ComercianteCreateManyInput[] = [];
+        const puestosBatch: Prisma.PuestoCreateManyInput[] = [];
 
         for (let i = 0; i < registros.length; i++) {
           const reg = registros[i];
@@ -183,45 +187,44 @@ export async function POST(request: Request) {
           const ciuNormalizado =
             reg.ciu && reg.ciu !== "-" && reg.ciu.trim().length > 0 ? reg.ciu.trim() : "S/N";
 
-          // Crear puesto
+          const idInterno = crypto.randomUUID();
           const puestoId = crypto.randomUUID();
-          const puestoCreado = await tx.puesto.create({
-            data: {
-              id: puestoId,
-              codigo: codigoPuesto,
-              naveId: nuevaNave.id,
-              estado: "Ocupado",
-            },
+
+          comerciantesBatch.push({
+            idInterno,
+            ciu: ciuNormalizado,
+            cedula,
+            contribuyente: nombre,
+            actividad: reg.actividad || "General",
+            puestoId: codigoPuesto,
+            nave: nuevaNave.nombre,
+            estadoRegistro: "Habilitado",
+            creadoPor: "importador-catastro",
           });
 
-          // Crear comerciante
-          const comercianteCreado = await tx.comerciante.create({
-            data: {
-              ciu: ciuNormalizado,
-              cedula,
-              contribuyente: nombre,
-              actividad: reg.actividad || "General",
-              puestoId: codigoPuesto,
-              nave: nuevaNave.nombre,
-              estadoRegistro: "Habilitado",
-              creadoPor: "importador-catastro",
-            },
-          });
-
-          // Enlazar puesto con comerciante
-          await tx.puesto.update({
-            where: { id: puestoCreado.id },
-            data: { comercianteId: comercianteCreado.idInterno },
+          puestosBatch.push({
+            id: puestoId,
+            codigo: codigoPuesto,
+            naveId: nuevaNave.id,
+            estado: "Ocupado",
+            comercianteId: idInterno,
           });
 
           exitosos++;
         }
 
+        if (comerciantesBatch.length > 0) {
+          await tx.comerciante.createMany({ data: comerciantesBatch });
+        }
+        if (puestosBatch.length > 0) {
+          await tx.puesto.createMany({ data: puestosBatch });
+        }
+
         return { exitosos, errores, naveId: nuevaNave.id, nombreNave: nuevaNave.nombre };
-      });
+      }, { maxWait: 15000, timeout: 60000 });
 
       await sincronizarPuestosDeNaveEnBD(resultadoCreacion.naveId);
-      await asegurarAsistenciaInicialDelDia();
+      await asegurarAsistenciaInicialDelDia(undefined, true);
 
       return NextResponse.json({
         exitosos: resultadoCreacion.exitosos,
@@ -298,25 +301,45 @@ export async function POST(request: Request) {
         });
       }
 
-      // 3. Procesar asignaciones a puestos (existentes o agregados)
-      for (const asig of asignacionesOcupar) {
-        let comercianteIdFinal = asig.comercianteId;
+      // 3. Agrupar creación de nuevos comerciantes y nuevos puestos por lotes
+      const nuevosComerciantesData: Prisma.ComercianteCreateManyInput[] = [];
+      const nuevosPuestosData: Prisma.PuestoCreateManyInput[] = [];
 
+      for (const asig of asignacionesOcupar) {
         if (asig.esNuevoComerciante) {
-          const nuevoCom = await tx.comerciante.create({
-            data: {
-              ciu: asig.datosComerciante.ciu,
-              cedula: asig.datosComerciante.cedula,
-              contribuyente: asig.datosComerciante.contribuyente,
-              actividad: asig.datosComerciante.actividad,
-              puestoId: asig.puestoCodigo,
-              nave: asig.datosComerciante.nave,
-              estadoRegistro: "Habilitado",
-              creadoPor: "importador-reconciliacion",
-            },
+          nuevosComerciantesData.push({
+            idInterno: asig.comercianteId,
+            ciu: asig.datosComerciante.ciu,
+            cedula: asig.datosComerciante.cedula,
+            contribuyente: asig.datosComerciante.contribuyente,
+            actividad: asig.datosComerciante.actividad,
+            puestoId: asig.puestoCodigo,
+            nave: asig.datosComerciante.nave,
+            estadoRegistro: "Habilitado",
+            creadoPor: "importador-reconciliacion",
           });
-          comercianteIdFinal = nuevoCom.idInterno;
-        } else {
+        }
+        if (asig.esNuevoPuesto) {
+          nuevosPuestosData.push({
+            id: asig.puestoId,
+            codigo: asig.puestoCodigo,
+            naveId: naveExistente!.id,
+            estado: "Ocupado",
+            comercianteId: asig.comercianteId,
+          });
+        }
+      }
+
+      if (nuevosComerciantesData.length > 0) {
+        await tx.comerciante.createMany({ data: nuevosComerciantesData });
+      }
+      if (nuevosPuestosData.length > 0) {
+        await tx.puesto.createMany({ data: nuevosPuestosData });
+      }
+
+      // 4. Actualizar comerciantes y puestos existentes
+      for (const asig of asignacionesOcupar) {
+        if (!asig.esNuevoComerciante) {
           await tx.comerciante.update({
             where: { idInterno: asig.comercianteId },
             data: {
@@ -331,24 +354,12 @@ export async function POST(request: Request) {
           });
         }
 
-        if (asig.esNuevoPuesto) {
-          // Crear el puesto nuevo sin tocar los existentes
-          await tx.puesto.create({
-            data: {
-              id: asig.puestoId,
-              codigo: asig.puestoCodigo,
-              naveId: naveExistente!.id,
-              estado: "Ocupado",
-              comercianteId: comercianteIdFinal,
-            },
-          });
-        } else {
-          // Vincular el puesto existente sin alterar su código
+        if (!asig.esNuevoPuesto) {
           await tx.puesto.update({
             where: { id: asig.puestoId },
             data: {
               estado: "Ocupado",
-              comercianteId: comercianteIdFinal,
+              comercianteId: asig.comercianteId,
             },
           });
         }
@@ -365,10 +376,10 @@ export async function POST(request: Request) {
           limitePuestos: totalPuestosEnNave,
         },
       });
-    });
+    }, { maxWait: 15000, timeout: 60000 });
 
     await sincronizarPuestosDeNaveEnBD(naveExistente!.id);
-    await asegurarAsistenciaInicialDelDia();
+    await asegurarAsistenciaInicialDelDia(undefined, true);
 
     return NextResponse.json({
       exitosos: asignacionesOcupar.length,
