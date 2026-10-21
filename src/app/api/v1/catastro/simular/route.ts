@@ -10,7 +10,11 @@ import {
   expandirRegistrosMultiPuesto,
   generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
-import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
+import {
+  getAuthenticatedUser,
+  userCanAccessNave,
+  getAccessibleNaveIds,
+} from "@/infrastructure/auth/authorization";
 
 export async function POST(request: Request) {
   try {
@@ -130,14 +134,29 @@ export async function POST(request: Request) {
       }
     }
 
-    if (actor.rol === "SUPERVISOR" && (!naveExistente || !(await userCanAccessNave(request, naveExistente.id)))) {
-      return NextResponse.json({ error: "La nave no pertenece al supervisor autenticado." }, { status: 403 });
+    if (actor.rol === "SUPERVISOR") {
+      if (crearNuevaNave) {
+        return NextResponse.json(
+          { error: "Solo SUPERADMIN y TIC pueden crear nuevas naves." },
+          { status: 403 }
+        );
+      }
+      if (naveExistente && !(await userCanAccessNave(request, naveExistente.id))) {
+        return NextResponse.json(
+          { error: "La nave no pertenece al supervisor autenticado." },
+          { status: 403 }
+        );
+      }
     }
 
     // 2. Si la nave no fue encontrada y no se solicitó crear nueva nave
     if (!naveExistente && !crearNuevaNave) {
+      const accessibleNaveIds = await getAccessibleNaveIds(request);
       const navesDisponibles = await prisma.nave.findMany({
-        where: { estadoRegistro: { not: "Deshabilitado" } },
+        where: {
+          estadoRegistro: { not: "Deshabilitado" },
+          ...(accessibleNaveIds ? { id: { in: accessibleNaveIds } } : {}),
+        },
         select: { id: true, nombre: true, cantidadPuestos: true },
         orderBy: { nombre: "asc" },
       });

@@ -115,8 +115,19 @@ export async function POST(request: Request) {
       }
     }
 
-    if (actor.rol === "SUPERVISOR" && (!naveExistente || !(await userCanAccessNave(request, naveExistente.id)))) {
-      return NextResponse.json({ error: "La nave no pertenece al supervisor autenticado." }, { status: 403 });
+    if (actor.rol === "SUPERVISOR") {
+      if (crearNuevaNave || modoUnificacion === "SEPARAR") {
+        return NextResponse.json(
+          { error: "Solo SUPERADMIN y TIC pueden crear nuevas naves." },
+          { status: 403 }
+        );
+      }
+      if (naveExistente && !(await userCanAccessNave(request, naveExistente.id))) {
+        return NextResponse.json(
+          { error: "La nave no pertenece al supervisor autenticado." },
+          { status: 403 }
+        );
+      }
     }
 
     // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave

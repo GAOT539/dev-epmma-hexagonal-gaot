@@ -37,6 +37,7 @@ export async function GET(request: Request) {
         await sincronizarPuestosDeNaveEnBD(d.id);
       }
       naves = await prisma.nave.findMany({
+        where: accessibleNaveIds ? { id: { in: accessibleNaveIds } } : undefined,
         include: { puestos: true },
         orderBy: { creadoEn: "asc" },
       });

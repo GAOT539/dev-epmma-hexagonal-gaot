@@ -67,6 +67,7 @@ export async function POST(request: Request) {
       success: true,
       mensaje: `Se ha generado y enviado una contraseña temporal a ${destinoCorreo}.`,
       correoDestino: destinoCorreo,
+      correoEnviado: destinoCorreo,
       modo: resultadoEnvio.modo,
     });
   } catch (error) {

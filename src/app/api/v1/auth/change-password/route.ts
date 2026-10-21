@@ -65,18 +65,26 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!currentPassword) {
-      return NextResponse.json(
-        { success: false, error: "Debe ingresar la contraseña actual." },
-        { status: 400 }
-      );
-    }
-    const match = await verifyPasswordHash(currentPassword, usuario.passwordHash);
-    if (!match) {
-      return NextResponse.json(
-        { success: false, error: "La contraseña actual es incorrecta." },
-        { status: 400 }
-      );
+    const esAdminCambiandoTercero =
+      Boolean(targetUserId && targetUserId !== userId && ["SUPERADMIN", "TIC"].includes(actorRole || ""));
+    const esPrimerIngresoObligatorio =
+      usuario.id === userId && usuario.mustChangePassword === true;
+
+    // Solo exigir y verificar currentPassword si es cambio voluntario (no primer ingreso ni administración)
+    if (!esPrimerIngresoObligatorio && !esAdminCambiandoTercero) {
+      if (!currentPassword) {
+        return NextResponse.json(
+          { success: false, error: "Debe ingresar la contraseña actual." },
+          { status: 400 }
+        );
+      }
+      const match = await verifyPasswordHash(currentPassword, usuario.passwordHash);
+      if (!match) {
+        return NextResponse.json(
+          { success: false, error: "La contraseña actual es incorrecta." },
+          { status: 400 }
+        );
+      }
     }
 
     // Validar complejidad de la nueva clave

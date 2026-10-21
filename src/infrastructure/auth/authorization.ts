@@ -1,7 +1,25 @@
 import { prisma } from "@/infrastructure/database/prisma";
+import { AUTH_COOKIE_NAME, verificarTokenJwt } from "@/infrastructure/auth/jwt.utils";
 
 export async function getAuthenticatedUser(request: Request) {
-  const userId = request.headers.get("x-user-id");
+  let userId = request.headers.get("x-user-id");
+
+  if (!userId) {
+    const authHeader = request.headers.get("Authorization");
+    let token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
+    if (!token) {
+      const cookieHeader = request.headers.get("cookie") || "";
+      const match = cookieHeader.match(new RegExp(`(?:^|; )${AUTH_COOKIE_NAME}=([^;]*)`));
+      token = match ? decodeURIComponent(match[1]) : null;
+    }
+    if (token) {
+      const payload = await verificarTokenJwt(token);
+      if (payload?.sub) {
+        userId = payload.sub;
+      }
+    }
+  }
+
   if (!userId) return null;
 
   return prisma.usuario.findUnique({
@@ -24,14 +42,25 @@ export async function userCanAccessNave(request: Request, naveId: string): Promi
 
   const nave = await prisma.nave.findUnique({
     where: { id: naveId },
-    select: { id: true, nombre: true },
+    select: { id: true, nombre: true, supervisores: true },
   });
   if (!nave) return false;
 
   const asignadas = Array.isArray(user.navesAsignadas)
-    ? (user.navesAsignadas as string[])
+    ? (user.navesAsignadas as string[]).map((s) => String(s).normalize("NFC").trim().toLowerCase())
     : [];
-  return asignadas.includes(nave.id) || asignadas.includes(nave.nombre);
+
+  const idNorm = nave.id.normalize("NFC").trim().toLowerCase();
+  const nombreNorm = nave.nombre.normalize("NFC").trim().toLowerCase();
+  const matchAsignadas = asignadas.includes(idNorm) || asignadas.includes(nombreNorm);
+
+  const nombreCompleto = `${user.nombres} ${user.apellidos}`.trim().toLowerCase();
+  const supervisoresNave = Array.isArray(nave.supervisores)
+    ? (nave.supervisores as string[]).map((s) => String(s).trim().toLowerCase())
+    : [];
+  const matchSupervisores = supervisoresNave.includes(nombreCompleto);
+
+  return matchAsignadas || matchSupervisores;
 }
 
 export async function userCanAccessComerciante(
@@ -65,12 +94,30 @@ export async function getAccessibleNaveIds(request: Request): Promise<string[] |
   const user = await getAuthenticatedUser(request);
   if (!user || user.estado !== "Habilitado") return [];
   if (user.rol !== "SUPERVISOR") return null;
+
   const asignadas = Array.isArray(user.navesAsignadas)
-    ? (user.navesAsignadas as string[])
+    ? (user.navesAsignadas as string[]).map((s) => String(s).normalize("NFC").trim().toLowerCase())
     : [];
-  const naves = await prisma.nave.findMany({
-    where: { OR: [{ id: { in: asignadas } }, { nombre: { in: asignadas } }] },
-    select: { id: true },
+
+  const nombreCompleto = `${user.nombres} ${user.apellidos}`.trim().toLowerCase();
+
+  const todasNaves = await prisma.nave.findMany({
+    where: { estadoRegistro: { not: "Deshabilitado" } },
+    select: { id: true, nombre: true, supervisores: true },
   });
-  return naves.map((nave) => nave.id);
+
+  return todasNaves
+    .filter((nave) => {
+      const idNorm = nave.id.normalize("NFC").trim().toLowerCase();
+      const nombreNorm = nave.nombre.normalize("NFC").trim().toLowerCase();
+      const matchAsignadas = asignadas.includes(idNorm) || asignadas.includes(nombreNorm);
+
+      const supervisoresNave = Array.isArray(nave.supervisores)
+        ? (nave.supervisores as string[]).map((s) => String(s).trim().toLowerCase())
+        : [];
+      const matchSupervisores = supervisoresNave.includes(nombreCompleto);
+
+      return matchAsignadas || matchSupervisores;
+    })
+    .map((nave) => nave.id);
 }

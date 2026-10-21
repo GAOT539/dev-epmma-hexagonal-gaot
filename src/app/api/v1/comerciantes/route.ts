@@ -114,15 +114,28 @@ export async function GET(request: Request) {
     }
 
     // Consulta general de comerciantes activos
+    let whereGeneral: Prisma.ComercianteWhereInput = {
+      estadoRegistro: { not: "Deshabilitado" },
+    };
+
+    if (accessibleNaveIds) {
+      const navesAutorizadas = await prisma.nave.findMany({
+        where: { id: { in: accessibleNaveIds } },
+        select: { id: true, nombre: true },
+      });
+      const nombresNavesAutorizadas = navesAutorizadas.flatMap((n) => [n.id, n.nombre]);
+
+      whereGeneral = {
+        ...whereGeneral,
+        OR: [
+          { puesto: { naveId: { in: accessibleNaveIds } } },
+          { nave: { in: nombresNavesAutorizadas } },
+        ],
+      };
+    }
+
     const comerciantes = await prisma.comerciante.findMany({
-      where: {
-        estadoRegistro: { not: "Deshabilitado" },
-        ...(accessibleNaveIds
-          ? {
-              puesto: { naveId: { in: accessibleNaveIds } },
-            }
-          : {}),
-      },
+      where: whereGeneral,
       orderBy: { creadoEn: "desc" },
     });
 
