@@ -30,6 +30,19 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { currentPassword, newPassword, targetUserId } = body;
 
+    // Blindaje contra IDOR: Si se especifica un targetUserId ajeno, exigir rol SUPERADMIN o TIC
+    if (targetUserId && targetUserId !== userId) {
+      if (!["SUPERADMIN", "TIC"].includes(actorRole || "")) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Acceso denegado. No tiene permisos para modificar la contraseña de otro usuario.",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     const finalUserId =
       targetUserId && targetUserId !== userId && ["SUPERADMIN", "TIC"].includes(actorRole || "")
         ? targetUserId

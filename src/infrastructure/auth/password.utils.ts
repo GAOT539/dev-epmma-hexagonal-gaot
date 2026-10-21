@@ -43,12 +43,33 @@ export function validatePassword(password: string): {
 
 /** Genera una contraseña temporal aleatoria segura que cumple todas las reglas de complejidad */
 export function generarPasswordTemporal(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
-  let password = "EpEma!";
-  for (let index = password.length; index < 18; index++) {
-    password += alphabet[randomInt(alphabet.length)];
+  const uppers = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const lowers = "abcdefghijkmnopqrstuvwxyz";
+  const digits = "23456789";
+  const specials = "!@#$%&*";
+  const all = uppers + lowers + digits + specials;
+
+  // Garantizar al menos un carácter de cada grupo exigido por la política de seguridad
+  const chars = [
+    uppers[randomInt(uppers.length)],
+    lowers[randomInt(lowers.length)],
+    digits[randomInt(digits.length)],
+    specials[randomInt(specials.length)],
+  ];
+
+  for (let i = chars.length; i < 16; i++) {
+    chars.push(all[randomInt(all.length)]);
   }
-  return password;
+
+  // Barajado Fisher-Yates con randomInt criptográfico para máxima entropía
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    const temp = chars[i];
+    chars[i] = chars[j];
+    chars[j] = temp;
+  }
+
+  return chars.join("");
 }
 
 export {

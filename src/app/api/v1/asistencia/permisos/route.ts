@@ -35,6 +35,7 @@ async function actualizarSesionControl(
     detalle.comercianteId === comercianteId ? { ...detalle, estado } : detalle
   );
   const presentes = actualizados.filter((detalle) => detalle.estado === "Presente").length;
+  const ausentes = actualizados.filter((detalle) => detalle.estado === "Ausente").length;
   const permisos = actualizados.filter((detalle) => detalle.estado === "Permiso").length;
   await tx.sesionControlSupervisor.update({
     where: { id: sesion.id },
@@ -43,6 +44,7 @@ async function actualizarSesionControl(
       resumen: {
         ...(sesion.resumen as object),
         presentes,
+        ausentes,
         permisos,
       } as unknown as Prisma.InputJsonValue,
     },
@@ -217,14 +219,20 @@ export async function DELETE(request: Request) {
       const hoy = obtenerFechaHoyEcuador();
       const registroHoy = registrosConPermiso.find((reg) => reg.fecha === hoy);
       if (registroHoy) {
-        const registroActual = await tx.registroAsistencia.findUnique({ where: { id: registroHoy.id } });
-        await actualizarSesionControl(
-          tx,
-          comercianteId,
-          registroHoy.puestoId,
-          hoy,
-          registroActual?.estado === "Permiso" ? "Permiso" : "Presente"
-        );
+        const puestoActual = await tx.puesto.findUnique({
+          where: { id: registroHoy.puestoId },
+          select: { naveId: true },
+        });
+        if (puestoActual) {
+          const registroActual = await tx.registroAsistencia.findUnique({ where: { id: registroHoy.id } });
+          await actualizarSesionControl(
+            tx,
+            comercianteId,
+            puestoActual.naveId,
+            hoy,
+            registroActual?.estado === "Permiso" ? "Permiso" : "Presente"
+          );
+        }
       }
     });
 

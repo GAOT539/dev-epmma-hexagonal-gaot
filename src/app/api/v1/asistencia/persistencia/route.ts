@@ -215,6 +215,8 @@ export async function POST(request: Request) {
         await tx.sesionControlSupervisor.update({
           where: { id: sesionExistente.id },
           data: {
+            supervisorId: actor.id,
+            supervisorNombre: `${actor.nombres} ${actor.apellidos}`.trim() || supervisorNombre,
             esPersistencia: true,
             fechaOrigenPersistencia: fechaBase,
             comentarioPersistencia: comentario,
