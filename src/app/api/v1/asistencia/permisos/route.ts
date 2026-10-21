@@ -5,6 +5,8 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { PermisoDetalle } from "@/domain/models/asistencia.model";
 import { parseISO, format, addDays, isBefore, isEqual } from "date-fns";
+import { userCanAccessComerciante } from "@/infrastructure/auth/authorization";
+import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 
 function generarRangoFechas(fechaInicio: string, fechaFin: string): string[] {
   const fechas: string[] = [];
@@ -17,6 +19,34 @@ function generarRangoFechas(fechaInicio: string, fechaFin: string): string[] {
   }
 
   return fechas;
+}
+
+async function actualizarSesionControl(
+  tx: Prisma.TransactionClient,
+  comercianteId: string,
+  naveId: string,
+  fecha: string,
+  estado: "Permiso" | "Presente"
+) {
+  const sesion = await tx.sesionControlSupervisor.findFirst({ where: { naveId, fechaJornada: fecha } });
+  if (!sesion || !Array.isArray(sesion.detallesComerciantes)) return;
+  const detalles = sesion.detallesComerciantes as unknown as Array<Record<string, unknown>>;
+  const actualizados = detalles.map((detalle) =>
+    detalle.comercianteId === comercianteId ? { ...detalle, estado } : detalle
+  );
+  const presentes = actualizados.filter((detalle) => detalle.estado === "Presente").length;
+  const permisos = actualizados.filter((detalle) => detalle.estado === "Permiso").length;
+  await tx.sesionControlSupervisor.update({
+    where: { id: sesion.id },
+    data: {
+      detallesComerciantes: actualizados as unknown as Prisma.InputJsonValue,
+      resumen: {
+        ...(sesion.resumen as object),
+        presentes,
+        permisos,
+      } as unknown as Prisma.InputJsonValue,
+    },
+  });
 }
 
 export async function POST(request: Request) {
@@ -44,19 +74,27 @@ export async function POST(request: Request) {
     if (!comerciante) {
       return NextResponse.json({ error: "Comerciante no encontrado." }, { status: 404 });
     }
+    if (!(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece a una nave asignada." }, { status: 403 });
+    }
 
     // Buscar puesto
-    let puesto = await prisma.puesto.findFirst({
-      where: {
-        OR: [
-          { comercianteId: comerciante.idInterno },
-          ...(comerciante.puestoId ? [{ codigo: comerciante.puestoId }] : []),
-        ],
-      },
-    });
+    let puesto = await prisma.puesto.findFirst({ where: { comercianteId: comerciante.idInterno } });
+    if (!puesto && comerciante.puestoId && comerciante.nave) {
+      puesto = await prisma.puesto.findFirst({
+        where: {
+          codigo: comerciante.puestoId,
+          nave: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+        },
+      });
+    }
 
     if (!puesto) {
-      const nave = await prisma.nave.findFirst();
+      const nave = comerciante.nave
+        ? await prisma.nave.findFirst({
+            where: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+          })
+        : null;
       if (!nave) return NextResponse.json({ error: "No hay naves en el sistema." }, { status: 400 });
       puesto = await prisma.puesto.create({
         data: {
@@ -109,6 +147,10 @@ export async function POST(request: Request) {
           },
         });
       }
+      const hoy = obtenerFechaHoyEcuador();
+      if (diasRango.includes(hoy)) {
+        await actualizarSesionControl(tx, comercianteId, puesto!.naveId, hoy, "Permiso");
+      }
     });
 
     return NextResponse.json(nuevoPermiso, { status: 201 });
@@ -129,6 +171,9 @@ export async function DELETE(request: Request) {
         { error: "comercianteId y permisoId son obligatorios." },
         { status: 400 }
       );
+    }
+    if (!(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece a una nave asignada." }, { status: 403 });
     }
 
     // Buscar todos los registros del comerciante que contengan este permiso
@@ -169,6 +214,18 @@ export async function DELETE(request: Request) {
           },
         });
       }
+      const hoy = obtenerFechaHoyEcuador();
+      const registroHoy = registrosConPermiso.find((reg) => reg.fecha === hoy);
+      if (registroHoy) {
+        const registroActual = await tx.registroAsistencia.findUnique({ where: { id: registroHoy.id } });
+        await actualizarSesionControl(
+          tx,
+          comercianteId,
+          registroHoy.puestoId,
+          hoy,
+          registroActual?.estado === "Permiso" ? "Permiso" : "Presente"
+        );
+      }
     });
 
     return NextResponse.json({ success: true, message: "Permiso eliminado y jornadas revertidas a Presente." });
@@ -176,4 +233,5 @@ export async function DELETE(request: Request) {
     console.error("Error en DELETE /api/v1/asistencia/permisos:", error);
     return NextResponse.json({ error: "Error al eliminar el permiso." }, { status: 500 });
   }
+
 }

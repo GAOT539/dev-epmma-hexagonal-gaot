@@ -1,6 +1,7 @@
 // ── Infraestructura: Utilidades de Criptografía de Contraseñas ───────────────
 
 import bcrypt from "bcryptjs";
+import { randomInt } from "node:crypto";
 
 const SALT_ROUNDS = 10;
 
@@ -42,9 +43,12 @@ export function validatePassword(password: string): {
 
 /** Genera una contraseña temporal aleatoria segura que cumple todas las reglas de complejidad */
 export function generarPasswordTemporal(): string {
-  const base = "EpEma2026*";
-  const digits = Math.floor(1000 + Math.random() * 9000).toString();
-  return base + digits;
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  let password = "EpEma!";
+  for (let index = password.length; index < 18; index++) {
+    password += alphabet[randomInt(alphabet.length)];
+  }
+  return password;
 }
 
 export {

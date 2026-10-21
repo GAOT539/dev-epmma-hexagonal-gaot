@@ -17,6 +17,7 @@ import {
   expandirRegistrosMultiPuesto,
   generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
 
 export async function POST(request: Request) {
   try {
@@ -33,6 +34,10 @@ export async function POST(request: Request) {
         { exitosos: 0, errores: [{ fila: 0, mensaje: "No se proporcionaron registros válidos." }] },
         { status: 400 }
       );
+    }
+    const actor = await getAuthenticatedUser(request);
+    if (!actor) {
+      return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
     }
 
     const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
@@ -108,6 +113,10 @@ export async function POST(request: Request) {
             n.id === detectadaSlug
         ) || null;
       }
+    }
+
+    if (actor.rol === "SUPERVISOR" && (!naveExistente || !(await userCanAccessNave(request, naveExistente.id)))) {
+      return NextResponse.json({ error: "La nave no pertenece al supervisor autenticado." }, { status: 403 });
     }
 
     // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave

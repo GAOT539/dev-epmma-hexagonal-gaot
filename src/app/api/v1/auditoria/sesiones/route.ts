@@ -9,6 +9,7 @@ import type {
   ResumenSesionControl,
   DetalleComercianteControl,
 } from "@/domain/models/auditoria.model";
+import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
 
 export async function GET(request: Request) {
   try {
@@ -81,14 +82,25 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body: SesionControlSupervisor = await request.json();
+    const actor = await getAuthenticatedUser(request);
+    if (!actor) {
+      return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
+    }
+    if (!(await userCanAccessNave(request, body.naveId))) {
+      return NextResponse.json({ error: "La nave no pertenece al ámbito autorizado." }, { status: 403 });
+    }
+    const nave = await prisma.nave.findUnique({ where: { id: body.naveId }, select: { nombre: true } });
+    if (!nave) {
+      return NextResponse.json({ error: "Nave no encontrada." }, { status: 404 });
+    }
 
     const created = await prisma.sesionControlSupervisor.create({
       data: {
         id: body.id,
-        supervisorId: body.supervisorId,
-        supervisorNombre: body.supervisorNombre,
+        supervisorId: actor.id,
+        supervisorNombre: `${actor.nombres} ${actor.apellidos}`.trim(),
         naveId: body.naveId,
-        naveNombre: body.naveNombre,
+        naveNombre: nave.nombre,
         fechaJornada: body.fechaJornada,
         timestampInicio: body.timestampInicio ? new Date(body.timestampInicio) : new Date(),
         accion: body.accion,

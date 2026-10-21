@@ -10,6 +10,7 @@ import {
   asegurarAsistenciaInicialDelDia,
   iniciarCronAsistenciaDiaria2AM,
 } from "@/infrastructure/database/daily-attendance.service";
+import { getAccessibleNaveIds, userCanAccessComerciante, userCanAccessNave } from "@/infrastructure/auth/authorization";
 
 export async function GET(request: Request) {
   try {
@@ -38,6 +39,16 @@ export async function GET(request: Request) {
     const naveId = searchParams.get("naveId");
     const fechaInicio = searchParams.get("fechaInicio");
     let fechaFin = searchParams.get("fechaFin");
+    const accessibleNaveIds = await getAccessibleNaveIds(request);
+    if (accessibleNaveIds?.length === 0) {
+      return NextResponse.json([]);
+    }
+    if (naveId && !(await userCanAccessNave(request, naveId))) {
+      return NextResponse.json({ error: "La nave no pertenece al ámbito autorizado." }, { status: 403 });
+    }
+    if (comercianteId && !(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece al ámbito autorizado." }, { status: 403 });
+    }
 
     // Recortar fechaFin a hoyStr para jamás consultar días futuros
     if (fechaFin && fechaFin > hoyStr) {
@@ -75,7 +86,7 @@ export async function GET(request: Request) {
     // Caso 3: Nave específica en un rango de fechas
     if (naveId && fechaInicio && fechaFin) {
       const puestosNave = await prisma.puesto.findMany({
-        where: { naveId },
+        where: { naveId: naveId! },
         select: { comercianteId: true },
       });
       const comercianteIds = puestosNave
@@ -95,6 +106,18 @@ export async function GET(request: Request) {
 
     // Caso 4: Rango global de fechas
     if (fechaInicio && fechaFin) {
+      if (accessibleNaveIds) {
+        const puestos = await prisma.puesto.findMany({
+          where: { naveId: { in: accessibleNaveIds } },
+          select: { comercianteId: true },
+        });
+        const ids = puestos.map((puesto) => puesto.comercianteId).filter((id): id is string => Boolean(id));
+        const registros = await prisma.registroAsistencia.findMany({
+          where: { comercianteId: { in: ids }, fecha: { gte: fechaInicio, lte: fechaFin } },
+          orderBy: { fecha: "asc" },
+        });
+        return NextResponse.json(registros);
+      }
       const registros = await prisma.registroAsistencia.findMany({
         where: {
           fecha: { gte: fechaInicio, lte: fechaFin },
@@ -112,7 +135,21 @@ export async function GET(request: Request) {
       }
 
       const registros = await prisma.registroAsistencia.findMany({
-        where: { fecha },
+        where: accessibleNaveIds
+          ? {
+              fecha,
+              comercianteId: {
+                in: (
+                  await prisma.puesto.findMany({
+                    where: { naveId: { in: accessibleNaveIds } },
+                    select: { comercianteId: true },
+                  })
+                )
+                  .map((puesto) => puesto.comercianteId)
+                  .filter((id): id is string => Boolean(id)),
+              },
+            }
+          : { fecha },
       });
 
       return NextResponse.json(registros);
@@ -162,19 +199,27 @@ export async function POST(request: Request) {
     if (!comerciante) {
       return NextResponse.json({ error: "Comerciante no encontrado." }, { status: 404 });
     }
+    if (!(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece a una nave asignada." }, { status: 403 });
+    }
 
     // Buscar el puesto del comerciante
-    let puestoObj = await prisma.puesto.findFirst({
-      where: {
-        OR: [
-          { comercianteId: comerciante.idInterno },
-          ...(comerciante.puestoId ? [{ codigo: comerciante.puestoId }] : []),
-        ],
-      },
-    });
+    let puestoObj = await prisma.puesto.findFirst({ where: { comercianteId: comerciante.idInterno } });
+    if (!puestoObj && comerciante.puestoId && comerciante.nave) {
+      puestoObj = await prisma.puesto.findFirst({
+        where: {
+          codigo: comerciante.puestoId,
+          nave: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+        },
+      });
+    }
 
     if (!puestoObj) {
-      const naveDefecto = await prisma.nave.findFirst();
+      const naveDefecto = comerciante.nave
+        ? await prisma.nave.findFirst({
+            where: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+          })
+        : null;
       if (!naveDefecto) {
         return NextResponse.json({ error: "No existen naves registradas en el sistema." }, { status: 400 });
       }

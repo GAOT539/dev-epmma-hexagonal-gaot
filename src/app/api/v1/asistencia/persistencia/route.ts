@@ -7,6 +7,7 @@ import type { PermisoDetalle } from "@/domain/models/asistencia.model";
 import type { DetalleComercianteControl } from "@/domain/models/auditoria.model";
 import { parseISO, subDays, format, isAfter, isBefore, isEqual } from "date-fns";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
+import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
 
 export async function POST(request: Request) {
   try {
@@ -31,6 +32,13 @@ export async function POST(request: Request) {
         { error: "naveId y fechaHasta son requeridos." },
         { status: 400 }
       );
+    }
+    if (!(await userCanAccessNave(request, naveId))) {
+      return NextResponse.json({ error: "La nave no pertenece al ámbito autorizado." }, { status: 403 });
+    }
+    const actor = await getAuthenticatedUser(request);
+    if (!actor) {
+      return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
     }
 
     const nave = await prisma.nave.findUnique({
@@ -198,10 +206,6 @@ export async function POST(request: Request) {
         permisos,
       };
 
-      const supervisor = await tx.usuario.findFirst({
-        where: { rol: "SUPERVISOR", estado: "Habilitado" },
-      });
-
       const etiquetas = ["CON_PERSISTENCIA"];
       if (fechaOrigen !== fechaHasta) {
         etiquetas.push("EN_FECHA");
@@ -222,8 +226,8 @@ export async function POST(request: Request) {
       } else {
         await tx.sesionControlSupervisor.create({
           data: {
-            supervisorId: supervisor ? supervisor.id : "u-super",
-            supervisorNombre: supervisorNombre,
+            supervisorId: actor.id,
+            supervisorNombre: `${actor.nombres} ${actor.apellidos}`.trim() || supervisorNombre,
             naveId: nave.id,
             naveNombre: nave.nombre,
             fechaJornada: fechaHasta,

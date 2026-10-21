@@ -5,6 +5,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { ObservacionDetalle } from "@/domain/models/asistencia.model";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
+import { userCanAccessComerciante } from "@/infrastructure/auth/authorization";
 
 export async function POST(request: Request) {
   try {
@@ -52,19 +53,27 @@ export async function POST(request: Request) {
     if (!comerciante) {
       return NextResponse.json({ error: "Comerciante no encontrado." }, { status: 404 });
     }
+    if (!(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece a una nave asignada." }, { status: 403 });
+    }
 
     // Buscar puesto
-    let puesto = await prisma.puesto.findFirst({
-      where: {
-        OR: [
-          { comercianteId: comerciante.idInterno },
-          ...(comerciante.puestoId ? [{ codigo: comerciante.puestoId }] : []),
-        ],
-      },
-    });
+    let puesto = await prisma.puesto.findFirst({ where: { comercianteId: comerciante.idInterno } });
+    if (!puesto && comerciante.puestoId && comerciante.nave) {
+      puesto = await prisma.puesto.findFirst({
+        where: {
+          codigo: comerciante.puestoId,
+          nave: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+        },
+      });
+    }
 
     if (!puesto) {
-      const nave = await prisma.nave.findFirst();
+      const nave = comerciante.nave
+        ? await prisma.nave.findFirst({
+            where: { OR: [{ id: comerciante.nave }, { nombre: comerciante.nave }] },
+          })
+        : null;
       if (!nave) {
         return NextResponse.json({ error: "No hay naves en el sistema." }, { status: 400 });
       }
@@ -142,6 +151,9 @@ export async function DELETE(request: Request) {
         { error: "comercianteId, fecha y observacionId son requeridos." },
         { status: 400 }
       );
+    }
+    if (!(await userCanAccessComerciante(request, comercianteId))) {
+      return NextResponse.json({ error: "El comerciante no pertenece a una nave asignada." }, { status: 403 });
     }
 
     const registro = await prisma.registroAsistencia.findUnique({

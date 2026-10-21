@@ -5,11 +5,14 @@ import {
   asegurarColacionEspanolEnBD,
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const accessibleNaveIds = await getAccessibleNaveIds(request);
     const [navesRaw, supervisoresUsuarios] = await Promise.all([
       prisma.nave.findMany({
+        where: accessibleNaveIds ? { id: { in: accessibleNaveIds } } : undefined,
         include: { puestos: true },
         orderBy: { creadoEn: "asc" },
       }),

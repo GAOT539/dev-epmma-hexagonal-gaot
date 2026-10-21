@@ -68,8 +68,6 @@ export async function POST(request: Request) {
       mensaje: `Se ha generado y enviado una contraseña temporal a ${destinoCorreo}.`,
       correoDestino: destinoCorreo,
       modo: resultadoEnvio.modo,
-      // Solo en modo desarrollo exponemos la clave para facilidad de pruebas
-      ...(resultadoEnvio.modo === "desarrollo" ? { tempPasswordDev: tempPassword } : {}),
     });
   } catch (error) {
     console.error("Error en POST /api/v1/auth/forgot-password:", error);

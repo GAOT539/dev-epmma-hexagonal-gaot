@@ -16,19 +16,24 @@ export async function POST(request: Request) {
     const token = cookieStore.get(AUTH_COOKIE_NAME)?.value;
 
     let userId: string | null = null;
-
-    if (token) {
-      const payload = await verificarTokenJwt(token);
+    let actorRole: string | null = null;
+    const bearerToken = request.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+    const verifiedToken = token || bearerToken;
+    if (verifiedToken) {
+      const payload = await verificarTokenJwt(verifiedToken);
       if (payload?.sub) {
         userId = payload.sub;
+        actorRole = payload.rol;
       }
     }
 
     const body = await request.json();
     const { currentPassword, newPassword, targetUserId } = body;
 
-    // Permitir targetUserId si no hay cookie pero viene especificado o si hay sesión
-    const finalUserId = userId || targetUserId;
+    const finalUserId =
+      targetUserId && targetUserId !== userId && ["SUPERADMIN", "TIC"].includes(actorRole || "")
+        ? targetUserId
+        : userId;
     if (!finalUserId) {
       return NextResponse.json(
         { success: false, error: "No hay sesión activa ni usuario identificado." },
@@ -47,21 +52,18 @@ export async function POST(request: Request) {
       );
     }
 
-    // Si no está obligado a cambiarla en primer login, verificar la clave actual
-    if (!usuario.mustChangePassword) {
-      if (!currentPassword) {
-        return NextResponse.json(
-          { success: false, error: "Debe ingresar la contraseña actual." },
-          { status: 400 }
-        );
-      }
-      const match = await verifyPasswordHash(currentPassword, usuario.passwordHash);
-      if (!match) {
-        return NextResponse.json(
-          { success: false, error: "La contraseña actual es incorrecta." },
-          { status: 400 }
-        );
-      }
+    if (!currentPassword) {
+      return NextResponse.json(
+        { success: false, error: "Debe ingresar la contraseña actual." },
+        { status: 400 }
+      );
+    }
+    const match = await verifyPasswordHash(currentPassword, usuario.passwordHash);
+    if (!match) {
+      return NextResponse.json(
+        { success: false, error: "La contraseña actual es incorrecta." },
+        { status: 400 }
+      );
     }
 
     // Validar complejidad de la nueva clave

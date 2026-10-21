@@ -5,6 +5,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
 
 export async function GET(request: Request) {
   try {
@@ -12,11 +13,16 @@ export async function GET(request: Request) {
     const puestoId = searchParams.get("puestoId");
     const puestosNave = searchParams.get("puestosNave");
     const naveParam = searchParams.get("nave");
+    const accessibleNaveIds = await getAccessibleNaveIds(request);
+    if (accessibleNaveIds?.length === 0) return NextResponse.json([]);
 
     // Consulta de puestos por nave
     if (puestosNave) {
       const puestos = await prisma.puesto.findMany({
-        where: { naveId: puestosNave },
+        where: {
+          naveId: puestosNave,
+          ...(accessibleNaveIds ? { naveId: { in: accessibleNaveIds } } : {}),
+        },
       });
 
       const getCategoriaPeso = (codigo: string): number => {
@@ -111,6 +117,11 @@ export async function GET(request: Request) {
     const comerciantes = await prisma.comerciante.findMany({
       where: {
         estadoRegistro: { not: "Deshabilitado" },
+        ...(accessibleNaveIds
+          ? {
+              puesto: { naveId: { in: accessibleNaveIds } },
+            }
+          : {}),
       },
       orderBy: { creadoEn: "desc" },
     });
