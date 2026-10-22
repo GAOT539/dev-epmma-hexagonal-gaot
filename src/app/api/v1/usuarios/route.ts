@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import { hashPassword } from "@/infrastructure/auth/password.utils";
 import type { Rol, EstadoUsuario, Prisma } from "@prisma/client";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
   try {
@@ -34,7 +35,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json(sanitizados);
   } catch (error) {
-    console.error("Error en GET /api/v1/usuarios:", error);
+    logError("API", "Error en GET /api/v1/usuarios", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al obtener usuarios." }, { status: 500 });
   }
 }
@@ -120,7 +130,16 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error en POST /api/v1/usuarios:", error);
+    logError("API", "Error en POST /api/v1/usuarios", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error interno al crear usuario." }, { status: 500 });
   }
 }

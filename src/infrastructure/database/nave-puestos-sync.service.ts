@@ -1,6 +1,7 @@
 // ── Servicio de Auto-Reconciliación y Sincronización de Puestos de Nave en BD ──
 
 import { prisma } from "./prisma";
+import { logInfo, logWarn } from "@/infrastructure/logger/system-logger";
 export {
   descomponerCodigoPuesto,
   sonCodigosPuestosEquivalentes,
@@ -68,21 +69,22 @@ export async function asegurarColacionEspanolEnBD(forzar: boolean = false): Prom
       await prisma.$executeRawUnsafe(
         "ALTER TABLE `naves` MODIFY `nombre` VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci NOT NULL;"
       );
-      console.log("[DB] Colación de `naves.nombre` actualizada a utf8mb4_spanish_ci.");
+      logInfo("DB-COLLATION", "Colación de `naves.nombre` actualizada a utf8mb4_spanish_ci.");
     }
 
     if (comerciantesCollation && (!esValida(comerciantesCollation) || (forzar && comerciantesCollation !== "utf8mb4_spanish_ci"))) {
       await prisma.$executeRawUnsafe(
         "ALTER TABLE `comerciantes` MODIFY `nave` VARCHAR(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_spanish_ci NULL;"
       );
-      console.log("[DB] Colación de `comerciantes.nave` actualizada a utf8mb4_spanish_ci.");
+      logInfo("DB-COLLATION", "Colación de `comerciantes.nave` actualizada a utf8mb4_spanish_ci.");
     }
 
     colacionEspanolVerificada = true;
   } catch (error) {
-    console.warn(
-      "[DB] Aviso: No se pudo verificar/actualizar colación en español en este momento:",
-      error instanceof Error ? error.message : error
+    logWarn(
+      "DB-COLLATION",
+      "No se pudo verificar/actualizar colación en español en este momento",
+      error
     );
   }
 }

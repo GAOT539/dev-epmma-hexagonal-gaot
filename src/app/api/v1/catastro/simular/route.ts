@@ -15,6 +15,7 @@ import {
   userCanAccessNave,
   getAccessibleNaveIds,
 } from "@/infrastructure/auth/authorization";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function POST(request: Request) {
   try {
@@ -234,7 +235,16 @@ export async function POST(request: Request) {
       },
     });
   } catch (error) {
-    console.error("Error en POST /api/v1/catastro/simular:", error);
+    logError("API", "Error en POST /api/v1/catastro/simular", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al simular la importación." }, { status: 500 });
   }
 }

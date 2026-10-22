@@ -10,6 +10,7 @@ import type {
   DetalleComercianteControl,
 } from "@/domain/models/auditoria.model";
 import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
   try {
@@ -74,7 +75,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json(resultado);
   } catch (error) {
-    console.error("Error en GET /api/v1/auditoria/sesiones:", error);
+    logError("API", "Error en GET /api/v1/auditoria/sesiones", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al consultar sesiones de auditoría." }, { status: 500 });
   }
 }
@@ -118,7 +128,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
-    console.error("Error en POST /api/v1/auditoria/sesiones:", error);
+    logError("API", "Error en POST /api/v1/auditoria/sesiones", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al registrar la sesión de control." }, { status: 500 });
   }
 }

@@ -1,6 +1,7 @@
 // ── Servicio de Asistencia Diaria Automática (02:00 AM Ecuador + Catch-Up Resiliente) ──
 
-import { prisma } from "@/infrastructure/database/prisma";
+import { prisma, verificarConexionBD } from "@/infrastructure/database/prisma";
+import { logInfo, logError } from "@/infrastructure/logger/system-logger";
 import type { Prisma } from "@prisma/client";
 import crypto from "crypto";
 
@@ -240,28 +241,38 @@ export function iniciarCronAsistenciaDiaria2AM() {
   if (globalThis.__epmma_cron_2am_initialized) return;
   globalThis.__epmma_cron_2am_initialized = true;
 
-  // Verificación inmediata al arrancar el servidor (Catch-up para encendidos en cualquier hora)
-  asegurarAsistenciaInicialDelDia().catch((err) => {
-    console.error("[ARRANQUE] Error en verificación inicial de asistencia:", err);
-  });
+  // Verificación de recuperación (Catch-up) en arranque solo si la BD está activa
+  // y la fecha de hoy aún no ha sido sincronizada
+  (async () => {
+    const hoyStr = obtenerFechaHoyEcuador();
+    if (globalThis.__epmma_last_2am_run_date !== hoyStr) {
+      const bdActiva = await verificarConexionBD();
+      if (!bdActiva) return;
+      try {
+        await asegurarAsistenciaInicialDelDia(hoyStr);
+      } catch (err) {
+        logError("ARRANQUE", "Error en verificación inicial de asistencia", err);
+      }
+    }
+  })();
 
   setInterval(async () => {
     try {
+      if (!(await verificarConexionBD())) return;
+
       const hour = obtenerHoraEcuador();
       const hoyStr = obtenerFechaHoyEcuador();
 
       // Si la hora es >= 2 (02:00 AM en adelante) y la jornada de hoy no ha sido sincronizada
       if (hour >= 2 && globalThis.__epmma_last_2am_run_date !== hoyStr) {
-        console.log(`[CRON ASISTENCIA] Sincronización automática de jornada (${hoyStr}) a las ${hour}h Ecuador...`);
+        logInfo(
+          "CRON-ASISTENCIA",
+          `Sincronización automática de jornada (${hoyStr}) a las ${hour}h Ecuador...`
+        );
         await asegurarAsistenciaInicialDelDia(hoyStr);
       }
     } catch (err) {
-      console.error("[CRON ASISTENCIA] Error en ciclo de verificación:", err);
+      logError("CRON-ASISTENCIA", "Error en ciclo de verificación de asistencia", err);
     }
   }, 60_000);
-}
-
-// Iniciar el cron en el entorno de servidor
-if (typeof window === "undefined") {
-  iniciarCronAsistenciaDiaria2AM();
 }

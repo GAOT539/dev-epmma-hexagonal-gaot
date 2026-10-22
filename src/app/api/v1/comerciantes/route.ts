@@ -6,6 +6,7 @@ import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
   try {
@@ -141,7 +142,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json(comerciantes);
   } catch (error) {
-    console.error("Error en GET /api/v1/comerciantes:", error);
+    logError("API", "Error en GET /api/v1/comerciantes", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al obtener comerciantes." }, { status: 500 });
   }
 }
@@ -294,7 +304,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json(resultado, { status: 201 });
   } catch (error) {
-    console.error("Error en POST /api/v1/comerciantes:", error);
+    logError("API", "Error en POST /api/v1/comerciantes", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     const mensaje = error instanceof Error ? error.message : "Error interno al crear comerciante.";
     return NextResponse.json({ error: mensaje }, { status: 500 });
   }

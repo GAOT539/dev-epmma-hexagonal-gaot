@@ -6,6 +6,7 @@ import {
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
   try {
@@ -68,7 +69,16 @@ export async function GET(request: Request) {
       supervisoresDisponibles: nombresSupervisores,
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/naves:", error);
+    logError("API", "Error en GET /api/v1/naves", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al obtener las naves." }, { status: 500 });
   }
 }
@@ -184,7 +194,16 @@ export async function POST(request: Request) {
       { status: 201 }
     );
   } catch (error) {
-    console.error("Error en POST /api/v1/naves:", error);
+    logError("API", "Error en POST /api/v1/naves", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al crear la nave." }, { status: 500 });
   }
 }

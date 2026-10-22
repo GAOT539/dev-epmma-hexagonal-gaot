@@ -2,6 +2,9 @@
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { verificarConexionBD } = await import(
+      "@/infrastructure/database/prisma"
+    );
     const {
       iniciarCronAsistenciaDiaria2AM,
       asegurarAsistenciaInicialDelDia,
@@ -9,13 +12,23 @@ export async function register() {
     const { asegurarColacionEspanolEnBD } = await import(
       "@/infrastructure/database/nave-puestos-sync.service"
     );
+    const { logInfo, logError } = await import(
+      "@/infrastructure/logger/system-logger"
+    );
 
     try {
-      await asegurarColacionEspanolEnBD();
-      await asegurarAsistenciaInicialDelDia();
+      const dbActiva = await verificarConexionBD();
+      if (dbActiva) {
+        await asegurarColacionEspanolEnBD();
+        await asegurarAsistenciaInicialDelDia();
+        logInfo(
+          "STARTUP",
+          "Servicios iniciales y colación verificados correctamente en MySQL."
+        );
+      }
       iniciarCronAsistenciaDiaria2AM();
     } catch (error) {
-      console.error("[INSTRUMENTATION] Error al inicializar servicios en arranque:", error);
+      logError("STARTUP", "Error al inicializar servicios en arranque", error);
     }
   }
 }

@@ -11,6 +11,7 @@ import {
   iniciarCronAsistenciaDiaria2AM,
 } from "@/infrastructure/database/daily-attendance.service";
 import { getAccessibleNaveIds, userCanAccessComerciante, userCanAccessNave } from "@/infrastructure/auth/authorization";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
   try {
@@ -160,7 +161,16 @@ export async function GET(request: Request) {
       { status: 400 }
     );
   } catch (error) {
-    console.error("Error en GET /api/v1/asistencia:", error);
+    logError("API", "Error en GET /api/v1/asistencia", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al consultar asistencia." }, { status: 500 });
   }
 }
@@ -466,7 +476,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ success: true, registro: registroActualizado });
   } catch (error) {
-    console.error("Error en POST /api/v1/asistencia:", error);
+    logError("API", "Error en POST /api/v1/asistencia", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al registrar asistencia." }, { status: 500 });
   }
 }
