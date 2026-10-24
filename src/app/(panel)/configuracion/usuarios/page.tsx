@@ -65,6 +65,31 @@ function UserFormDialog({
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
+  useEffect(() => {
+    if (open) {
+      if (user) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setNombres(user.nombres ?? "");
+        setApellidos(user.apellidos ?? "");
+        setCedula(user.cedula ?? "");
+        setCorreo(user.correo ?? "");
+        setRol(user.rol ?? "SUPERVISOR");
+        setNavesAsignadas(user.navesAsignadas ?? []);
+        setError("");
+        setGuardando(false);
+      } else {
+        setNombres("");
+        setApellidos("");
+        setCedula("");
+        setCorreo("");
+        setRol("SUPERVISOR");
+        setNavesAsignadas([]);
+        setError("");
+        setGuardando(false);
+      }
+    }
+  }, [open, user]);
+
   function toggleNave(naveId: string) {
     setNavesAsignadas((prev) =>
       prev.includes(naveId)
@@ -76,13 +101,13 @@ function UserFormDialog({
   async function handleSubmit() {
     setError("");
 
-    if (!nombres.trim() || !cedula.trim()) {
-      setError("Nombres y Cédula son obligatorios.");
+    if (!nombres.trim() || !apellidos.trim() || !cedula.trim() || !correo.trim()) {
+      setError("Nombres, Apellidos, Cédula y Correo Electrónico son campos obligatorios.");
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!correo.trim() || !emailRegex.test(correo.trim())) {
+    if (!emailRegex.test(correo.trim())) {
       setError("Debe ingresar un correo electrónico válido (ej. usuario@ep-ema.gob.ec).");
       return;
     }
@@ -117,8 +142,8 @@ function UserFormDialog({
 
       onSave();
       onClose();
-    } catch {
-      setError("Ocurrió un error al procesar la solicitud.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Ocurrió un error al procesar la solicitud.");
     } finally {
       setGuardando(false);
     }
@@ -150,7 +175,9 @@ function UserFormDialog({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-2">
           <div className="space-y-1.5">
-            <Label htmlFor="user-nombres">Nombres</Label>
+            <Label htmlFor="user-nombres">
+              Nombres <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="user-nombres"
               value={nombres}
@@ -159,7 +186,9 @@ function UserFormDialog({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="user-apellidos">Apellidos</Label>
+            <Label htmlFor="user-apellidos">
+              Apellidos <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="user-apellidos"
               value={apellidos}
@@ -169,7 +198,9 @@ function UserFormDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="user-cedula">Cédula</Label>
+            <Label htmlFor="user-cedula">
+              Cédula <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="user-cedula"
               value={cedula}

@@ -10,7 +10,7 @@ export { useAuth, AuthProvider } from "@/infrastructure/auth/auth-context";
 
 /**
  * Solicita el restablecimiento de contraseña llamando a la API del backend
- * e invocando el servicio de correo institucional Resend.
+ * e invocando el servicio de correo institucional SMTP.
  */
 export async function solicitarRestablecimientoPassword(identificador: string) {
   try {

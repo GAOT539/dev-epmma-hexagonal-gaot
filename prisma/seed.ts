@@ -78,7 +78,7 @@ async function main() {
       cedula: "admin",
       nombres: "Administrador",
       apellidos: "Sistema",
-      correo: "admin@ep-ema.gob.ec",
+      correo: "sistema.epema@gmail.com",
       rol: "SUPERADMIN",
       mustChangePassword: false,
       passwordHash,

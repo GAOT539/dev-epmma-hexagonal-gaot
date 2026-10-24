@@ -19,13 +19,15 @@ export async function POST(request: Request) {
     }
 
     const cleanId = String(identificador).trim();
+    const cleanEmail = cleanId.toLowerCase();
 
-    // Buscar por cédula, correo o alias especial 'admin'
+    // Buscar por cédula, correo (sin distinguir mayúsculas/minúsculas) o alias especial 'admin'
     const usuario = await prisma.usuario.findFirst({
       where: {
         OR: [
           { cedula: cleanId },
           { correo: cleanId },
+          { correo: cleanEmail },
           ...(cleanId.toLowerCase() === "admin"
             ? [{ rol: "SUPERADMIN" as const }]
             : []),

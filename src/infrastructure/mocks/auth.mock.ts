@@ -438,37 +438,21 @@ export function sincronizarNavesSupervisorDesdeNaves(naves: { id: string; superv
  * Solicita el restablecimiento de contraseña de un usuario mediante su identificador (usuario/cédula) o correo electrónico.
  *
  * =========================================================================================
- * DOCUMENTACIÓN DE INTEGRACIÓN BACKEND REAL CON RESEND:
+ * DOCUMENTACIÓN DE INTEGRACIÓN BACKEND REAL CON GMAIL SMTP (NODEMAILER):
  * =========================================================================================
- * En el backend en producción, esta operación llamará al endpoint:
+ * En el backend en producción, esta operación llama al endpoint:
  *   POST /api/v1/auth/forgot-password
  * Body: { identificador: string }
  *
- * Flujo en el servidor Node.js/NestJS/Next.js API:
- * 1. Buscar al usuario en la base de datos por `cedula`, `username` o `correo`:
- *    `const usuario = await prisma.usuario.findFirst({ where: { OR: [{ cedula: identificador }, { correo: identificador }] } });`
+ * Flujo en el servidor Node.js/Next.js API:
+ * 1. Buscar al usuario en la base de datos por `cedula` o `correo`:
  * 2. Si el usuario existe y tiene correo registrado:
- *    - Generar una contraseña temporal aleatoria segura (o token JWT con expiración de 15 minutos).
- *    - Encriptar y actualizar la contraseña temporal en la base de datos:
- *      `await prisma.usuario.update({ where: { id: usuario.id }, data: { passwordHash: bcrypt.hashSync(tempPass, 10), mustChangePassword: true } });`
- *    - Enviar correo electrónico transaccional utilizando el SDK oficial de **Resend**:
- *      ```ts
- *      import { Resend } from "resend";
- *      const resend = new Resend(process.env.RESEND_API_KEY);
- *      await resend.emails.send({
- *        from: "EP-EMA Notificaciones <no-reply@ep-ema.gob.ec>",
- *        to: usuario.correo,
- *        subject: "Restablecimiento de Contraseña - EP-EMA",
- *        html: `<p>Estimado/a ${usuario.nombres},</p>
- *               <p>Se ha generado una contraseña temporal para su acceso al sistema EP-EMA:</p>
- *               <p style="font-size:18px; font-weight:bold; color:#15803D;">${tempPass}</p>
- *               <p>Al iniciar sesión con esta clave temporal, el sistema le solicitará definir una nueva contraseña personal.</p>`,
- *      });
- *      ```
+ *    - Generar una contraseña temporal aleatoria segura.
+ *    - Enviar correo institucional mediante Gmail SMTP con Nodemailer.
+ *    - Si el envío es exitoso, actualizar la contraseña temporal en la base de datos con mustChangePassword = true.
  * 3. En la simulación frontend actual:
- *    - Se busca el usuario en memoria por cédula, alias ("admin", "director", "jefe", "supervisor", "tic") o correo.
- *    - Se genera una contraseña temporal `tempPass = "TempPass2026*"`.
- *    - Se actualiza `passwordActual` y `mustChangePassword = true` en el mock.
+ *    - Se busca el usuario en memoria por cédula, alias o correo.
+ *    - Se genera una contraseña temporal y se actualiza mustChangePassword = true.
  *    - Se retorna éxito y el correo al cual fue enviado.
  */
 export async function solicitarRestablecimientoPassword(

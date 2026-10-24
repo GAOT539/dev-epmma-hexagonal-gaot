@@ -14,7 +14,7 @@ El **Sistema de Gestión EP-EMA** es una solución digital integral de grado emp
 | Fase del Proyecto | Estado | Madurez | Descripción |
 | :--- | :---: | :---: | :--- |
 | **Fase 1: Frontend & Simulación Operativa en Memoria** | **Completado y Auditado** | **100%** | Interfaz de usuario completa, responsiva (*Mobile-First*), modularizada bajo Arquitectura Hexagonal estricta. Validada con 0 errores TypeScript y 0 advertencias ESLint. Implementa persistencia selectiva en memoria, planificador espacial vectorial y exportación de reportes PDF. |
-| **Fase 2: Backend API REST, Base de Datos MySQL y Servicios Transaccionales** | **Completado, Optimizado y Auditado** | **100%** | Arquitectura backend robusta desacoplada mediante Next.js Route Handlers (`/api/v1/*`), base de datos relacional MySQL 8.0 nativa y contenedorizada con Docker, Prisma ORM 6.19.3, autenticación perimetral mediante cookies `HttpOnly` y JWT con `jose`, cifrado criptográfico `bcryptjs`, servicio transaccional de correo con Resend, motor de reconciliación catastral mensual en 4 pasos y servicio de auto-asistencia diaria a las 02:00 AM (Ecuador). |
+| **Fase 2: Backend API REST, Base de Datos MySQL y Servicios Transaccionales** | **Completado, Optimizado y Auditado** | **100%** | Arquitectura backend robusta desacoplada mediante Next.js Route Handlers (`/api/v1/*`), base de datos relacional MySQL 8.0 nativa y contenedorizada con Docker, Prisma ORM 6.19.3, autenticación perimetral mediante cookies `HttpOnly` y JWT con `jose`, cifrado criptográfico `bcryptjs`, servicio transaccional de correo con Gmail SMTP (Nodemailer), motor de reconciliación catastral mensual en 4 pasos y servicio de auto-asistencia diaria a las 02:00 AM (Ecuador). |
 | **Fase 3: Auditoría de Ciberseguridad, RBAC Multi-Tenant y Optimización de Concurrencia (14+ Usuarios)** | **Completado y Verificado** | **100%** | Blindaje de seguridad en `src/middleware.ts` y capa de autorización multi-tenant por naves asignadas para rol SUPERVISOR. Mitigación contra ataques IDOR en cambio de contraseñas, no exposición de credenciales temporales en respuestas HTTP, generador CSPRNG de contraseñas seguras con Fisher-Yates, optimización de concurrencia mediante Fast-Path (60s), Single-Flight Lock (0 ms), cliente singleton global de Prisma y soporte nativo de colación en español (`utf8mb4_spanish_ci`) para la coexistencia de `NAVE Ñ` y `NAVE N`. |
 
 ---
@@ -95,7 +95,7 @@ dev-epmma-hexagonal-gaot/
 │   │   │       │   └── sesiones/         # GET de sesiones de control con filtros y badges
 │   │   │       ├── auth/                 # Ciclo de vida de autenticación y credenciales
 │   │   │       │   ├── change-password/  # POST cambio de contraseña (anti-IDOR y primer login)
-│   │   │       │   ├── forgot-password/  # POST generación CSPRNG y envío por correo Resend
+│   │   │       │   ├── forgot-password/  # POST generación CSPRNG y envío por correo Gmail SMTP
 │   │   │       │   ├── login/            # POST autenticación y expedición de Cookie JWT
 │   │   │       │   ├── logout/           # POST revocación de Cookie HttpOnly
 │   │   │       │   └── me/               # GET perfil y sesión del usuario activo
@@ -139,7 +139,7 @@ dev-epmma-hexagonal-gaot/
 │   │   │   ├── daily-attendance.service.ts # Servicio diario de asistencia 02:00 AM y locks
 │   │   │   └── nave-puestos-sync.service.ts # Sincronización de puestos y colación en español
 │   │   ├── mail/                         # Notificaciones transaccionales
-│   │   │   └── resend.service.ts         # Integración oficial con API de Resend
+│   │   │   └── smtp.service.ts           # Servicio de correo institucional Gmail SMTP con Nodemailer
 │   │   ├── parsers/                      # Parsers heurísticos de archivos
 │   │   │   └── catastro-file.parser.ts   # Motor de análisis para .xlsx, .xls, .csv y .xml
 │   │   └── repositories/                 # 6 Adaptadores concretos de repositorios
@@ -182,7 +182,7 @@ dev-epmma-hexagonal-gaot/
 - **Autenticación y Criptografía de Sesión:** **JSON Web Tokens (JWT)** firmados y verificados con la librería abierta **`jose`** `6.2.12`, transportados mediante cookies estrictamente seguras con banderas `HttpOnly`, `SameSite=Lax` y expiración en 8 horas.
 - **Criptografía de Credenciales:** Hashing unidireccional con **`bcryptjs`** `3.0.3` con factor de coste de 10 rondas de salado.
 - **Generador Criptográfico Seguro:** Generación de contraseñas temporales aleatorias de 16 caracteres mediante CSPRNG nativo (`crypto.randomInt`) con algoritmo de barajado Fisher-Yates.
-- **Servicio de Correo Transaccional:** Notificaciones de credenciales y restablecimiento de contraseñas mediante **Resend** `6.34.1`.
+- **Servicio de Correo Transaccional:** Notificaciones de credenciales y restablecimiento de contraseñas mediante **Nodemailer** vía **Gmail SMTP**.
 - **Ejecución y Sembrado TypeScript:** **`tsx`** `4.23.15` para la ejecución nativa de semillas y scripts de base de datos (`prisma/seed.ts`).
 
 ---
@@ -341,7 +341,7 @@ El script oficial de inicialización (`prisma/seed.ts`) siembra un entorno de pr
   - El administrador puede resetear la clave del colaborador a `${cedula}*`, restableciendo `mustChangePassword = true`.
 - **Recuperación Autónoma con Envío de Correo (`/api/v1/auth/forgot-password`):**
   - Genera una contraseña temporal aleatoria de 16 caracteres de alta entropía utilizando un generador pseudoaleatorio criptográficamente seguro (CSPRNG vía `crypto.randomInt`) con algoritmo de barajado Fisher-Yates, garantizando caracteres en todos los subconjuntos exigidos.
-  - La clave se hashea en base de datos y se transmite de forma cifrada al correo registrado del usuario mediante **Resend**. La contraseña en texto plano **jamás se devuelve en la respuesta HTTP**.
+  - La clave se hashea en base de datos y se transmite de forma cifrada al correo registrado del usuario mediante **Gmail SMTP (Nodemailer)**. La contraseña en texto plano **jamás se devuelve en la respuesta HTTP**.
 
 ---
 
@@ -485,7 +485,7 @@ A continuación se detalla la matriz técnica de las 21 familias de endpoints RE
 | **2** | `POST` | `/api/v1/auth/logout` | Revocación y expiración inmediata de la Cookie de sesión | Autenticado |
 | **3** | `GET` | `/api/v1/auth/me` | Obtención del perfil, rol y naves asignadas de la sesión activa | Autenticado |
 | **4** | `POST` | `/api/v1/auth/change-password` | Cambio de contraseña (voluntario o primer login obligatorio) con protección anti-IDOR | Autenticado |
-| **5** | `POST` | `/api/v1/auth/forgot-password` | Generación CSPRNG de clave temporal segura de 16 chars y envío vía Resend | Público |
+| **5** | `POST` | `/api/v1/auth/forgot-password` | Generación CSPRNG de clave temporal segura de 16 chars y envío vía Gmail SMTP | Público |
 | **6** | `GET`, `POST` | `/api/v1/usuarios` | Listado general de usuarios y creación de nuevas cuentas institucionales | `SUPERADMIN`, `TIC` |
 | **7** | `GET`, `PUT`, `DELETE` | `/api/v1/usuarios/[id]` | Consulta de detalle, actualización de datos/rol y baja lógica de usuario | `SUPERADMIN`, `TIC` |
 | **8** | `POST` | `/api/v1/usuarios/[id]/reset-password` | Restablecimiento administrativo de clave a contraseña temporal `${cedula}*` | `SUPERADMIN`, `TIC` |
@@ -561,9 +561,13 @@ En un servidor institucional de producción (ej. Ubuntu Server / Debian / RHEL) 
    # Clave secreta robusta para firma criptográfica de tokens JWT
    JWT_SECRET="epmma_jwt_super_secret_key_minimum_32_characters_long_2026"
 
-   # Credenciales de correo transaccional con Resend
-   RESEND_API_KEY="re_sample_key_for_epmma_notifications"
-   EMAIL_FROM="EP-EMA Notificaciones <no-reply@ep-ema.gob.ec>"
+   # Credenciales de correo transaccional con Gmail SMTP
+   SMTP_HOST="smtp.gmail.com"
+   SMTP_PORT="465"
+   SMTP_SECURE="true"
+   SMTP_USER="sistema.epema@gmail.com"
+   SMTP_PASS="tu_contraseña_de_aplicacion_aqui"
+   EMAIL_FROM="EP-EMA Sistema de Gestión <sistema.epema@gmail.com>"
    ```
 
 2. **Compilación y Arranque del Servidor:**

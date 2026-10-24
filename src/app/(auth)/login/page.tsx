@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Eye, EyeOff, Lock, Check, X, Key, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -102,7 +102,7 @@ function PasswordChangeModal({
               Cambio de Contraseña Obligatorio
             </DialogTitle>
             <DialogDescription className="text-sm text-base-white/80 mt-0.5">
-              Es su primer ingreso. Debe establecer una nueva contraseña.
+              Por seguridad, debe establecer una nueva contraseña personal antes de continuar.
             </DialogDescription>
           </div>
         </div>
@@ -189,7 +189,7 @@ function PasswordChangeModal({
   );
 }
 
-// ── Modal de Restablecer Contraseña (Preparado para Resend) ─────────────────
+// ── Modal de Restablecer Contraseña (Gmail SMTP) ──────────────────────────
 
 function RestablecerPasswordModal({
   open,
@@ -204,6 +204,23 @@ function RestablecerPasswordModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [enviado, setEnviado] = useState<{ correo: string } | null>(null);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIdentificador(initialIdentificador);
+      setIsSubmitting(false);
+      setEnviado(null);
+      setError("");
+    }
+  }, [open, initialIdentificador]);
+
+  function handleClose() {
+    setIsSubmitting(false);
+    setEnviado(null);
+    setError("");
+    onClose();
+  }
 
   async function handleEnviar(e: React.FormEvent) {
     e.preventDefault();
@@ -231,8 +248,8 @@ function RestablecerPasswordModal({
   }
 
   return (
-    <Dialog open={open} disablePointerDismissal={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden rounded-2xl bg-base-white border-0 shadow-2xl">
+    <Dialog open={open} disablePointerDismissal={true} onOpenChange={(o) => !o && handleClose()}>
+      <DialogContent showCloseButton={false} className="sm:max-w-md p-0 overflow-hidden rounded-2xl bg-base-white border-0 shadow-2xl">
         <div className="bg-institucional-green px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white">
@@ -249,7 +266,7 @@ function RestablecerPasswordModal({
           </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="rounded-full p-1.5 text-base-white/80 hover:text-base-white hover:bg-base-white/20 transition-colors"
           >
             <X size={18} />
@@ -276,7 +293,7 @@ function RestablecerPasswordModal({
             <div className="pt-2">
               <Button
                 type="button"
-                onClick={onClose}
+                onClick={handleClose}
                 className="w-full bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
               >
                 Volver al Inicio de Sesión
@@ -287,14 +304,14 @@ function RestablecerPasswordModal({
           <form onSubmit={handleEnviar} className="p-6 space-y-4">
             <div className="space-y-2">
               <label htmlFor="reset-identificador" className="text-xs font-semibold text-gray-700">
-                Usuario, Cédula o Correo Electrónico
+                Correo Electrónico o Número de Cédula
               </label>
               <Input
                 id="reset-identificador"
                 type="text"
                 value={identificador}
                 onChange={(e) => setIdentificador(e.target.value)}
-                placeholder="Ej. admin, 1801234567 o usuario@ep-ema.gob.ec"
+                placeholder="Ingrese su correo electrónico o número de cédula"
                 className="text-xs"
                 autoFocus
               />
@@ -309,7 +326,7 @@ function RestablecerPasswordModal({
             )}
 
             <div className="flex items-center justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+              <Button type="button" variant="outline" onClick={handleClose} disabled={isSubmitting}>
                 Cancelar
               </Button>
               <Button
@@ -434,7 +451,7 @@ export default function LoginPage() {
                 htmlFor="login-username"
                 className="text-base font-medium text-base-eerieBlack"
               >
-                Usuario / Cédula
+                Correo / Cédula
               </label>
               <input
                 id="login-username"
@@ -442,7 +459,7 @@ export default function LoginPage() {
                 type="text"
                 autoComplete="username"
                 required
-                placeholder="Ingrese su cédula o usuario"
+                placeholder="Ingrese su correo o número de cédula"
                 value={usuario}
                 onChange={(e) => setUsuario(e.target.value)}
                 className="h-12 w-full rounded-lg border border-institucional-whiteSmokeBlack bg-institucional-whiteSmoke px-4 text-base text-base-eerieBlack placeholder:text-gray-700 outline-none transition focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"

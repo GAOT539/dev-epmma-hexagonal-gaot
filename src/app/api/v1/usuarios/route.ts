@@ -54,22 +54,45 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { cedula, nombres, apellidos, correo, rol, navesAsignadas, estado } = body;
 
-    if (!cedula || !nombres || !apellidos || !rol) {
+    const cleanCedula = String(cedula ?? "").trim();
+    const cleanNombres = String(nombres ?? "").trim();
+    const cleanApellidos = String(apellidos ?? "").trim();
+    const cleanCorreo = String(correo ?? "").trim().toLowerCase();
+    const cleanRol = rol as Rol;
+
+    if (!cleanCedula || !cleanNombres || !cleanApellidos || !cleanCorreo || !cleanRol) {
       return NextResponse.json(
-        { error: "Cédula, nombres, apellidos y rol son obligatorios." },
+        { error: "Cédula, nombres, apellidos, correo electrónico y rol son obligatorios." },
         { status: 400 }
       );
     }
 
-    const cleanCedula = String(cedula).trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanCorreo)) {
+      return NextResponse.json(
+        { error: "Debe ingresar un correo electrónico válido." },
+        { status: 400 }
+      );
+    }
 
     // Comprobar cédula duplicada
-    const existente = await prisma.usuario.findUnique({
+    const existenteCedula = await prisma.usuario.findFirst({
       where: { cedula: cleanCedula },
     });
-    if (existente) {
+    if (existenteCedula) {
       return NextResponse.json(
-        { error: "Ya existe un usuario registrado con esa cédula." },
+        { error: "Ya existe un usuario registrado con ese número de cédula." },
+        { status: 400 }
+      );
+    }
+
+    // Comprobar correo duplicado
+    const existenteCorreo = await prisma.usuario.findFirst({
+      where: { correo: cleanCorreo },
+    });
+    if (existenteCorreo) {
+      return NextResponse.json(
+        { error: "Ya existe un usuario registrado con ese correo electrónico." },
         { status: 400 }
       );
     }
@@ -83,10 +106,10 @@ export async function POST(request: Request) {
     const nuevoUsuario = await prisma.usuario.create({
       data: {
         cedula: cleanCedula,
-        nombres: String(nombres).trim(),
-        apellidos: String(apellidos).trim(),
-        correo: correo ? String(correo).trim() : null,
-        rol: rol as Rol,
+        nombres: cleanNombres,
+        apellidos: cleanApellidos,
+        correo: cleanCorreo,
+        rol: cleanRol,
         mustChangePassword: true,
         passwordHash,
         navesAsignadas: naves,

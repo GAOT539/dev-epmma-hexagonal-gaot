@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Rol, EstadoUsuario, Prisma } from "@prisma/client";
+import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -31,7 +32,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       estado: usuario.estado,
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/usuarios/[id]:", error);
+    logError("API", "Error en GET /api/v1/usuarios/[id]", error);
     return NextResponse.json({ error: "Error al obtener usuario." }, { status: 500 });
   }
 }
@@ -47,10 +48,52 @@ export async function PUT(request: Request, { params }: RouteParams) {
     }
 
     const updateData: Prisma.UsuarioUpdateInput = {};
-    if (body.cedula) updateData.cedula = String(body.cedula).trim();
+    if (body.cedula !== undefined) {
+      const cleanCedula = String(body.cedula).trim();
+      if (!cleanCedula) {
+        return NextResponse.json({ error: "La cédula no puede estar vacía." }, { status: 400 });
+      }
+      const existenteCedula = await prisma.usuario.findFirst({
+        where: {
+          cedula: cleanCedula,
+          NOT: { id },
+        },
+      });
+      if (existenteCedula) {
+        return NextResponse.json(
+          { error: "Ya existe un usuario registrado con ese número de cédula." },
+          { status: 400 }
+        );
+      }
+      updateData.cedula = cleanCedula;
+    }
+
+    if (body.correo !== undefined) {
+      const cleanCorreo = String(body.correo).trim().toLowerCase();
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!cleanCorreo || !emailRegex.test(cleanCorreo)) {
+        return NextResponse.json(
+          { error: "Debe ingresar un correo electrónico válido." },
+          { status: 400 }
+        );
+      }
+      const existenteCorreo = await prisma.usuario.findFirst({
+        where: {
+          correo: cleanCorreo,
+          NOT: { id },
+        },
+      });
+      if (existenteCorreo) {
+        return NextResponse.json(
+          { error: "Ya existe un usuario registrado con ese correo electrónico." },
+          { status: 400 }
+        );
+      }
+      updateData.correo = cleanCorreo;
+    }
+
     if (body.nombres) updateData.nombres = String(body.nombres).trim();
     if (body.apellidos) updateData.apellidos = String(body.apellidos).trim();
-    if (body.correo !== undefined) updateData.correo = body.correo ? String(body.correo).trim() : null;
     if (body.rol) updateData.rol = body.rol as Rol;
     if (body.estado) updateData.estado = body.estado as EstadoUsuario;
     if (body.navesAsignadas !== undefined) {
@@ -113,7 +156,16 @@ export async function PUT(request: Request, { params }: RouteParams) {
       estado: actualizado.estado,
     });
   } catch (error) {
-    console.error("Error en PUT /api/v1/usuarios/[id]:", error);
+    logError("API", "Error en PUT /api/v1/usuarios/[id]", error);
+    if (esErrorConexionBD(error)) {
+      return NextResponse.json(
+        {
+          error:
+            "El servidor de base de datos MySQL no se encuentra disponible en este momento. Verifique que el servicio esté iniciado.",
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json({ error: "Error al actualizar usuario." }, { status: 500 });
   }
 }
