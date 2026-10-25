@@ -43,6 +43,7 @@ export default function NavesPage() {
   const [editSupervisores, setEditSupervisores] = useState<string[]>([]);
   const [puestosOcupados, setPuestosOcupados] = useState(0);
   const [editarError, setEditarError] = useState("");
+  const [guardandoNave, setGuardandoNave] = useState(false);
 
   // Estado del modal de Gestión de Puestos de Nave
   const [navePuestosModal, setNavePuestosModal] = useState<Nave | null>(null);
@@ -160,14 +161,23 @@ export default function NavesPage() {
       return;
     }
 
-    const naveCreada = await naveService.crearNave(nombre, cantidad, nuevoSupervisores);
-    const navesActualizadas = await naveService.obtenerNaves();
-    setNaves(navesActualizadas);
-    setIsCrearOpen(false);
+    setGuardandoNave(true);
+    try {
+      const naveCreada = await naveService.crearNave(nombre, cantidad, nuevoSupervisores);
+      const navesActualizadas = await naveService.obtenerNaves();
+      setNaves(navesActualizadas);
+      setIsCrearOpen(false);
 
-    toast.success(`Nave ${naveCreada.nombre} creada exitosamente`, {
-      description: `Capacidad registrada: ${naveCreada.cantidadPuestos} puestos.`,
-    });
+      toast.success(`Nave ${naveCreada.nombre} creada exitosamente`, {
+        description: `Capacidad registrada: ${naveCreada.cantidadPuestos} puestos.`,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al crear la nave.";
+      setCrearError(msg);
+      toast.error(msg);
+    } finally {
+      setGuardandoNave(false);
+    }
   }
 
   // ── Manejadores de Edición ────────────────────────────────────────────────
@@ -230,19 +240,28 @@ export default function NavesPage() {
       return;
     }
 
-    const actualizada = await naveService.actualizarNave(editingNave.id, {
-      nombre,
-      cantidadPuestos: cantidad,
-      supervisores: editSupervisores,
-    });
+    setGuardandoNave(true);
+    try {
+      const actualizada = await naveService.actualizarNave(editingNave.id, {
+        nombre,
+        cantidadPuestos: cantidad,
+        supervisores: editSupervisores,
+      });
 
-    if (actualizada) {
-      const navesActualizadas = await naveService.obtenerNaves();
-      setNaves(navesActualizadas);
-      setEditingNave(null);
-      toast.success(`Nave ${actualizada.nombre} actualizada correctamente`);
-    } else {
-      setEditarError("No se pudo actualizar la nave seleccionada.");
+      if (actualizada) {
+        const navesActualizadas = await naveService.obtenerNaves();
+        setNaves(navesActualizadas);
+        setEditingNave(null);
+        toast.success(`Nave ${actualizada.nombre} actualizada correctamente`);
+      } else {
+        setEditarError("No se pudo actualizar la nave seleccionada.");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al actualizar la nave.";
+      setEditarError(msg);
+      toast.error(msg);
+    } finally {
+      setGuardandoNave(false);
     }
   }
 
@@ -537,6 +556,7 @@ export default function NavesPage() {
         puestosOcupados={puestosOcupados}
         handleGuardarEditar={handleGuardarEditar}
         supervisoresDisponibles={supervisoresDisponibles}
+        guardando={guardandoNave}
       />
 
       {/* ── Modal de Gestión Interactiva de Puestos por Nave ── */}

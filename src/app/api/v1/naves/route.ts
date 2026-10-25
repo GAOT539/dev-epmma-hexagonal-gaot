@@ -115,12 +115,11 @@ export async function POST(request: Request) {
         },
       });
 
-      // 2. Generar puestos vacantes iniciales calculando el prefijo a partir del nombre (ej. NAVE Ñ -> N-Ñ)
-      const prefix = nombreLimpio.replace(/^NAVE\s+/i, "N-").replace(/\s+/g, "-");
+      // 2. Generar puestos vacantes iniciales numerados como "1", "2", "3", ..., String(cantidad)
       const puestosData = [];
       for (let i = 1; i <= cantidad; i++) {
         puestosData.push({
-          codigo: `${prefix}-${String(i).padStart(2, "0")}`,
+          codigo: String(i),
           naveId: nave.id,
           estado: "Vacante" as const,
         });

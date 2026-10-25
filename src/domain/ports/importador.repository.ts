@@ -14,7 +14,10 @@ export interface IImportadorRepository {
     registros: ImportacionRegistro[],
     opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado>;
-  parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]>;
+  parsearExcel(
+    data: ArrayBuffer | Uint8Array,
+    fileName?: string
+  ): Promise<ImportacionRegistro[]>;
   parsearXML(contenido: string): Promise<ImportacionRegistro[]>;
   parsearCSV(contenido: string): Promise<ImportacionRegistro[]>;
   generarRegistrosEjemplo(cantidad?: number): Promise<ImportacionRegistro[]>;

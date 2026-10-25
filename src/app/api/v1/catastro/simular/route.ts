@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
-    const modoUnificacion: "UNIFICAR" | "SEPARAR" = body.modoUnificacion || "UNIFICAR";
+    const modoUnificacion = "UNIFICAR";
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -108,11 +108,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Si el usuario eligió separar como nave independiente (ej. BODEGA NAVE H vs NAVE H)
-      if (modoUnificacion === "SEPARAR" && naveDetectada && contieneBodegas && !naveDetectada.startsWith("BODEGA")) {
-        naveDetectada = `BODEGA ${naveDetectada}`;
-      }
-
       if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
         const detectadaNorm = naveDetectada.normalize("NFC").trim();
         const detectadaSlug = generarSlugNave(detectadaNorm);
@@ -181,7 +176,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Si se solicita crear una nueva nave
-    if (crearNuevaNave || (!naveExistente && modoUnificacion === "SEPARAR")) {
+    if (crearNuevaNave) {
       const nombreFinal = (nuevoNombreNave || naveDetectada || "NUEVA NAVE").trim().toUpperCase();
       const capacidadNave = registros.length;
       return NextResponse.json({

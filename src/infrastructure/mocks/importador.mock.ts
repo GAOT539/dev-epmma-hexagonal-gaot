@@ -274,7 +274,7 @@ export function inferirNaveDesdePuesto(codigoPuesto: string): string | null {
 
 // ── Parser Heurístico Inteligente para Excel (.xls / .xlsx) ─────────────────
 
-export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistro[] {
+export function parsearExcel(data: ArrayBuffer | Uint8Array, fileName?: string): ImportacionRegistro[] {
   const wb = XLSX.read(data, { type: "array" });
   if (!wb.SheetNames || wb.SheetNames.length === 0) {
     return [];
@@ -290,7 +290,8 @@ export function parsearExcel(data: ArrayBuffer | Uint8Array): ImportacionRegistr
   const esHojaBodegasLocales =
     sheetNameUpper.includes("950") ||
     sheetNameUpper.includes("BODEGA") ||
-    sheetNameUpper.includes("LOCAL");
+    sheetNameUpper.includes("LOCAL") ||
+    (fileName ? fileName.toUpperCase().includes("950") : false);
 
   const primerasFilas = rows.slice(0, 15);
   const tieneCabeceraLocales = primerasFilas.some(

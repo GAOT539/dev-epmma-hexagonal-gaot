@@ -51,7 +51,6 @@ export default function IngresoCatastroPage() {
   const [parseando, setParseando] = useState(false);
   const [procesando, setProcesando] = useState(false);
   const [opcionesImportacion, setOpcionesImportacion] = useState<OpcionesImportacion>({});
-  const [modoUnificacion, setModoUnificacion] = useState<"UNIFICAR" | "SEPARAR">("UNIFICAR");
   const [naveManualSeleccionada, setNaveManualSeleccionada] = useState<string>("");
   const [nombreNuevaNaveInput, setNombreNuevaNaveInput] = useState<string>("");
 
@@ -84,7 +83,7 @@ export default function IngresoCatastroPage() {
 
         if (extension === "xlsx" || extension === "xls") {
           const buffer = await file.arrayBuffer();
-          parsed = await importadorService.parsearExcel(buffer);
+          parsed = await importadorService.parsearExcel(buffer, file.name);
         } else if (extension === "csv" || extension === "txt") {
           const texto = await file.text();
           parsed = await importadorService.parsearCSV(texto);
@@ -96,7 +95,7 @@ export default function IngresoCatastroPage() {
           continue;
         }
 
-        // Inferencia de nave desde código de puesto o nombre de archivo si no está definida
+        // Inferencia de nave: prioridad absoluta a las celdas internas de la hoja (reg.nave)
         const nombreArchivoUpper = file.name.normalize("NFC").toUpperCase();
         let naveDesdeArchivo: string | null = null;
         if (nombreArchivoUpper.includes("ROPA")) naveDesdeArchivo = "NAVE ROPA";
@@ -107,7 +106,10 @@ export default function IngresoCatastroPage() {
           if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
         }
 
-        if (naveDesdeArchivo && !naveInferidaGlobal) {
+        const naveDetectadaEnHoja = parsed.find((r) => r.nave && r.nave.trim().toUpperCase() !== "NO DEFINIDA")?.nave?.trim().toUpperCase() || null;
+        if (naveDetectadaEnHoja && !naveInferidaGlobal) {
+          naveInferidaGlobal = naveDetectadaEnHoja;
+        } else if (naveDesdeArchivo && !naveInferidaGlobal) {
           naveInferidaGlobal = naveDesdeArchivo;
         }
 
@@ -188,7 +190,6 @@ export default function IngresoCatastroPage() {
       }
 
       setRegistros(todosParsed);
-      setModoUnificacion("UNIFICAR");
       const opcInicial: OpcionesImportacion = { modoUnificacion: "UNIFICAR" };
       setOpcionesImportacion(opcInicial);
       const sim = await importadorService.simularImportacion(todosParsed, opcInicial);
@@ -246,7 +247,6 @@ export default function IngresoCatastroPage() {
     setResultado(null);
     setAnalisis(null);
     setOpcionesImportacion({});
-    setModoUnificacion("UNIFICAR");
     setNaveManualSeleccionada("");
     setNombreNuevaNaveInput("");
     setArchivoNombre("");
@@ -531,63 +531,15 @@ export default function IngresoCatastroPage() {
                     )}
                   </div>
 
-                  {/* Selector de Modo: Unificar vs Separar Nave para Bodegas */}
+                  {/* Aviso informativo limpio para Bodegas / Locales */}
                   {analisis.reconciliacion.esArchivoBodegas && (
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-slate-100/90 border border-slate-300/80">
-                      <div className="text-xs">
-                        <span className="font-bold text-gray-800 uppercase tracking-wide">
-                          Modo de Conciliación de Bodegas / Locales:
-                        </span>
-                        <p className="text-[11px] text-gray-600 mt-0.5">
-                          Elija si desea mantener bodegas y puestos juntos en la misma nave o administrarlos como naves separadas.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0 bg-white p-1 rounded-lg border border-slate-300/70 shadow-2xs">
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setModoUnificacion("UNIFICAR");
-                            const opc: OpcionesImportacion = { ...opcionesImportacion, modoUnificacion: "UNIFICAR" };
-                            setOpcionesImportacion(opc);
-                            setParseando(true);
-                            try {
-                              const sim = await importadorService.simularImportacion(registros, opc);
-                              setAnalisis(sim);
-                            } finally {
-                              setParseando(false);
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
-                            modoUnificacion === "UNIFICAR"
-                              ? "bg-institucional-green text-white shadow-2xs"
-                              : "text-gray-700 hover:text-black hover:bg-slate-100"
-                          }`}
-                        >
-                          1. Unificar en {analisis.reconciliacion.naveDetectada.replace(/^BODEGA\s+/, "")} (Bodegas + Puestos)
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            setModoUnificacion("SEPARAR");
-                            const opc: OpcionesImportacion = { ...opcionesImportacion, modoUnificacion: "SEPARAR" };
-                            setOpcionesImportacion(opc);
-                            setParseando(true);
-                            try {
-                              const sim = await importadorService.simularImportacion(registros, opc);
-                              setAnalisis(sim);
-                            } finally {
-                              setParseando(false);
-                            }
-                          }}
-                          className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
-                            modoUnificacion === "SEPARAR"
-                              ? "bg-institucional-green text-white shadow-2xs"
-                              : "text-gray-700 hover:text-black hover:bg-slate-100"
-                          }`}
-                        >
-                          2. Separar como nave independiente (BODEGA {analisis.reconciliacion.naveDetectada.replace(/^BODEGA\s+/, "")})
-                        </button>
-                      </div>
+                    <div className="flex items-center gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200/80 text-xs text-gray-700">
+                      <span className="font-semibold text-institucional-green uppercase tracking-wide shrink-0">
+                        Bodegas / Locales Detectados:
+                      </span>
+                      <span>
+                        Se concilian automáticamente dentro de <strong>{analisis.reconciliacion.naveDetectada}</strong> sin afectar los puestos numéricos existentes.
+                      </span>
                     </div>
                   )}
 

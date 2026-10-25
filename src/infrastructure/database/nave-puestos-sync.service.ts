@@ -252,8 +252,41 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
     }
   }
 
-  // ── Paso C: Completar puestos vacantes hasta nave.cantidadPuestos ──
-  const puestosFinales = await prisma.puesto.findMany({
+  // ── Paso C: Completar o podar puestos vacantes hasta nave.cantidadPuestos ──
+  const puestosActuales = await prisma.puesto.findMany({
+    where: { naveId: nave.id },
+  });
+
+  // Limpiar vacantes duplicados con el mismo código (conservando prioritariamente el ocupado si existe)
+  const codigosVistos = new Set<string>();
+  const vacantesDuplicadosAEliminar: string[] = [];
+
+  for (const p of puestosActuales) {
+    const codNorm = p.codigo.trim().toUpperCase();
+    if (p.estado === "Ocupado" || p.comercianteId) {
+      codigosVistos.add(codNorm);
+    }
+  }
+
+  for (const p of puestosActuales) {
+    if (p.estado === "Vacante" && !p.comercianteId) {
+      const codNorm = p.codigo.trim().toUpperCase();
+      if (codigosVistos.has(codNorm)) {
+        vacantesDuplicadosAEliminar.push(p.id);
+      } else {
+        codigosVistos.add(codNorm);
+      }
+    }
+  }
+
+  if (vacantesDuplicadosAEliminar.length > 0) {
+    await prisma.puesto.deleteMany({
+      where: { id: { in: vacantesDuplicadosAEliminar } },
+    });
+  }
+
+  // Refrescar puestos tras eliminar duplicados
+  let puestosFinales = await prisma.puesto.findMany({
     where: { naveId: nave.id },
   });
 
@@ -271,20 +304,52 @@ export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promi
     });
   }
 
+  // Si tras la limpieza los puestos aún exceden la capacidad objetivo y hay vacantes sobrantes
+  if (puestosFinales.length > capacidadObjetivo) {
+    const exceso = puestosFinales.length - capacidadObjetivo;
+    const vacantesSobrantes = puestosFinales
+      .filter((p) => p.estado === "Vacante" && !p.comercianteId)
+      .sort((a, b) => {
+        const numA = parseInt(a.codigo, 10);
+        const numB = parseInt(b.codigo, 10);
+        if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+        return a.codigo.localeCompare(b.codigo);
+      })
+      .slice(-exceso);
+
+    if (vacantesSobrantes.length > 0) {
+      await prisma.puesto.deleteMany({
+        where: { id: { in: vacantesSobrantes.map((p) => p.id) } },
+      });
+      puestosFinales = await prisma.puesto.findMany({
+        where: { naveId: nave.id },
+      });
+    }
+  }
+
   const totalPuestos = puestosFinales.length;
   if (totalPuestos < capacidadObjetivo) {
     const faltantes = capacidadObjetivo - totalPuestos;
     const codigosExistentes = new Set(puestosFinales.map((p) => p.codigo.trim().toUpperCase()));
+    const numerosExistentes = new Set(
+      puestosFinales
+        .map((p) => {
+          const num = parseInt(p.codigo.trim(), 10);
+          return isNaN(num) ? null : num;
+        })
+        .filter((n): n is number => n !== null)
+    );
+
     const nuevosVacantes = [];
     let num = 1;
 
     for (let i = 0; i < faltantes; i++) {
-      let candidate = `VACANTE-${String(num).padStart(2, "0")}`;
-      while (codigosExistentes.has(candidate)) {
+      while (codigosExistentes.has(String(num)) || numerosExistentes.has(num)) {
         num++;
-        candidate = `VACANTE-${String(num).padStart(2, "0")}`;
       }
+      const candidate = String(num);
       codigosExistentes.add(candidate);
+      numerosExistentes.add(num);
       num++;
 
       nuevosVacantes.push({

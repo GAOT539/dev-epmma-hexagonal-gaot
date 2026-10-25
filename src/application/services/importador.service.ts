@@ -23,8 +23,11 @@ export class ImportadorService {
     return this.repository.guardarImportacion(registros, opciones);
   }
 
-  async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {
-    return this.repository.parsearExcel(data);
+  async parsearExcel(
+    data: ArrayBuffer | Uint8Array,
+    fileName?: string
+  ): Promise<ImportacionRegistro[]> {
+    return this.repository.parsearExcel(data, fileName);
   }
 
   async parsearXML(contenido: string): Promise<ImportacionRegistro[]> {

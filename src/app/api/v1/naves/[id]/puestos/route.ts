@@ -5,31 +5,10 @@ import {
   sincronizarPuestosDeNaveEnBD,
   generarSlugNave,
 } from "@/infrastructure/database/nave-puestos-sync.service";
+import { ordenarPuestos } from "@/infrastructure/database/catastro-reconciliacion.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
-}
-
-const getCategoriaPeso = (codigo: string): number => {
-  const upper = (codigo || "").trim().toUpperCase();
-  if (upper.startsWith("BODEGA")) return 1;
-  if (upper.startsWith("CUBICULO") || upper.startsWith("CUBÍCULO")) return 2;
-  if (upper.startsWith("NUCLEO") || upper.startsWith("NÚCLEO")) return 3;
-  if (upper.startsWith("ZCF") || upper.startsWith("ZONA")) return 4;
-  if (upper.startsWith("N-") || upper.startsWith("P-")) return 5;
-  return 6;
-};
-
-function ordenarPuestos<T extends { codigo: string }>(puestos: T[]): T[] {
-  return [...puestos].sort((a, b) => {
-    const pesoA = getCategoriaPeso(a.codigo);
-    const pesoB = getCategoriaPeso(b.codigo);
-    if (pesoA !== pesoB) return pesoA - pesoB;
-    return (a.codigo || "").trim().localeCompare((b.codigo || "").trim(), undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
-  });
 }
 
 export async function GET(request: Request, { params }: RouteParams) {

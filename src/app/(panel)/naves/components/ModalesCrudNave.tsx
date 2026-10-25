@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Building2, Pencil } from "lucide-react";
+import { Building2, Pencil, RefreshCw } from "lucide-react";
 import type { Nave } from "@/domain/models/nave.model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +42,7 @@ interface ModalesCrudNaveProps {
 
   // Compartido
   supervisoresDisponibles: string[];
+  guardando?: boolean;
 }
 
 export function ModalesCrudNave({
@@ -67,6 +68,7 @@ export function ModalesCrudNave({
   puestosOcupados,
   handleGuardarEditar,
   supervisoresDisponibles,
+  guardando = false,
 }: ModalesCrudNaveProps) {
   return (
     <>
@@ -154,14 +156,23 @@ export function ModalesCrudNave({
                 type="button"
                 variant="outline"
                 onClick={() => setIsCrearOpen(false)}
+                disabled={guardando}
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
-                className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
+                disabled={guardando}
+                className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold flex items-center gap-1.5"
               >
-                Guardar Nave
+                {guardando ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" />
+                    Guardando...
+                  </>
+                ) : (
+                  "Guardar Nave"
+                )}
               </Button>
             </DialogFooter>
           </form>
@@ -253,14 +264,23 @@ export function ModalesCrudNave({
                   type="button"
                   variant="outline"
                   onClick={() => setEditingNave(null)}
+                  disabled={guardando}
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
+                  disabled={guardando}
+                  className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold flex items-center gap-1.5"
                 >
-                  Guardar Cambios
+                  {guardando ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Guardando...
+                    </>
+                  ) : (
+                    "Guardar Cambios"
+                  )}
                 </Button>
               </DialogFooter>
             </form>

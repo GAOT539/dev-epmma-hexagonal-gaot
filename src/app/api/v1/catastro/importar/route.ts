@@ -13,7 +13,6 @@ import {
 import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
-  esCodigoTipoBodegaOLocal,
   expandirRegistrosMultiPuesto,
   generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
-    const modoUnificacion: "UNIFICAR" | "SEPARAR" = body.modoUnificacion || "UNIFICAR";
+    const modoUnificacion = "UNIFICAR";
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -40,8 +39,6 @@ export async function POST(request: Request) {
     if (!actor) {
       return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
     }
-
-    const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));
 
     // 1. Detección o Selección de Nave con Validación Estricta Unicode NFC
     let naveExistente = null;
@@ -89,11 +86,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Si el usuario eligió separar como nave independiente (ej. BODEGA NAVE H vs NAVE H)
-      if (modoUnificacion === "SEPARAR" && naveDetectada && contieneBodegas && !naveDetectada.startsWith("BODEGA")) {
-        naveDetectada = `BODEGA ${naveDetectada}`;
-      }
-
       if (naveDetectada && naveDetectada !== "NO DEFINIDA") {
         const detectadaNorm = naveDetectada.normalize("NFC").trim();
         const detectadaSlug = generarSlugNave(detectadaNorm);
@@ -117,7 +109,7 @@ export async function POST(request: Request) {
     }
 
     if (actor.rol === "SUPERVISOR") {
-      if (crearNuevaNave || modoUnificacion === "SEPARAR") {
+      if (crearNuevaNave) {
         return NextResponse.json(
           { error: "Solo SUPERADMIN y TIC pueden crear nuevas naves." },
           { status: 403 }
@@ -132,7 +124,7 @@ export async function POST(request: Request) {
     }
 
     // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave
-    if (!naveExistente && !crearNuevaNave && modoUnificacion !== "SEPARAR") {
+    if (!naveExistente && !crearNuevaNave) {
       return NextResponse.json(
         {
           exitosos: 0,
@@ -149,7 +141,7 @@ export async function POST(request: Request) {
     }
 
     // ── CASO A: Crear Nueva Nave ──────────────────────────────────────────────
-    if ((crearNuevaNave || modoUnificacion === "SEPARAR") && !naveExistente) {
+    if (crearNuevaNave && !naveExistente) {
       // Asegurar colación en español en BD antes de crear la nave
       await asegurarColacionEspanolEnBD();
 
@@ -296,7 +288,11 @@ export async function POST(request: Request) {
         }
         await tx.puesto.update({
           where: { id: vac.puestoId },
-          data: { estado: "Vacante", comercianteId: null },
+          data: {
+            codigo: vac.puestoCodigo,
+            estado: "Vacante",
+            comercianteId: null,
+          },
         });
       }
 
@@ -379,6 +375,7 @@ export async function POST(request: Request) {
           await tx.puesto.update({
             where: { id: asig.puestoId },
             data: {
+              codigo: asig.puestoCodigo,
               estado: "Ocupado",
               comercianteId: asig.comercianteId,
             },

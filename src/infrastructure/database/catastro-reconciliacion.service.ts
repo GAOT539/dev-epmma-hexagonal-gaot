@@ -35,54 +35,103 @@ export function generarSlugNave(nombre: string): string {
 }
 
 /**
- * Desglose inteligente de celdas multi-puesto separadas por guion (ej. "024-027" -> ["024", "027"]):
- * - Protege códigos con prefijo o formato de nave como N-A-10, BODEGA N-A-01, ZCF-01, N-02A-H.
- * - Desglosa secuencias puramente numéricas con posibles sufijos de puesto (ej. "024-027", "039-040", "105-129").
+ * Simplifica y limpia cualquier código de puesto eliminando prefijos descriptivos
+ * (BODEGA, CUBICULO, NUCLEO, COCINA, LOCAL, PUESTO, BAJO, ALTO) y prefijos/sufijos de nave (N-X-, -N-X),
+ * retornando el identificador corto del puesto (ej. "01", "003-A", "062A", "S/N").
  */
-export function desglosarCodigosPuestoMultiples(codigoPuesto: string): string[] {
+export function simplificarCodigoPuesto(rawCodigo: string): string {
+  if (!rawCodigo) return "-";
+  const norm = rawCodigo.normalize("NFC").trim();
+  if (!norm || norm === "-") return "-";
+  if (norm.toUpperCase() === "S/N" || norm.toUpperCase() === "SN") return "S/N";
+
+  let token = norm
+    .replace(/^(?:BODEGA|CUBICULO|CUBÍCULO|NUCLEO|NÚCLEO|NUCLEOS|COCINA|LOCAL|PUESTO|BAJO|ALTO)\s+/i, "")
+    .trim();
+
+  // Limpiar prefijo estructural de nave ej. N-A-01, N-CF-01, N-Ñ-01, ZCF-01
+  const matchPrefijo = token.match(/^(?:N-[A-ZÑ0-9]+-|ZCF-)(.+)$/i);
+  if (matchPrefijo) {
+    token = matchPrefijo[1].trim();
+  }
+
+  // Limpiar sufijo estructural de nave ej. N-02A-H o 02A-N-H
+  const matchSufijo =
+    token.match(/^N-([0-9]+[A-Z0-9]*)-[A-ZÑ]$/i) || token.match(/^([0-9]+[A-Z0-9]*)-N-[A-ZÑ]$/i);
+  if (matchSufijo) {
+    token = matchSufijo[1].trim();
+  }
+
+  // Quitar palabras descriptivas residuales
+  token = token
+    .replace(/\b(?:BODEGA|CUBICULO|CUBÍCULO|NUCLEO|NÚCLEO|NUCLEOS|COCINA|LOCAL|PUESTO|BAJO|ALTO)\b/gi, "")
+    .trim()
+    .replace(/^[-_\s]+|[-_\s]+$/g, "");
+
+  return token || norm;
+}
+
+/**
+ * Motor Heurístico de Separación vs Preservación de Puestos Múltiples (5 Casos Exactos):
+ * - Caso 1: Prefijo estructural con numeración múltiple (ej. "CUBICULO N-Z-52-53") -> ["CUBICULO N-Z-52", "CUBICULO N-Z-53"]
+ * - Caso 2: Códigos estructurales únicos (BODEGA, CUBICULO, N-, ZCF-, S/N) -> NO separar
+ * - Caso 3: Subdivisiones con letra (ej. "003-A", "102-A") -> NO separar
+ * - Caso 4: Lista de puestos numéricos con guion (ej. "001-126", "049-073", "008-009-015-016") -> separar por '-'
+ * - Caso 5: Puestos numéricos de 6 dígitos concatenados sin guion (ej. "068069") -> ["068", "069"]
+ */
+export function expandPuestosHeuristic(codigoPuesto: string): string[] {
   if (!codigoPuesto) return ["-"];
   const codigoLimpio = codigoPuesto.normalize("NFC").trim();
-  if (!codigoLimpio || codigoLimpio === "-") return ["-"];
+  if (!codigoLimpio || codigoLimpio === "-" || codigoLimpio.toUpperCase() === "S/N") {
+    return [codigoLimpio || "-"];
+  }
 
   const upper = codigoLimpio.toUpperCase();
 
-  // Regla 1: Protección de códigos institucionales o con prefijo de nave
-  if (
-    upper.startsWith("N-") ||
-    upper.startsWith("ZCF-") ||
-    upper.startsWith("P-") ||
-    upper.startsWith("BODEGA") ||
-    upper.startsWith("CUBICULO") ||
-    upper.startsWith("CUBÍCULO") ||
-    upper.startsWith("NUCLEO") ||
-    upper.startsWith("NÚCLEO") ||
-    upper.startsWith("LOCAL") ||
-    upper.startsWith("PUESTO")
-  ) {
+  // Caso 1: Prefijo estructural con numeración múltiple al final
+  const regexCaso1 = /^((?:CUBICULO|CUBÍCULO|BODEGA|NUCLEO|NÚCLEO|LOCAL|COCINA)\s+N-[A-ZÑ0-9]+-)(\d+(?:-\d+)+)$/i;
+  const matchCaso1 = upper.match(regexCaso1);
+  if (matchCaso1) {
+    const prefijo = matchCaso1[1];
+    const numeros = matchCaso1[2].split("-");
+    return numeros.map((num) => `${prefijo}${num}`);
+  }
+
+  // Caso 2: Códigos estructurales únicos -> NO separar
+  if (/^(?:BODEGA|CUBICULO|CUBÍCULO|NUCLEO|NÚCLEO|NUCLEOS|COCINA|LOCAL|N-|ZCF-)/i.test(upper)) {
     return [codigoLimpio];
   }
 
-  // Protección de formatos con letra de nave como segmento (ej. N-02A-H, N-H-01)
-  if (/^N-(?:[A-ZÑ0-9]+-[A-Z0-9-]+|[A-Z0-9]+-[A-ZÑ])(?:[\s*].*)?$/i.test(upper)) {
+  // Caso 3: Subdivisiones con letra -> NO separar
+  if (/^\d+-[A-Za-z]+$/i.test(codigoLimpio)) {
     return [codigoLimpio];
   }
 
-  // Regla 2: Detección y separación de múltiples puestos numéricos (ej. "024-027", "058-063")
-  if (codigoLimpio.includes("-")) {
+  // Caso 4: Lista de puestos numéricos separados por guion (ej. "001-126", "049-073")
+  if (/^\d+[A-Za-z]?(-(?:\d+[A-Za-z]?))+$/i.test(codigoLimpio)) {
     const partes = codigoLimpio
       .split("-")
       .map((p) => p.trim())
       .filter(Boolean);
-
-    if (
-      partes.length >= 2 &&
-      partes.every((p) => /^\d+[A-ZÑ]?$/i.test(p))
-    ) {
+    if (partes.length >= 2) {
       return partes;
     }
   }
 
+  // Caso 5: Puestos numéricos de 6 dígitos concatenados sin guion (ej. "068069")
+  if (/^\d{6}$/.test(codigoLimpio)) {
+    return [codigoLimpio.slice(0, 3), codigoLimpio.slice(3, 6)];
+  }
+
   return [codigoLimpio];
+}
+
+/**
+ * Desglose inteligente de celdas multi-puesto separadas por guion.
+ * Utiliza el motor heurístico exacto expandPuestosHeuristic.
+ */
+export function desglosarCodigosPuestoMultiples(codigoPuesto: string): string[] {
+  return expandPuestosHeuristic(codigoPuesto);
 }
 
 /**
@@ -247,8 +296,8 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
   // Limpiar guiones o espacios iniciales/finales
   token = token.replace(/^[-_\s]+|[-_\s]+$/g, "").trim();
 
-  // 5. Extraer número base y sufijo alfanumérico estricto
-  const matchNum = token.match(/^(\d+)([A-ZÑ]*)$/i);
+  // 5. Extraer número base y sufijo alfanumérico estricto (ej. "116" vs "116A", "003-A")
+  const matchNum = token.match(/^(\d+)[-_]?([A-ZÑ]*)$/i);
 
   let numeroBase = "";
   let sufijoAlfanumerico = "";
@@ -258,7 +307,7 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
     numeroBase = String(parseInt(rawNum, 10)); // sin ceros a la izquierda
     sufijoAlfanumerico = (matchNum[2] || "").toUpperCase().trim();
   } else {
-    const matchNumEnToken = token.match(/(\d+)([A-ZÑ]*)$/i);
+    const matchNumEnToken = token.match(/(\d+)[-_]?([A-ZÑ]*)$/i);
     if (matchNumEnToken) {
       numeroBase = String(parseInt(matchNumEnToken[1], 10));
       sufijoAlfanumerico = (matchNumEnToken[2] || "").toUpperCase().trim();
@@ -280,7 +329,9 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
 /**
  * Regla de Oro de Comparación de Puestos:
  * - Dos códigos son equivalentes si tienen el mismo numeroBase Y exactamente el mismo sufijoAlfanumerico.
- * - "N-A-01" ("1", "") y "N-A-01A" ("1", "A") son ESTRICTAMENTE DIFERENTES.
+ * - "116" ("116", "") y "116A" ("116", "A") o "003-A" ("3", "A") son ESTRICTAMENTE DIFERENTES.
+ * - Un código de tipo Bodega/Local (esCodigoTipoBodegaOLocal === true, ej. "N-N-01") JAMÁS es equivalente
+ *   a un puesto numérico de nave abierta ("001" o "1").
  * - Códigos dobles como "058-063" y "079-095" se conservan íntegros y no colisionan con puestos unitarios.
  * - Si ambos especifican categoría y difieren ("BODEGA" !== "CUBICULO"), no son equivalentes.
  */
@@ -292,6 +343,11 @@ export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null
 
   // Igualdad exacta
   if (c1 === c2) return true;
+
+  // Un código de tipo Bodega/Local JAMÁS es equivalente a un puesto numérico de nave abierta
+  if (esCodigoTipoBodegaOLocal(c1) !== esCodigoTipoBodegaOLocal(c2)) {
+    return false;
+  }
 
   const d1 = descomponerCodigoPuesto(c1);
   const d2 = descomponerCodigoPuesto(c2);
@@ -309,7 +365,7 @@ export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null
     // Deben tener el mismo número base
     if (d1.numeroBase !== d2.numeroBase) return false;
 
-    // Y EXACTAMENTE el mismo sufijo ("01" !== "01A", "07" !== "07A")
+    // Y EXACTAMENTE el mismo sufijo ("01" !== "01A", "116" !== "116A", "003" !== "003-A")
     if (d1.sufijoAlfanumerico !== d2.sufijoAlfanumerico) return false;
 
     // Si ambos especificaron categoría, deben coincidir
@@ -326,6 +382,60 @@ export function sonCodigosPuestosEquivalentes(cod1: string, cod2?: string | null
   }
 
   return false;
+}
+
+/**
+ * Comparador canónico de códigos de puesto según la secuencia real del mercado:
+ * 1. Puestos numéricos con o sin sufijo (ej. 001..062, 062A, 063, 063A, 064, 064A..126, 003-A):
+ *    Se ordenan por su número base entero (parseInt) primero, y luego por su sufijo ("" antes que "A").
+ * 2. Códigos estructurales y de bodegas (N-N-01, N-N-02, BODEGA N-A-01, etc.):
+ *    Se ordenan después de los puestos numéricos por categoría y orden alfanumérico natural.
+ */
+export function compararCodigosPuesto(codigoA: string, codigoB: string): number {
+  const a = (codigoA || "").trim();
+  const b = (codigoB || "").trim();
+  if (a === b) return 0;
+
+  const matchA = a.match(/^(\d+)[-_]?([A-ZÑ]*)$/i);
+  const matchB = b.match(/^(\d+)[-_]?([A-ZÑ]*)$/i);
+
+  // Si ambos son puestos numéricos (con o sin sufijo de letra)
+  if (matchA && matchB) {
+    const numA = parseInt(matchA[1], 10);
+    const numB = parseInt(matchB[1], 10);
+    if (numA !== numB) {
+      return numA - numB;
+    }
+    const sufA = (matchA[2] || "").toUpperCase();
+    const sufB = (matchB[2] || "").toUpperCase();
+    return sufA.localeCompare(sufB);
+  }
+
+  // Puestos numéricos van antes que códigos de bodegas/estructurales
+  if (matchA && !matchB) return -1;
+  if (!matchA && matchB) return 1;
+
+  // Entre no-numéricos, ordenar por categoría y orden natural
+  const getCategoriaPeso = (c: string): number => {
+    const u = c.toUpperCase();
+    if (u.startsWith("N-") || u.startsWith("P-")) return 1;
+    if (u.startsWith("BODEGA")) return 2;
+    if (u.startsWith("CUBICULO") || u.startsWith("CUBÍCULO")) return 3;
+    if (u.startsWith("NUCLEO") || u.startsWith("NÚCLEO")) return 4;
+    if (u.startsWith("LOCAL")) return 5;
+    if (u.startsWith("ZCF") || u.startsWith("ZONA")) return 6;
+    return 7;
+  };
+
+  const pesoA = getCategoriaPeso(a);
+  const pesoB = getCategoriaPeso(b);
+  if (pesoA !== pesoB) return pesoA - pesoB;
+
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
+export function ordenarPuestos<T extends { codigo: string }>(puestos: T[]): T[] {
+  return [...puestos].sort((a, b) => compararCodigosPuesto(a.codigo, b.codigo));
 }
 
 /**
@@ -436,6 +546,23 @@ export function reconciliarCatastroNaveExistente(
   const asignacionesOcupar: ResultadoReconciliacionEjecucion["asignacionesOcupar"] = [];
   const puestosAVacante: ResultadoReconciliacionEjecucion["puestosAVacante"] = [];
 
+  // ── Calcular el máximo número base y formato de ceros del Excel entrante ──
+  let maxNumeroPuroExcel = 0;
+  let padLengthExcel = 1;
+
+  for (const reg of registros) {
+    const rawCod = (reg.puesto || "").trim();
+    if (/^\d+$/.test(rawCod)) {
+      const num = parseInt(rawCod, 10);
+      if (num > maxNumeroPuroExcel) {
+        maxNumeroPuroExcel = num;
+      }
+      if (rawCod.length > padLengthExcel) {
+        padLengthExcel = rawCod.length;
+      }
+    }
+  }
+
   // ── Detección de Subconjunto de Registros Entrantes ──
   const todosSonBodegas =
     registros.length > 0 &&
@@ -447,10 +574,20 @@ export function reconciliarCatastroNaveExistente(
   // Filtrar los puestos de la nave que participan en la reconciliación según la categoría entrante:
   const puestosNaveParticipantes = puestosNave.filter((p) => {
     if (todosSonBodegas) {
-      return esCodigoTipoBodegaOLocal(p.codigo);
+      // Participan puestos de bodega O puestos vacantes no asignados (para permitir que bodegas ocupen vacantes preexistentes)
+      const esBodega = esCodigoTipoBodegaOLocal(p.codigo);
+      const com = p.comercianteId ? comerciantesNave.find((c) => c.idInterno === p.comercianteId) : null;
+      const comEsBodega = com ? esCodigoTipoBodegaOLocal(com.puestoId || "") : false;
+      const esVacanteLibre = p.estado === "Vacante" && !p.comercianteId;
+      return esBodega || comEsBodega || esVacanteLibre;
     }
     if (todosSonPuestosNumericos) {
-      return !esCodigoTipoBodegaOLocal(p.codigo);
+      // Participan puestos numéricos O puestos vacantes no asignados (pero NUNCA bodegas ocupadas)
+      const esBodega = esCodigoTipoBodegaOLocal(p.codigo);
+      const com = p.comercianteId ? comerciantesNave.find((c) => c.idInterno === p.comercianteId) : null;
+      const comEsBodega = com ? esCodigoTipoBodegaOLocal(com.puestoId || "") : false;
+      const esVacanteLibre = p.estado === "Vacante" && !p.comercianteId;
+      return (!esBodega && !comEsBodega) || esVacanteLibre;
     }
     return true; // mixto: participan todos
   });
@@ -461,7 +598,7 @@ export function reconciliarCatastroNaveExistente(
 
   // ── PASO 1: Comparar Contribuyentes Existentes en la Sección Participante ─────
 
-  // Subpaso 1A: Mismo Contribuyente que permanece en su MISMO Puesto
+  // Subpaso 1A: Mismo Contribuyente que permanece en su MISMO Puesto (o placeholder sobrante)
   for (let idx = 0; idx < registros.length; idx++) {
     const reg = registros[idx];
     const candidatos = comerciantesNave.filter(
@@ -478,54 +615,101 @@ export function reconciliarCatastroNaveExistente(
 
     for (const cand of candidatos) {
       const pActual = puestosNaveParticipantes.find((p) => p.comercianteId === cand.idInterno);
-      if (
+      const candStallId = cand.puestoId || "";
+      const matchesDirect =
         (pActual && sonCodigosPuestosEquivalentes(pActual.codigo, reg.puesto)) ||
-        sonCodigosPuestosEquivalentes(cand.puestoId || "", reg.puesto)
-      ) {
+        sonCodigosPuestosEquivalentes(candStallId, reg.puesto);
+
+      // Si el contribuyente ya tiene un puesto en la nave y es el único registro en el archivo para esta persona
+      const esUnicoRegistroParaPersona =
+        candidatos.length === 1 &&
+        !registros.some(
+          (r, rIdx) => rIdx !== idx && sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, cand)
+        );
+
+      if (matchesDirect || (pActual && esUnicoRegistroParaPersona)) {
         comMismoPuesto = cand;
-        puestoActualMatch = pActual || puestosNaveParticipantes.find((p) => sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)) || null;
+        puestoActualMatch =
+          pActual ||
+          puestosNaveParticipantes.find((p) => sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)) ||
+          null;
         break;
       }
     }
 
     if (comMismoPuesto && puestoActualMatch) {
-      const puestoDestino =
-        puestosNaveParticipantes.find((p) =>
-          sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
-        ) || puestoActualMatch;
+      const codigoExcel = (reg.puesto || "").trim().toUpperCase();
 
-      const cambioAct =
-        comMismoPuesto.actividad.toUpperCase() !== (reg.actividad || "General").toUpperCase();
-      const cambioCiu = comMismoPuesto.ciu !== reg.ciu && reg.ciu !== "S/N";
+      // Buscar si existe en la nave un puesto que coincida exactamente o por equivalencia con el código del Excel
+      let puestoDestino = puestosNaveParticipantes.find(
+        (p) => !puestosAsignadosIds.has(p.id) && sonCodigosPuestosEquivalentes(p.codigo, codigoExcel)
+      );
 
-      if (cambioAct || cambioCiu) {
-        cambiosDetectados.push({
-          tipo: "ACTUALIZACION",
-          puesto: puestoDestino.codigo,
-          anterior: `${comMismoPuesto.contribuyente} (${comMismoPuesto.actividad})`,
-          nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
-          detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${puestoDestino.codigo}`,
-        });
+      // Si no existe pero el puesto que ocupaba antes era un placeholder sobrante (> maxNumeroPuroExcel),
+      // o coincide con su puesto actual:
+      if (!puestoDestino) {
+        const esPlaceholderSobrante =
+          maxNumeroPuroExcel > 0 &&
+          /^\d+$/.test(puestoActualMatch.codigo.trim()) &&
+          parseInt(puestoActualMatch.codigo.trim(), 10) > maxNumeroPuroExcel;
+
+        if (esPlaceholderSobrante || sonCodigosPuestosEquivalentes(puestoActualMatch.codigo, codigoExcel)) {
+          puestoDestino = puestoActualMatch;
+        }
       }
 
-      puestosAsignadosIds.add(puestoDestino.id);
-      comerciantesProcesadosIds.add(comMismoPuesto.idInterno);
-      registrosProcesadosIndices.add(idx);
+      if (puestoDestino) {
+        // El código ganador SIEMPRE debe ser el código del Excel
+        const codigoPuestoFinal = (codigoExcel && codigoExcel !== "-")
+          ? codigoExcel
+          : puestoDestino.codigo;
 
-      asignacionesOcupar.push({
-        puestoId: puestoDestino.id,
-        puestoCodigo: puestoDestino.codigo,
-        comercianteId: comMismoPuesto.idInterno,
-        esNuevoComerciante: false,
-        datosComerciante: {
-          ciu: reg.ciu || comMismoPuesto.ciu || "S/N",
-          cedula: reg.cedula || comMismoPuesto.cedula,
-          contribuyente: reg.nombre || comMismoPuesto.contribuyente,
-          actividad: reg.actividad || comMismoPuesto.actividad || "General",
-          puestoId: puestoDestino.codigo,
-          nave: nave.nombre,
-        },
-      });
+        // Solo detectar ACTUALIZACION si los datos cambiaron significativamente (idempotencia estricta)
+        const actActual = (comMismoPuesto.actividad || "").trim().toUpperCase();
+        const actNueva = (reg.actividad || "General").trim().toUpperCase();
+        const cambioAct =
+          actActual && actNueva && actActual !== "GENERAL" && actNueva !== "GENERAL" && actActual !== actNueva;
+
+        const ciuActual = (comMismoPuesto.ciu || "").trim();
+        const ciuNuevo = (reg.ciu || "").trim();
+        const cambioCiu =
+          ciuNuevo &&
+          ciuNuevo !== "S/N" &&
+          ciuNuevo !== "-" &&
+          ciuActual &&
+          ciuActual !== "S/N" &&
+          ciuActual !== "-" &&
+          ciuActual !== ciuNuevo;
+
+        if (cambioAct || cambioCiu) {
+          cambiosDetectados.push({
+            tipo: "ACTUALIZACION",
+            puesto: codigoPuestoFinal,
+            anterior: `${comMismoPuesto.contribuyente} (${comMismoPuesto.actividad})`,
+            nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
+            detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${codigoPuestoFinal}`,
+          });
+        }
+
+        puestosAsignadosIds.add(puestoDestino.id);
+        comerciantesProcesadosIds.add(comMismoPuesto.idInterno);
+        registrosProcesadosIndices.add(idx);
+
+        asignacionesOcupar.push({
+          puestoId: puestoDestino.id,
+          puestoCodigo: codigoPuestoFinal,
+          comercianteId: comMismoPuesto.idInterno,
+          esNuevoComerciante: false,
+          datosComerciante: {
+            ciu: reg.ciu && reg.ciu !== "-" ? reg.ciu : comMismoPuesto.ciu || "S/N",
+            cedula: reg.cedula || comMismoPuesto.cedula,
+            contribuyente: reg.nombre || comMismoPuesto.contribuyente,
+            actividad: reg.actividad || comMismoPuesto.actividad || "General",
+            puestoId: codigoPuestoFinal,
+            nave: nave.nombre,
+          },
+        });
+      }
     }
   }
 
@@ -544,23 +728,41 @@ export function reconciliarCatastroNaveExistente(
 
     const comCambio = candidatos[0];
     const puestoActual = puestosNaveParticipantes.find((p) => p.comercianteId === comCambio.idInterno);
-    const puestoNuevoArchivo = puestosNaveParticipantes.find((p) =>
-      sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)
+    const codigoExcel = (reg.puesto || "").trim().toUpperCase();
+    let puestoNuevoArchivo = puestosNaveParticipantes.find((p) =>
+      !puestosAsignadosIds.has(p.id) && sonCodigosPuestosEquivalentes(p.codigo, codigoExcel)
     );
+
+    // Si no existe pero su puesto actual era placeholder sobrante (> maxNumeroPuroExcel), reutilizarlo
+    if (!puestoNuevoArchivo && puestoActual) {
+      const esPlaceholderSobrante =
+        maxNumeroPuroExcel > 0 &&
+        /^\d+$/.test(puestoActual.codigo.trim()) &&
+        parseInt(puestoActual.codigo.trim(), 10) > maxNumeroPuroExcel;
+
+      if (esPlaceholderSobrante) {
+        puestoNuevoArchivo = puestoActual;
+      }
+    }
 
     if (
       puestoActual &&
       puestoNuevoArchivo &&
-      puestoActual.id !== puestoNuevoArchivo.id &&
       !puestosAsignadosIds.has(puestoNuevoArchivo.id)
     ) {
-      cambiosDetectados.push({
-        tipo: "CAMBIO_PUESTO",
-        puesto: puestoNuevoArchivo.codigo,
-        anterior: puestoActual.codigo,
-        nuevo: puestoNuevoArchivo.codigo,
-        detalle: `${comCambio.contribuyente} pasó del puesto ${puestoActual.codigo} al puesto ${puestoNuevoArchivo.codigo}`,
-      });
+      const codigoPuestoFinal = (codigoExcel && codigoExcel !== "-")
+        ? codigoExcel
+        : puestoNuevoArchivo.codigo;
+
+      if (puestoActual.id !== puestoNuevoArchivo.id) {
+        cambiosDetectados.push({
+          tipo: "CAMBIO_PUESTO",
+          puesto: codigoPuestoFinal,
+          anterior: puestoActual.codigo,
+          nuevo: codigoPuestoFinal,
+          detalle: `${comCambio.contribuyente} pasó del puesto ${puestoActual.codigo} al puesto ${codigoPuestoFinal}`,
+        });
+      }
 
       puestosAsignadosIds.add(puestoNuevoArchivo.id);
       comerciantesProcesadosIds.add(comCambio.idInterno);
@@ -568,7 +770,7 @@ export function reconciliarCatastroNaveExistente(
 
       asignacionesOcupar.push({
         puestoId: puestoNuevoArchivo.id,
-        puestoCodigo: puestoNuevoArchivo.codigo,
+        puestoCodigo: codigoPuestoFinal,
         comercianteId: comCambio.idInterno,
         esNuevoComerciante: false,
         datosComerciante: {
@@ -576,7 +778,7 @@ export function reconciliarCatastroNaveExistente(
           cedula: reg.cedula || comCambio.cedula,
           contribuyente: reg.nombre || comCambio.contribuyente,
           actividad: reg.actividad || comCambio.actividad || "General",
-          puestoId: puestoNuevoArchivo.codigo,
+          puestoId: codigoPuestoFinal,
           nave: nave.nombre,
         },
       });
@@ -588,19 +790,37 @@ export function reconciliarCatastroNaveExistente(
   const puestosLibres = puestosNaveParticipantes.filter((p) => !puestosAsignadosIds.has(p.id));
 
   // Subpaso 2A: Coincidencia por código de puesto equivalente
+  const esRegBodegaGlobal = todosSonBodegas;
   for (let idx = 0; idx < registros.length; idx++) {
     if (registrosProcesadosIndices.has(idx)) continue;
     const regNuevo = registros[idx];
+    const esRegBodega = esRegBodegaGlobal || esCodigoTipoBodegaOLocal(regNuevo.puesto || "");
 
-    const idxPuestoMatch = puestosLibres.findIndex((p) =>
-      sonCodigosPuestosEquivalentes(p.codigo, regNuevo.puesto)
-    );
+    const idxPuestoMatch = puestosLibres.findIndex((p) => {
+      if (!sonCodigosPuestosEquivalentes(p.codigo, regNuevo.puesto)) {
+        return false;
+      }
+      // Regla anti-colisión: Si el puesto está ocupado por alguien de otra categoría, NO tomarlo
+      if (p.comercianteId) {
+        const comActual = comerciantesNave.find((c) => c.idInterno === p.comercianteId);
+        const comEsBodega = comActual ? esCodigoTipoBodegaOLocal(comActual.puestoId || "") : false;
+        if (esRegBodega !== comEsBodega) {
+          return false;
+        }
+      }
+      return true;
+    });
 
     if (idxPuestoMatch !== -1) {
       const puestoMatch = puestosLibres[idxPuestoMatch];
       puestosLibres.splice(idxPuestoMatch, 1);
       puestosAsignadosIds.add(puestoMatch.id);
       registrosProcesadosIndices.add(idx);
+
+      const codigoExcel = (regNuevo.puesto || "").trim().toUpperCase();
+      const codigoPuestoFinal = (codigoExcel && codigoExcel !== "-")
+        ? codigoExcel
+        : puestoMatch.codigo;
 
       const comSaliente = puestoMatch.comercianteId
         ? comerciantesNave.find((c) => c.idInterno === puestoMatch.comercianteId)
@@ -609,23 +829,23 @@ export function reconciliarCatastroNaveExistente(
       if (comSaliente && !sonMismoContribuyente(comSaliente, { contribuyente: regNuevo.nombre, cedula: regNuevo.cedula })) {
         cambiosDetectados.push({
           tipo: "REEMPLAZO_OCUPANTE",
-          puesto: puestoMatch.codigo,
+          puesto: codigoPuestoFinal,
           anterior: comSaliente.contribuyente,
           nuevo: regNuevo.nombre,
-          detalle: `Puesto ${puestoMatch.codigo}: Se reemplazó a ${comSaliente.contribuyente} por ${regNuevo.nombre}`,
+          detalle: `Puesto ${codigoPuestoFinal}: Se reemplazó a ${comSaliente.contribuyente} por ${regNuevo.nombre}`,
         });
       } else {
         cambiosDetectados.push({
           tipo: "NUEVO",
-          puesto: puestoMatch.codigo,
+          puesto: codigoPuestoFinal,
           nuevo: regNuevo.nombre,
-          detalle: `Nuevo comerciante ${regNuevo.nombre} asignado al puesto ${puestoMatch.codigo}`,
+          detalle: `Nuevo comerciante ${regNuevo.nombre} asignado al puesto ${codigoPuestoFinal}`,
         });
       }
 
       asignacionesOcupar.push({
         puestoId: puestoMatch.id,
-        puestoCodigo: puestoMatch.codigo,
+        puestoCodigo: codigoPuestoFinal,
         comercianteId: crypto.randomUUID(),
         esNuevoComerciante: true,
         datosComerciante: {
@@ -633,130 +853,135 @@ export function reconciliarCatastroNaveExistente(
           cedula: regNuevo.cedula,
           contribuyente: regNuevo.nombre,
           actividad: regNuevo.actividad || "General",
-          puestoId: puestoMatch.codigo,
+          puestoId: codigoPuestoFinal,
           nave: nave.nombre,
         },
       });
     }
   }
 
-  // Subpaso 2B: Asignar nuevos restantes a puestos libres existentes en la sección
+  // Subpaso 2B: Asignar nuevos restantes SIN alterar puestos vacantes internos (<= maxNumeroPuroExcel)
   for (let idx = 0; idx < registros.length; idx++) {
     if (registrosProcesadosIndices.has(idx)) continue;
-    if (puestosLibres.length === 0) break;
-
     const regNuevo = registros[idx];
-    let idxPuestoDeduccion = puestosLibres.findIndex((p) => p.comercianteId !== null);
-    if (idxPuestoDeduccion === -1) {
-      idxPuestoDeduccion = 0;
+    const codigoExcel = (regNuevo.puesto || "").trim().toUpperCase();
+    const codigoPuestoFinal = (codigoExcel && codigoExcel !== "-")
+      ? codigoExcel
+      : `PUESTO-${idx + 1}`;
+
+    // Buscar únicamente si existe un puesto placeholder sobrante de cola (> maxNumeroPuroExcel)
+    let idxPlaceholderSobrante = -1;
+    if (maxNumeroPuroExcel > 0) {
+      idxPlaceholderSobrante = puestosLibres.findIndex((p) => {
+        if (p.comercianteId !== null) return false;
+        const codTrim = p.codigo.trim();
+        if (!/^\d+$/.test(codTrim)) return false;
+        const numP = parseInt(codTrim, 10);
+        return numP > maxNumeroPuroExcel;
+      });
     }
 
-    const puestoDeducido = puestosLibres[idxPuestoDeduccion];
-    puestosLibres.splice(idxPuestoDeduccion, 1);
-    puestosAsignadosIds.add(puestoDeducido.id);
-    registrosProcesadosIndices.add(idx);
+    if (idxPlaceholderSobrante !== -1) {
+      // Reutilizar el placeholder de cola (> maxNumeroPuroExcel, ej. 127) y renombrarlo al código del Excel
+      const puestoPlaceholder = puestosLibres[idxPlaceholderSobrante];
+      puestosLibres.splice(idxPlaceholderSobrante, 1);
+      puestosAsignadosIds.add(puestoPlaceholder.id);
+      registrosProcesadosIndices.add(idx);
 
-    const comSaliente = puestoDeducido.comercianteId
-      ? comerciantesNave.find((c) => c.idInterno === puestoDeducido.comercianteId)
-      : null;
-
-    if (comSaliente) {
-      cambiosDetectados.push({
-        tipo: "REEMPLAZO_OCUPANTE",
-        puesto: puestoDeducido.codigo,
-        anterior: comSaliente.contribuyente,
-        nuevo: regNuevo.nombre,
-        detalle: `Puesto ${puestoDeducido.codigo}: Se asigna a ${regNuevo.nombre} (anterior ocupante: ${comSaliente.contribuyente})`,
-      });
-    } else {
       cambiosDetectados.push({
         tipo: "NUEVO",
-        puesto: puestoDeducido.codigo,
+        puesto: codigoPuestoFinal,
         nuevo: regNuevo.nombre,
-        detalle: `Nuevo comerciante ${regNuevo.nombre} asignado al puesto vacante ${puestoDeducido.codigo}`,
+        detalle: `Puesto ${codigoPuestoFinal}: Asignado a ${regNuevo.nombre} (reutilizando placeholder ${puestoPlaceholder.codigo})`,
+      });
+
+      asignacionesOcupar.push({
+        puestoId: puestoPlaceholder.id,
+        puestoCodigo: codigoPuestoFinal,
+        comercianteId: crypto.randomUUID(),
+        esNuevoComerciante: true,
+        esNuevoPuesto: false,
+        datosComerciante: {
+          ciu: regNuevo.ciu || "S/N",
+          cedula: regNuevo.cedula,
+          contribuyente: regNuevo.nombre,
+          actividad: regNuevo.actividad || "General",
+          puestoId: codigoPuestoFinal,
+          nave: nave.nombre,
+        },
+      });
+    } else {
+      // Si no hay placeholders sobrantes de cola (> maxNumeroPuroExcel), crearlo como puesto nuevo
+      const nuevoPuestoId = crypto.randomUUID();
+      puestosAsignadosIds.add(nuevoPuestoId);
+      registrosProcesadosIndices.add(idx);
+
+      cambiosDetectados.push({
+        tipo: "NUEVO",
+        puesto: codigoPuestoFinal,
+        nuevo: regNuevo.nombre,
+        detalle: `Puesto ${codigoPuestoFinal}: Nuevo comerciante ${regNuevo.nombre} asignado`,
+      });
+
+      asignacionesOcupar.push({
+        puestoId: nuevoPuestoId,
+        puestoCodigo: codigoPuestoFinal,
+        comercianteId: crypto.randomUUID(),
+        esNuevoComerciante: true,
+        esNuevoPuesto: true,
+        datosComerciante: {
+          ciu: regNuevo.ciu || "S/N",
+          cedula: regNuevo.cedula,
+          contribuyente: regNuevo.nombre,
+          actividad: regNuevo.actividad || "General",
+          puestoId: codigoPuestoFinal,
+          nave: nave.nombre,
+        },
       });
     }
-
-    asignacionesOcupar.push({
-      puestoId: puestoDeducido.id,
-      puestoCodigo: puestoDeducido.codigo,
-      comercianteId: crypto.randomUUID(),
-      esNuevoComerciante: true,
-      datosComerciante: {
-        ciu: regNuevo.ciu || "S/N",
-        cedula: regNuevo.cedula,
-        contribuyente: regNuevo.nombre,
-        actividad: regNuevo.actividad || "General",
-        puestoId: puestoDeducido.codigo,
-        nave: nave.nombre,
-      },
-    });
-  }
-
-  // Subpaso 2C: Si el archivo contiene más puestos de los existentes en esta sección,
-  // se agregan como PUESTOS NUEVOS sin descartar ni inventar vacantes artificiales.
-  for (let idx = 0; idx < registros.length; idx++) {
-    if (registrosProcesadosIndices.has(idx)) continue;
-    const regNuevo = registros[idx];
-    const nuevoPuestoId = crypto.randomUUID();
-    const codigoPuestoFinal = (regNuevo.puesto || `PUESTO-${idx + 1}`).trim().toUpperCase();
-
-    puestosAsignadosIds.add(nuevoPuestoId);
-    registrosProcesadosIndices.add(idx);
-
-    cambiosDetectados.push({
-      tipo: "NUEVO",
-      puesto: codigoPuestoFinal,
-      nuevo: regNuevo.nombre,
-      detalle: `Puesto ${codigoPuestoFinal}: Nuevo comerciante ${regNuevo.nombre} asignado`,
-    });
-
-    asignacionesOcupar.push({
-      puestoId: nuevoPuestoId,
-      puestoCodigo: codigoPuestoFinal,
-      comercianteId: crypto.randomUUID(),
-      esNuevoComerciante: true,
-      esNuevoPuesto: true,
-      datosComerciante: {
-        ciu: regNuevo.ciu || "S/N",
-        cedula: regNuevo.cedula,
-        contribuyente: regNuevo.nombre,
-        actividad: regNuevo.actividad || "General",
-        puestoId: codigoPuestoFinal,
-        nave: nave.nombre,
-      },
-    });
   }
 
   // ── PASO 3: Puestos de la Sección Participante que Quedan Vacantes ──────────
   for (const puestoRestante of puestosLibres) {
-    if (puestoRestante.comercianteId || puestoRestante.estado === "Ocupado") {
-      const comSaliente = puestoRestante.comercianteId
-        ? comerciantesNave.find((c) => c.idInterno === puestoRestante.comercianteId)
-        : null;
+    let codigoVacante = puestoRestante.codigo;
 
+    // Si es un número entero puro <= maxNumeroPuroExcel (ej. "64") y padLengthExcel > 1 (ej. 3),
+    // formatear con el padding del Excel ("064")
+    if (maxNumeroPuroExcel > 0 && /^\d+$/.test(puestoRestante.codigo.trim())) {
+      const numP = parseInt(puestoRestante.codigo.trim(), 10);
+      if (numP <= maxNumeroPuroExcel && padLengthExcel > 1) {
+        codigoVacante = String(numP).padStart(padLengthExcel, "0");
+      }
+    }
+
+    const teniaOcupante = Boolean(puestoRestante.comercianteId || puestoRestante.estado === "Ocupado");
+    const comSaliente = puestoRestante.comercianteId
+      ? comerciantesNave.find((c) => c.idInterno === puestoRestante.comercianteId)
+      : null;
+
+    if (teniaOcupante) {
       cambiosDetectados.push({
         tipo: "VACANTE",
-        puesto: puestoRestante.codigo,
+        puesto: codigoVacante,
         anterior: comSaliente ? comSaliente.contribuyente : "Ocupante anterior",
-        detalle: `Puesto ${puestoRestante.codigo} queda Vacante (anterior ocupante: ${
+        detalle: `Puesto ${codigoVacante} queda Vacante (anterior ocupante: ${
           comSaliente ? comSaliente.contribuyente : "No identificado"
         })`,
       });
-
-      puestosAVacante.push({
-        puestoId: puestoRestante.id,
-        puestoCodigo: puestoRestante.codigo,
-        comercianteSalienteId:
-          puestoRestante.comercianteId &&
-          !comerciantesProcesadosIds.has(puestoRestante.comercianteId)
-            ? puestoRestante.comercianteId
-            : null,
-      });
     }
+
+    puestosAVacante.push({
+      puestoId: puestoRestante.id,
+      puestoCodigo: codigoVacante,
+      comercianteSalienteId:
+        puestoRestante.comercianteId &&
+        !comerciantesProcesadosIds.has(puestoRestante.comercianteId)
+          ? puestoRestante.comercianteId
+          : null,
+    });
   }
 
-  // ── PASO 4: Conteo Real de Capacidad (Suma de Puestos Reales, Cero '100' Forzado) ──
+  // ── PASO 4: Conteo Real de Capacidad (Suma de Puestos Reales) ──
   const ocupadosParticipantes = puestosAsignadosIds.size;
   const ocupadosNoParticipantes = puestosNaveNoParticipantes.filter(
     (p) => p.estado === "Ocupado" || p.comercianteId !== null
@@ -764,12 +989,10 @@ export function reconciliarCatastroNaveExistente(
 
   const totalOcupados = ocupadosParticipantes + ocupadosNoParticipantes;
 
-  // La capacidad total es la suma de los puestos de la sección no participante más los participantes
-  const vacantesParticipantes = puestosAVacante.length;
+  const vacantesParticipantes = puestosLibres.length;
   const vacantesNoParticipantes = puestosNaveNoParticipantes.filter(
-    (p) => p.estado === "Vacante" && !p.comercianteId
+    (p) => p.estado === "Vacante" && p.comercianteId === null
   ).length;
-
   const totalVacantes = vacantesParticipantes + vacantesNoParticipantes;
   const capacidadNave = totalOcupados + totalVacantes;
 

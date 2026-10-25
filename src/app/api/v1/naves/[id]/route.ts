@@ -48,35 +48,30 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const body = await request.json();
     const { nombre, cantidadPuestos, supervisores } = body;
 
-    const naveActual = await prisma.nave.findUnique({
-      where: { id },
-      include: { puestos: true },
-    });
-
-    if (!naveActual) {
-      return NextResponse.json({ error: "Nave no encontrada." }, { status: 404 });
-    }
-
-    // Validar cantidad de puestos contra puestos ocupados
-    const puestosOcupados = naveActual.puestos.filter((p) => p.estado === "Ocupado");
-    if (cantidadPuestos !== undefined && Number(cantidadPuestos) < puestosOcupados.length) {
-      return NextResponse.json(
-        {
-          error: `No es posible reducir la capacidad a ${cantidadPuestos} puestos porque actualmente hay ${puestosOcupados.length} puestos ocupados.`,
-        },
-        { status: 400 }
-      );
-    }
-
-    const nuevoNombre = nombre ? String(nombre).trim().toUpperCase() : naveActual.nombre;
-    const nuevaCantidad = cantidadPuestos !== undefined ? Number(cantidadPuestos) : naveActual.cantidadPuestos;
-    const nuevosSupervisores = Array.isArray(supervisores)
-      ? supervisores
-      : Array.isArray(naveActual.supervisores)
-      ? (naveActual.supervisores as string[])
-      : [];
-
     await prisma.$transaction(async (tx) => {
+      const naveActual = await tx.nave.findUnique({
+        where: { id },
+        include: { puestos: true },
+      });
+
+      if (!naveActual) {
+        throw new Error("NAVE_NOT_FOUND");
+      }
+
+      // Validar cantidad de puestos contra puestos ocupados
+      const puestosOcupados = naveActual.puestos.filter((p) => p.estado === "Ocupado");
+      if (cantidadPuestos !== undefined && Number(cantidadPuestos) < puestosOcupados.length) {
+        throw new Error(`CAPACIDAD_MENOR_QUE_OCUPADOS:${puestosOcupados.length}`);
+      }
+
+      const nuevoNombre = nombre ? String(nombre).trim().toUpperCase() : naveActual.nombre;
+      const nuevaCantidad = cantidadPuestos !== undefined ? Number(cantidadPuestos) : naveActual.cantidadPuestos;
+      const nuevosSupervisores = Array.isArray(supervisores)
+        ? supervisores
+        : Array.isArray(naveActual.supervisores)
+        ? (naveActual.supervisores as string[])
+        : [];
+
       // 1. Actualizar datos de la nave
       await tx.nave.update({
         where: { id },
@@ -99,25 +94,50 @@ export async function PUT(request: Request, { params }: RouteParams) {
       // 3. Ajustar puestos si la cantidad cambió
       const diferencia = nuevaCantidad - naveActual.puestos.length;
       if (diferencia > 0) {
-        // Crear nuevos puestos vacantes calculando el prefijo desde el nombre de la nave
-        const prefix = nuevoNombre.replace(/^NAVE\s+/i, "N-").replace(/\s+/g, "-");
+        // Generar los nuevos puestos vacantes buscando el siguiente número entero disponible ("1", "2", "3", ...)
+        // verificando con un Set de códigos existentes y números base existentes para jamás duplicar un código
+        const codigosExistentes = new Set(naveActual.puestos.map((p) => p.codigo.trim().toUpperCase()));
+        const numerosExistentes = new Set(
+          naveActual.puestos
+            .map((p) => {
+              const num = parseInt(p.codigo.trim(), 10);
+              return isNaN(num) ? null : num;
+            })
+            .filter((n): n is number => n !== null)
+        );
+
         const nuevosPuestos = [];
-        for (let i = 1; i <= diferencia; i++) {
-          const num = naveActual.puestos.length + i;
+        let candidateNum = 1;
+        for (let i = 0; i < diferencia; i++) {
+          while (codigosExistentes.has(String(candidateNum)) || numerosExistentes.has(candidateNum)) {
+            candidateNum++;
+          }
+          const nuevoCodigo = String(candidateNum);
+          codigosExistentes.add(nuevoCodigo);
+          numerosExistentes.add(candidateNum);
+          candidateNum++;
+
           nuevosPuestos.push({
             id: crypto.randomUUID(),
-            codigo: `${prefix}-${String(num).padStart(2, "0")}`,
+            codigo: nuevoCodigo,
             naveId: id,
             estado: "Vacante" as const,
           });
         }
         await tx.puesto.createMany({ data: nuevosPuestos });
       } else if (diferencia < 0) {
-        // Eliminar puestos vacantes sobrantes
+        // Eliminar puestos vacantes sobrantes empezando por los últimos
         const vacantes = naveActual.puestos
           .filter((p) => p.estado === "Vacante")
-          .slice(diferencia); // toma los últimos
-        const idsAEliminar = vacantes.map((p) => p.id);
+          .sort((a, b) => {
+            const numA = parseInt(a.codigo, 10);
+            const numB = parseInt(b.codigo, 10);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return a.codigo.localeCompare(b.codigo);
+          });
+        const cantidadAEliminar = Math.abs(diferencia);
+        const vacantesAEliminar = vacantes.slice(-cantidadAEliminar);
+        const idsAEliminar = vacantesAEliminar.map((p) => p.id);
         if (idsAEliminar.length > 0) {
           await tx.puesto.deleteMany({
             where: { id: { in: idsAEliminar } },
@@ -170,6 +190,20 @@ export async function PUT(request: Request, { params }: RouteParams) {
       })),
     });
   } catch (error) {
+    if (error instanceof Error) {
+      if (error.message === "NAVE_NOT_FOUND") {
+        return NextResponse.json({ error: "Nave no encontrada." }, { status: 404 });
+      }
+      if (error.message.startsWith("CAPACIDAD_MENOR_QUE_OCUPADOS:")) {
+        const ocupados = error.message.split(":")[1];
+        return NextResponse.json(
+          {
+            error: `No es posible reducir la capacidad porque actualmente hay ${ocupados} puestos ocupados.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
     console.error("Error en PUT /api/v1/naves/[id]:", error);
     return NextResponse.json({ error: "Error al actualizar la nave." }, { status: 500 });
   }

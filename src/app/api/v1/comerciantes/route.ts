@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
-import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
+import {
+  generarSlugNave,
+  compararCodigosPuesto,
+} from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
@@ -26,25 +29,7 @@ export async function GET(request: Request) {
         },
       });
 
-      const getCategoriaPeso = (codigo: string): number => {
-        const upper = codigo.trim().toUpperCase();
-        if (upper.startsWith("BODEGA")) return 1;
-        if (upper.startsWith("CUBICULO") || upper.startsWith("CUBÍCULO")) return 2;
-        if (upper.startsWith("NUCLEO") || upper.startsWith("NÚCLEO")) return 3;
-        if (upper.startsWith("ZCF") || upper.startsWith("ZONA")) return 4;
-        if (upper.startsWith("N-") || upper.startsWith("P-")) return 5;
-        return 6;
-      };
-
-      puestos.sort((a, b) => {
-        const pesoA = getCategoriaPeso(a.codigo);
-        const pesoB = getCategoriaPeso(b.codigo);
-        if (pesoA !== pesoB) return pesoA - pesoB;
-        return a.codigo.trim().localeCompare(b.codigo.trim(), undefined, {
-          numeric: true,
-          sensitivity: "base",
-        });
-      });
+      puestos.sort((a, b) => compararCodigosPuesto(a.codigo, b.codigo));
 
       return NextResponse.json(
         puestos.map((p) => ({

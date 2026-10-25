@@ -46,8 +46,11 @@ export class ImportadorRepositoryImpl implements IImportadorRepository {
     return await res.json();
   }
 
-  async parsearExcel(data: ArrayBuffer | Uint8Array): Promise<ImportacionRegistro[]> {
-    const res = parserExcel(data);
+  async parsearExcel(
+    data: ArrayBuffer | Uint8Array,
+    fileName?: string
+  ): Promise<ImportacionRegistro[]> {
+    const res = parserExcel(data, fileName);
     return Promise.resolve([...res]);
   }
 

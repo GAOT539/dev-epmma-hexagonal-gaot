@@ -55,12 +55,13 @@ export function ModalPuestosNave({
     setFiltroEstado("TODOS");
     setCambiosCodigos({});
     setErrorMsg("");
+    setPuestos([]);
     onClose();
   }, [onClose]);
 
-  // Si puestos del fetch aún no cargaron, usar puestos de la nave como fallback inmediato
+  // Si puestos del fetch aún no cargaron o pertenecen a otra nave, usar puestos de la nave actual como fallback inmediato
   const puestosEfectivos = useMemo(() => {
-    if (puestos.length > 0) return puestos;
+    if (puestos.length > 0 && (!nave || puestos[0]?.naveId === nave.id)) return puestos;
     if (!nave?.puestos || nave.puestos.length === 0) return [];
     return nave.puestos.map((p) => {
       const com = comerciantes.find((c) => c.idInterno === p.comercianteId);
@@ -84,16 +85,16 @@ export function ModalPuestosNave({
   }, [puestos, nave, comerciantes]);
 
   useEffect(() => {
-    if (!isOpen || !nave) return;
+    if (!isOpen || !nave) {
+      return;
+    }
 
     let activo = true;
     naveService
       .obtenerPuestosNave(nave.id)
       .then((data) => {
         if (activo) {
-          if (Array.isArray(data) && data.length > 0) {
-            setPuestos(data);
-          }
+          setPuestos(Array.isArray(data) ? data : []);
           setCambiosCodigos({});
           setCargando(false);
         }
