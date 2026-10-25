@@ -70,6 +70,8 @@ export function ModalesCrudNave({
   supervisoresDisponibles,
   guardando = false,
 }: ModalesCrudNaveProps) {
+  const supervisoresUnicos = Array.from(new Set(supervisoresDisponibles));
+
   return (
     <>
       {/* ── Modal: Crear Nave ── */}
@@ -127,11 +129,11 @@ export function ModalesCrudNave({
                 Asignar Supervisor(es)
               </label>
               <div className="space-y-1.5 rounded-lg border border-border bg-base-white p-3 max-h-48 overflow-y-auto">
-                {supervisoresDisponibles.map((sup) => {
+                {supervisoresUnicos.map((sup, idx) => {
                   const isChecked = nuevoSupervisores.includes(sup);
                   return (
                     <label
-                      key={sup}
+                      key={`${sup}-${idx}`}
                       className="flex items-center gap-2.5 text-xs text-base-eerieBlack cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
                     >
                       <input
@@ -235,11 +237,11 @@ export function ModalesCrudNave({
                   Supervisor(es) Asignado(s)
                 </label>
                 <div className="space-y-1.5 rounded-lg border border-border bg-base-white p-3 max-h-48 overflow-y-auto">
-                  {supervisoresDisponibles.map((sup) => {
+                  {supervisoresUnicos.map((sup, idx) => {
                     const isChecked = editSupervisores.includes(sup);
                     return (
                       <label
-                        key={sup}
+                        key={`${sup}-${idx}`}
                         className="flex items-center gap-2.5 text-xs text-base-eerieBlack cursor-pointer hover:bg-slate-50 p-1.5 rounded transition-colors"
                       >
                         <input

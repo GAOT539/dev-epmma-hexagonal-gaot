@@ -44,8 +44,12 @@ export async function GET(request: Request) {
       });
     }
 
-    const nombresSupervisores = supervisoresUsuarios.map(
-      (s) => `${s.nombres} ${s.apellidos}`.trim()
+    const nombresSupervisores = Array.from(
+      new Set(
+        supervisoresUsuarios
+          .map((s) => `${s.nombres} ${s.apellidos}`.replace(/\s+/g, " ").trim())
+          .filter(Boolean)
+      )
     );
 
     const formattedNaves = naves.map((n) => ({
