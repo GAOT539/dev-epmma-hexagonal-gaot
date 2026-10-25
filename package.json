@@ -49,12 +49,5 @@
   "packageManager": "pnpm@11.20.0",
   "prisma": {
     "seed": "tsx prisma/seed.ts"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@prisma/client",
-      "prisma",
-      "esbuild"
-    ]
   }
 }

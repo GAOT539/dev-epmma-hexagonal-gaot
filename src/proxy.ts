@@ -1,4 +1,4 @@
-// ── Middleware Server-Side: Protección de Rutas API y Panel ───────────────────
+// ── Proxy Server-Side: Protección de Rutas API y Panel ───────────────────
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -17,7 +17,7 @@ const ROLE_RESTRICTIONS: Record<string, string[]> = {
   "/api/v1/auditoria": ["SUPERADMIN", "TIC", "DIRECTOR", "JEFE_OPERATIVO"],
 };
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Solo interceptar rutas de la API v1
