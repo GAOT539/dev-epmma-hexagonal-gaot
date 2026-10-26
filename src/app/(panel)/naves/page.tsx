@@ -9,6 +9,7 @@ import {
   Pencil,
   LayoutGrid,
   Store,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 import { naveService } from "@/application/services/nave.service";
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { ModalesCrudNave } from "./components/ModalesCrudNave";
 import { PlanificadorEspacial } from "./components/PlanificadorEspacial";
 import { ModalPuestosNave } from "./components/ModalPuestosNave";
+import { ModalReporteVacantes } from "./components/ModalReporteVacantes";
 
 export default function NavesPage() {
   const [naves, setNaves] = useState<Nave[]>([]);
@@ -31,6 +33,7 @@ export default function NavesPage() {
 
   // Estado del modal de Crear Nave
   const [isCrearOpen, setIsCrearOpen] = useState(false);
+  const [isReporteVacantesOpen, setIsReporteVacantesOpen] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevaCantidad, setNuevaCantidad] = useState("100");
   const [nuevoSupervisores, setNuevoSupervisores] = useState<string[]>([]);
@@ -326,6 +329,16 @@ export default function NavesPage() {
 
           <Button
             type="button"
+            variant="outline"
+            onClick={() => setIsReporteVacantesOpen(true)}
+            className="border-institucional-green text-institucional-green hover:bg-institucional-green/10 shrink-0 whitespace-nowrap h-9 font-semibold"
+          >
+            <FileText className="mr-2" size={14} />
+            Generar Reporte
+          </Button>
+
+          <Button
+            type="button"
             onClick={handleOpenCrear}
             className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 shrink-0 whitespace-nowrap h-9 font-semibold"
           >
@@ -566,6 +579,12 @@ export default function NavesPage() {
         onClose={handleClosePuestos}
         onPuestosActualizados={handlePuestosActualizados}
         comerciantes={comerciantes}
+      />
+
+      {/* ── Modal de Certificación de Espacios Públicos Vacantes ── */}
+      <ModalReporteVacantes
+        isOpen={isReporteVacantesOpen}
+        onClose={() => setIsReporteVacantesOpen(false)}
       />
     </div>
   );
