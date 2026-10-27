@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Loader2,
   Calendar,
+  X,
 } from "lucide-react";
 import type { Usuario } from "@/domain/models/usuario.model";
 import type { Nave } from "@/domain/models/nave.model";
@@ -511,8 +512,17 @@ export function ModalGestionSupervisores({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-hidden flex flex-col p-0 border border-institucional-whiteSmokeBlack/30 bg-base-white shadow-2xl rounded-2xl">
+    <Dialog
+      open={isOpen}
+      disablePointerDismissal={true}
+      onOpenChange={(open) => {
+        if (!open && !guardandoPermiso && !guardandoRegla) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className="w-[96vw] max-w-[96vw] sm:max-w-4xl lg:max-w-6xl xl:max-w-7xl max-h-[92dvh] flex flex-col p-0 overflow-hidden border border-institucional-whiteSmokeBlack/30 bg-base-white shadow-2xl rounded-2xl gap-0"
+      >
         <DialogHeader className="px-6 py-4 border-b border-institucional-whiteSmokeBlack/20 bg-institucional-whiteSmoke/40 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -528,6 +538,14 @@ export function ModalGestionSupervisores({
                 </DialogDescription>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-full p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              aria-label="Cerrar modal"
+            >
+              <X size={20} />
+            </button>
           </div>
 
           {/* Navegación por pestañas */}
@@ -582,231 +600,235 @@ export function ModalGestionSupervisores({
               PESTAÑA 1: PERMISOS Y COBERTURAS POR NAVE
              ══════════════════════════════════════════════════════════════════════════ */}
           {tabActiva === "permisos" && (
-            <div className="space-y-6">
-              <form
-                onSubmit={handleGuardarPermiso}
-                className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-base-white p-5 shadow-xs space-y-4"
-              >
-                <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
-                  <UserCheck size={18} className="text-institucional-green" />
-                  <h3 className="text-sm font-bold text-institucional-green">
-                    Registrar Justificación / Permiso con Cobertura por Nave
-                  </h3>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Selector de Supervisor Ausente */}
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">
-                      Supervisor Ausente <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={supervisorAusenteId}
-                      onChange={(e) => handleCambioSupervisorAusente(e.target.value)}
-                      required
-                      className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
-                    >
-                      <option value="">-- Seleccione Supervisor --</option>
-                      {supervisores.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.nombres} {s.apellidos}
-                        </option>
-                      ))}
-                    </select>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Columna Izquierda: Formulario de Creación (lg:col-span-5) */}
+              <div className="lg:col-span-5">
+                <form
+                  onSubmit={handleGuardarPermiso}
+                  className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-5 shadow-xs space-y-4"
+                >
+                  <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
+                    <UserCheck size={18} className="text-institucional-green" />
+                    <h3 className="text-sm font-bold text-institucional-green">
+                      Registrar Justificación / Permiso con Cobertura por Nave
+                    </h3>
                   </div>
 
-                  {/* Fecha Inicio */}
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">
-                      Fecha Inicio <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      value={permisoFechaInicio}
-                      onChange={(e) => setPermisoFechaInicio(e.target.value)}
-                      required
-                      className="h-9 text-xs"
-                    />
-                  </div>
-
-                  {/* Fecha Fin */}
-                  <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">
-                      Fecha Fin <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      type="date"
-                      value={permisoFechaFin}
-                      min={permisoFechaInicio}
-                      onChange={(e) => setPermisoFechaFin(e.target.value)}
-                      required
-                      className="h-9 text-xs"
-                    />
-                  </div>
-                </div>
-
-                {/* Motivo */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
-                    Motivo del Permiso / Justificación <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Ej. Cita médica IESS, Calamidad doméstica, Permiso justificado..."
-                    value={permisoMotivo}
-                    onChange={(e) => setPermisoMotivo(e.target.value)}
-                    required
-                    className="h-9 text-xs"
-                  />
-                </div>
-
-                {/* Naves Asignadas y Cobertura Independiente */}
-                {supervisorAusenteId && (
-                  <div className="pt-2 border-t border-institucional-whiteSmokeBlack/15 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
-                        Cobertura Operativa por Cada Nave Asignada ({navesDelSupervisor.length} naves):
-                      </span>
-                      <span className="text-[11px] text-gray-500 italic">
-                        Configure si delega acceso temporal o si aplica persistencia automática
-                      </span>
+                  <div className="space-y-3">
+                    {/* Selector de Supervisor Ausente */}
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">
+                        Supervisor Ausente <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={supervisorAusenteId}
+                        onChange={(e) => handleCambioSupervisorAusente(e.target.value)}
+                        required
+                        className="h-9 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-3 text-xs text-base-eerieBlack outline-none focus:border-institucional-green focus:ring-2 focus:ring-institucional-green/20"
+                      >
+                        <option value="">-- Seleccione Supervisor --</option>
+                        {supervisores.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.nombres} {s.apellidos}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
-                    {cargandoNaves ? (
-                      <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
-                        <Loader2 size={16} className="animate-spin text-institucional-green" />
-                        Cargando naves asignadas...
+                    {/* Fecha Inicio y Fin */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 block mb-1">
+                          Fecha Inicio <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={permisoFechaInicio}
+                          onChange={(e) => setPermisoFechaInicio(e.target.value)}
+                          required
+                          className="h-9 text-xs bg-base-white"
+                        />
                       </div>
-                    ) : navesDelSupervisor.length === 0 ? (
-                      <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-xs font-medium border border-amber-200">
-                        Este supervisor no tiene naves asignadas actualmente.
+
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 block mb-1">
+                          Fecha Fin <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={permisoFechaFin}
+                          min={permisoFechaInicio}
+                          onChange={(e) => setPermisoFechaFin(e.target.value)}
+                          required
+                          className="h-9 text-xs bg-base-white"
+                        />
                       </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {navesDelSupervisor.map((nave) => {
-                          const conf = coberturasForm[nave.id] || {
-                            tipoCobertura: "PERSISTENCIA_AUTOMATICA",
-                          };
-                          const esReemplazo = conf.tipoCobertura === "REEMPLAZO_TEMPORAL";
+                    </div>
 
-                          return (
-                            <div
-                              key={nave.id}
-                              className="rounded-xl border border-institucional-whiteSmokeBlack/25 bg-institucional-whiteSmoke/30 p-3.5 space-y-2.5 transition-colors hover:border-institucional-green/40"
-                            >
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs font-bold text-institucional-green">
-                                  {nave.nombre}
-                                </span>
-                                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-base-white text-gray-700 border border-institucional-whiteSmokeBlack/20">
-                                  {nave.cantidadPuestos} puestos
-                                </span>
-                              </div>
+                    {/* Motivo */}
+                    <div>
+                      <label className="text-xs font-semibold text-gray-700 block mb-1">
+                        Motivo del Permiso / Justificación <span className="text-red-500">*</span>
+                      </label>
+                      <Input
+                        type="text"
+                        placeholder="Ej. Cita médica IESS, Calamidad doméstica..."
+                        value={permisoMotivo}
+                        onChange={(e) => setPermisoMotivo(e.target.value)}
+                        required
+                        className="h-9 text-xs bg-base-white"
+                      />
+                    </div>
+                  </div>
 
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-4 text-xs">
-                                  <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-700">
-                                    <input
-                                      type="radio"
-                                      name={`tipo_cob_${nave.id}`}
-                                      checked={conf.tipoCobertura === "PERSISTENCIA_AUTOMATICA"}
-                                      onChange={() =>
-                                        setCoberturasForm((prev) => ({
-                                          ...prev,
-                                          [nave.id]: {
-                                            tipoCobertura: "PERSISTENCIA_AUTOMATICA",
-                                          },
-                                        }))
-                                      }
-                                      className="text-institucional-green focus:ring-institucional-green"
-                                    />
-                                    <span>Persistencia Automática</span>
-                                  </label>
+                  {/* Naves Asignadas y Cobertura Independiente */}
+                  {supervisorAusenteId && (
+                    <div className="pt-2 border-t border-institucional-whiteSmokeBlack/15 space-y-3">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-xs font-bold text-gray-800 uppercase tracking-wider">
+                          Cobertura Operativa por Nave ({navesDelSupervisor.length} naves):
+                        </span>
+                        <span className="text-[11px] text-gray-500 italic">
+                          Configure persistencia o reemplazo temporal por nave
+                        </span>
+                      </div>
 
-                                  <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-700">
-                                    <input
-                                      type="radio"
-                                      name={`tipo_cob_${nave.id}`}
-                                      checked={esReemplazo}
-                                      onChange={() =>
-                                        setCoberturasForm((prev) => ({
-                                          ...prev,
-                                          [nave.id]: {
-                                            tipoCobertura: "REEMPLAZO_TEMPORAL",
-                                            supervisorReemplazoId:
-                                              prev[nave.id]?.supervisorReemplazoId || "",
-                                          },
-                                        }))
-                                      }
-                                      className="text-institucional-green focus:ring-institucional-green"
-                                    />
-                                    <span>Reemplazo Temporal</span>
-                                  </label>
+                      {cargandoNaves ? (
+                        <div className="p-4 text-center text-xs text-gray-500 flex items-center justify-center gap-2">
+                          <Loader2 size={16} className="animate-spin text-institucional-green" />
+                          Cargando naves asignadas...
+                        </div>
+                      ) : navesDelSupervisor.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-amber-50 text-amber-800 text-xs font-medium border border-amber-200">
+                          Este supervisor no tiene naves asignadas actualmente.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 gap-2.5">
+                          {navesDelSupervisor.map((nave) => {
+                            const conf = coberturasForm[nave.id] || {
+                              tipoCobertura: "PERSISTENCIA_AUTOMATICA",
+                            };
+                            const esReemplazo = conf.tipoCobertura === "REEMPLAZO_TEMPORAL";
+
+                            return (
+                              <div
+                                key={nave.id}
+                                className="rounded-xl border border-institucional-whiteSmokeBlack/25 bg-base-white p-3 space-y-2.5 transition-colors hover:border-institucional-green/40 shadow-xs"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-bold text-institucional-green">
+                                    {nave.nombre}
+                                  </span>
+                                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-100 text-gray-700 border border-institucional-whiteSmokeBlack/20">
+                                    {nave.cantidadPuestos} puestos
+                                  </span>
                                 </div>
 
-                                {esReemplazo && (
-                                  <div className="pt-1">
-                                    <label className="text-[11px] font-semibold text-gray-600 block mb-1">
-                                      Supervisor de Reemplazo (acceso temporal solo en las fechas):
+                                <div className="space-y-2">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs">
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-700">
+                                      <input
+                                        type="radio"
+                                        name={`tipo_cob_${nave.id}`}
+                                        checked={conf.tipoCobertura === "PERSISTENCIA_AUTOMATICA"}
+                                        onChange={() =>
+                                          setCoberturasForm((prev) => ({
+                                            ...prev,
+                                            [nave.id]: {
+                                              tipoCobertura: "PERSISTENCIA_AUTOMATICA",
+                                            },
+                                          }))
+                                        }
+                                        className="text-institucional-green focus:ring-institucional-green"
+                                      />
+                                      <span>Persistencia Automática</span>
                                     </label>
-                                    <select
-                                      value={conf.supervisorReemplazoId || ""}
-                                      onChange={(e) =>
-                                        setCoberturasForm((prev) => ({
-                                          ...prev,
-                                          [nave.id]: {
-                                            ...prev[nave.id],
-                                            tipoCobertura: "REEMPLAZO_TEMPORAL",
-                                            supervisorReemplazoId: e.target.value,
-                                          },
-                                        }))
-                                      }
-                                      required
-                                      className="h-8 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-institucional-green"
-                                    >
-                                      <option value="">-- Seleccionar supervisor sustituto --</option>
-                                      {supervisores
-                                        .filter((s) => s.id !== supervisorAusenteId)
-                                        .map((s) => (
-                                          <option key={s.id} value={s.id}>
-                                            {s.nombres} {s.apellidos}
-                                          </option>
-                                        ))}
-                                    </select>
+
+                                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-700">
+                                      <input
+                                        type="radio"
+                                        name={`tipo_cob_${nave.id}`}
+                                        checked={esReemplazo}
+                                        onChange={() =>
+                                          setCoberturasForm((prev) => ({
+                                            ...prev,
+                                            [nave.id]: {
+                                              tipoCobertura: "REEMPLAZO_TEMPORAL",
+                                              supervisorReemplazoId:
+                                                prev[nave.id]?.supervisorReemplazoId || "",
+                                            },
+                                          }))
+                                        }
+                                        className="text-institucional-green focus:ring-institucional-green"
+                                      />
+                                      <span>Reemplazo Temporal</span>
+                                    </label>
                                   </div>
-                                )}
+
+                                  {esReemplazo && (
+                                    <div className="pt-1">
+                                      <label className="text-[11px] font-semibold text-gray-600 block mb-1">
+                                        Supervisor de Reemplazo (acceso temporal):
+                                      </label>
+                                      <select
+                                        value={conf.supervisorReemplazoId || ""}
+                                        onChange={(e) =>
+                                          setCoberturasForm((prev) => ({
+                                            ...prev,
+                                            [nave.id]: {
+                                              ...prev[nave.id],
+                                              tipoCobertura: "REEMPLAZO_TEMPORAL",
+                                              supervisorReemplazoId: e.target.value,
+                                            },
+                                          }))
+                                        }
+                                        required
+                                        className="h-8 w-full rounded-lg border border-institucional-whiteSmokeBlack/30 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-institucional-green"
+                                      >
+                                        <option value="">-- Seleccionar supervisor sustituto --</option>
+                                        {supervisores
+                                          .filter((s) => s.id !== supervisorAusenteId)
+                                          .map((s) => (
+                                            <option key={s.id} value={s.id}>
+                                              {s.nombres} {s.apellidos}
+                                            </option>
+                                          ))}
+                                      </select>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex justify-end pt-2">
+                    <Button
+                      type="submit"
+                      disabled={guardandoPermiso || !supervisorAusenteId || navesDelSupervisor.length === 0}
+                      className="w-full sm:w-auto bg-institucional-green hover:bg-acento-verdeOliva1 text-base-white text-xs font-bold h-9 px-5 shadow-xs"
+                    >
+                      {guardandoPermiso ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin mr-1.5" />
+                          Guardando y Aplicando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={14} className="mr-1.5" />
+                          Guardar Permiso / Justificación
+                        </>
+                      )}
+                    </Button>
                   </div>
-                )}
+                </form>
+              </div>
 
-                <div className="flex justify-end pt-2">
-                  <Button
-                    type="submit"
-                    disabled={guardandoPermiso || !supervisorAusenteId || navesDelSupervisor.length === 0}
-                    className="bg-institucional-green hover:bg-acento-verdeOliva1 text-base-white text-xs font-bold h-9 px-5 shadow-xs"
-                  >
-                    {guardandoPermiso ? (
-                      <>
-                        <Loader2 size={14} className="animate-spin mr-1.5" />
-                        Guardando y Aplicando...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 size={14} className="mr-1.5" />
-                        Guardar Permiso / Justificación
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </form>
-
-              {/* Listado de Permisos Registrados */}
-              <div className="space-y-3">
+              {/* Columna Derecha: Tabla de Permisos Registrados (lg:col-span-7) */}
+              <div className="lg:col-span-7 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Permisos y Justificaciones Registradas ({permisos.length})
@@ -923,279 +945,282 @@ export function ModalGestionSupervisores({
               PESTAÑA 2: DÍAS NO LABORABLES / FERIADOS / RECURRENTES
              ══════════════════════════════════════════════════════════════════════════ */}
           {tabActiva === "diasNoLaborables" && (
-            <div className="space-y-6">
-              <form
-                onSubmit={(e) => handleGuardarReglaNoLaborable(e)}
-                className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-base-white p-5 shadow-xs space-y-4"
-              >
-                <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
-                  <CalendarOff size={18} className="text-amber-600" />
-                  <h3 className="text-sm font-bold text-amber-800">
-                    Configurar Días No Laborables / Exclusión de Toma de Lista
-                  </h3>
-                </div>
-
-                {/* Tipo de Regla (3 botones) */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1.5">
-                    Tipo de Regla de Descanso / Feriado:
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setTipoRegla("DIA_UNICO")}
-                      className={[
-                        "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
-                        tipoRegla === "DIA_UNICO"
-                          ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
-                          : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
-                      ].join(" ")}
-                    >
-                      <Calendar size={14} />
-                      <span>Día Único / Feriado</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTipoRegla("RANGO_CONTINUO")}
-                      className={[
-                        "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
-                        tipoRegla === "RANGO_CONTINUO"
-                          ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
-                          : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
-                      ].join(" ")}
-                    >
-                      <Layers size={14} />
-                      <span>Rango Continuo de Fechas</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setTipoRegla("RECURRENTE_SEMANAL")}
-                      className={[
-                        "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
-                        tipoRegla === "RECURRENTE_SEMANAL"
-                          ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
-                          : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
-                      ].join(" ")}
-                    >
-                      <CalendarDays size={14} />
-                      <span>Días Recurrentes de la Semana</span>
-                    </button>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+              {/* Columna Izquierda: Formulario (lg:col-span-5) */}
+              <div className="lg:col-span-5">
+                <form
+                  onSubmit={(e) => handleGuardarReglaNoLaborable(e)}
+                  className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-5 shadow-xs space-y-4"
+                >
+                  <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
+                    <CalendarOff size={18} className="text-amber-600" />
+                    <h3 className="text-sm font-bold text-amber-800">
+                      Configurar Días No Laborables / Exclusión de Toma de Lista
+                    </h3>
                   </div>
-                </div>
 
-                {/* Selectores de Fechas según tipo */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Tipo de Regla (3 botones) */}
                   <div>
-                    <label className="text-xs font-semibold text-gray-700 block mb-1">
-                      {tipoRegla === "DIA_UNICO" ? "Fecha del Feriado / Descanso" : "Fecha Desde (Inicio)"}{" "}
-                      <span className="text-red-500">*</span>
+                    <label className="text-xs font-semibold text-gray-700 block mb-1.5">
+                      Tipo de Regla de Descanso / Feriado:
                     </label>
-                    <Input
-                      type="date"
-                      value={reglaFechaInicio}
-                      onChange={(e) => setReglaFechaInicio(e.target.value)}
-                      required
-                      className="h-9 text-xs"
-                    />
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTipoRegla("DIA_UNICO")}
+                        className={[
+                          "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
+                          tipoRegla === "DIA_UNICO"
+                            ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
+                            : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
+                        ].join(" ")}
+                      >
+                        <Calendar size={14} />
+                        <span>Día Único</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTipoRegla("RANGO_CONTINUO")}
+                        className={[
+                          "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
+                          tipoRegla === "RANGO_CONTINUO"
+                            ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
+                            : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
+                        ].join(" ")}
+                      >
+                        <Layers size={14} />
+                        <span>Rango</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setTipoRegla("RECURRENTE_SEMANAL")}
+                        className={[
+                          "flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-all",
+                          tipoRegla === "RECURRENTE_SEMANAL"
+                            ? "border-amber-600 bg-amber-50 text-amber-900 shadow-2xs"
+                            : "border-institucional-whiteSmokeBlack/25 bg-base-white text-gray-600 hover:bg-institucional-whiteSmoke/40",
+                        ].join(" ")}
+                      >
+                        <CalendarDays size={14} />
+                        <span>Semanal</span>
+                      </button>
+                    </div>
                   </div>
 
-                  {tipoRegla !== "DIA_UNICO" && (
+                  {/* Selectores de Fechas según tipo */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <label className="text-xs font-semibold text-gray-700 block mb-1">
-                        Fecha Hasta (Fin) <span className="text-red-500">*</span>
+                        {tipoRegla === "DIA_UNICO" ? "Fecha del Feriado" : "Fecha Inicio"}{" "}
+                        <span className="text-red-500">*</span>
                       </label>
                       <Input
                         type="date"
-                        value={reglaFechaFin}
-                        min={reglaFechaInicio}
-                        onChange={(e) => setReglaFechaFin(e.target.value)}
+                        value={reglaFechaInicio}
+                        onChange={(e) => setReglaFechaInicio(e.target.value)}
                         required
-                        className="h-9 text-xs"
+                        className="h-9 text-xs bg-base-white"
                       />
                     </div>
-                  )}
-                </div>
 
-                {/* Selector de días de la semana si es RECURRENTE_SEMANAL */}
-                {tipoRegla === "RECURRENTE_SEMANAL" && (
-                  <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 space-y-2">
-                    <span className="text-xs font-bold text-amber-900 block">
-                      Seleccione qué días de la semana no se labora en el rango:
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      {DIAS_SEMANA_OPCIONES.map((dia) => {
-                        const seleccionado = diasSemanaSeleccionados.includes(dia.val);
-                        return (
-                          <button
-                            key={dia.val}
-                            type="button"
-                            onClick={() => toggleDiaSemana(dia.val)}
-                            className={[
-                              "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
-                              seleccionado
-                                ? "bg-amber-600 text-white border-amber-600 font-bold shadow-2xs"
-                                : "bg-base-white text-gray-700 border-institucional-whiteSmokeBlack/30 hover:border-amber-400",
-                            ].join(" ")}
-                          >
-                            {dia.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ámbito de Naves */}
-                <div className="space-y-2 pt-2 border-t border-institucional-whiteSmokeBlack/15">
-                  <span className="text-xs font-semibold text-gray-700 block">
-                    Ámbito de Aplicación:
-                  </span>
-                  <div className="flex items-center gap-4 text-xs">
-                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-800">
-                      <input
-                        type="radio"
-                        name="ambito_naves"
-                        checked={aplicaTodasNaves}
-                        onChange={() => setAplicaTodasNaves(true)}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
-                      <span className="font-bold">Todas las Naves del Mercado</span>
-                    </label>
-
-                    <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-800">
-                      <input
-                        type="radio"
-                        name="ambito_naves"
-                        checked={!aplicaTodasNaves}
-                        onChange={() => setAplicaTodasNaves(false)}
-                        className="text-amber-600 focus:ring-amber-500"
-                      />
-                      <span>Seleccionar Naves Específicas</span>
-                    </label>
+                    {tipoRegla !== "DIA_UNICO" && (
+                      <div>
+                        <label className="text-xs font-semibold text-gray-700 block mb-1">
+                          Fecha Fin <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          type="date"
+                          value={reglaFechaFin}
+                          min={reglaFechaInicio}
+                          onChange={(e) => setReglaFechaFin(e.target.value)}
+                          required
+                          className="h-9 text-xs bg-base-white"
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {!aplicaTodasNaves && (
-                    <div className="p-3 rounded-xl bg-institucional-whiteSmoke/50 border border-institucional-whiteSmokeBlack/20 space-y-2">
-                      <span className="text-[11px] font-semibold text-gray-600 block">
-                        Marque las naves que tendrán descanso:
+                  {/* Selector de días de la semana si es RECURRENTE_SEMANAL */}
+                  {tipoRegla === "RECURRENTE_SEMANAL" && (
+                    <div className="p-3 rounded-xl bg-amber-50/60 border border-amber-200/60 space-y-2">
+                      <span className="text-xs font-bold text-amber-900 block">
+                        Días de la semana sin laborar en el rango:
                       </span>
-                      <div className="flex flex-wrap gap-2">
-                        {todasLasNaves.map((n) => {
-                          const seleccionada = navesSeleccionadas.includes(n.id);
+                      <div className="flex flex-wrap gap-1.5">
+                        {DIAS_SEMANA_OPCIONES.map((dia) => {
+                          const seleccionado = diasSemanaSeleccionados.includes(dia.val);
                           return (
                             <button
-                              key={n.id}
+                              key={dia.val}
                               type="button"
-                              onClick={() => toggleNaveSeleccionada(n.id)}
+                              onClick={() => toggleDiaSemana(dia.val)}
                               className={[
-                                "px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border",
-                                seleccionada
-                                  ? "bg-institucional-green text-white border-institucional-green font-bold shadow-2xs"
-                                  : "bg-base-white text-gray-700 border-institucional-whiteSmokeBlack/30 hover:border-institucional-green",
+                                "px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border",
+                                seleccionado
+                                  ? "bg-amber-600 text-white border-amber-600 font-bold shadow-2xs"
+                                  : "bg-base-white text-gray-700 border-institucional-whiteSmokeBlack/30 hover:border-amber-400",
                               ].join(" ")}
                             >
-                              {n.nombre}
+                              {dia.label}
                             </button>
                           );
                         })}
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* Motivo */}
-                <div>
-                  <label className="text-xs font-semibold text-gray-700 block mb-1">
-                    Motivo o Justificación del Día No Laborable <span className="text-red-500">*</span>
-                  </label>
-                  <Input
-                    type="text"
-                    placeholder="Ej. Feriado Nacional de Difuntos, Día sin feria en nave, Mantenimiento preventivo..."
-                    value={reglaMotivo}
-                    onChange={(e) => setReglaMotivo(e.target.value)}
-                    required
-                    className="h-9 text-xs"
-                  />
-                </div>
+                  {/* Ámbito de Naves */}
+                  <div className="space-y-2 pt-2 border-t border-institucional-whiteSmokeBlack/15">
+                    <span className="text-xs font-semibold text-gray-700 block">
+                      Ámbito de Aplicación:
+                    </span>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-xs">
+                      <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-800">
+                        <input
+                          type="radio"
+                          name="ambito_naves"
+                          checked={aplicaTodasNaves}
+                          onChange={() => setAplicaTodasNaves(true)}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span className="font-bold">Todas las Naves</span>
+                      </label>
 
-                {/* Recuadro de Alerta Roja/Ámbar con Contraseña ante Conflicto de Borrado */}
-                {alertaConflicto && (
-                  <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3 shadow-xs">
-                    <div className="flex items-start gap-2.5 text-red-900">
-                      <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
-                      <div className="space-y-1 text-xs">
-                        <p className="font-bold">{alertaConflicto.mensaje}</p>
-                        <p className="text-gray-700">
-                          Fechas afectadas con asistencias tomadas:{" "}
-                          <span className="font-mono font-bold text-red-800">
-                            {alertaConflicto.fechasConRegistros.join(", ")}
-                          </span>{" "}
-                          ({alertaConflicto.totalRegistrosAfectados} registros afectados).
-                        </p>
-                      </div>
+                      <label className="flex items-center gap-1.5 cursor-pointer font-medium text-gray-800">
+                        <input
+                          type="radio"
+                          name="ambito_naves"
+                          checked={!aplicaTodasNaves}
+                          onChange={() => setAplicaTodasNaves(false)}
+                          className="text-amber-600 focus:ring-amber-500"
+                        />
+                        <span>Naves Específicas</span>
+                      </label>
                     </div>
 
-                    <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
-                      <div className="relative flex-1">
-                        <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-                        <Input
-                          type="password"
-                          placeholder="Ingrese su contraseña actual para confirmar el borrado..."
-                          value={passwordConfirmacion}
-                          onChange={(e) => setPasswordConfirmacion(e.target.value)}
-                          className="pl-9 h-9 text-xs border-red-300 bg-base-white text-base-eerieBlack focus:border-red-600 focus:ring-red-200"
-                        />
+                    {!aplicaTodasNaves && (
+                      <div className="p-3 rounded-xl bg-institucional-whiteSmoke/50 border border-institucional-whiteSmokeBlack/20 space-y-2">
+                        <span className="text-[11px] font-semibold text-gray-600 block">
+                          Marque las naves que tendrán descanso:
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {todasLasNaves.map((n) => {
+                            const seleccionada = navesSeleccionadas.includes(n.id);
+                            return (
+                              <button
+                                key={n.id}
+                                type="button"
+                                onClick={() => toggleNaveSeleccionada(n.id)}
+                                className={[
+                                  "px-2.5 py-1 rounded-lg text-xs font-semibold transition-all border",
+                                  seleccionada
+                                    ? "bg-institucional-green text-white border-institucional-green font-bold shadow-2xs"
+                                    : "bg-base-white text-gray-700 border-institucional-whiteSmokeBlack/30 hover:border-institucional-green",
+                                ].join(" ")}
+                              >
+                                {n.nombre}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Motivo */}
+                  <div>
+                    <label className="text-xs font-semibold text-gray-700 block mb-1">
+                      Motivo del Día No Laborable <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="text"
+                      placeholder="Ej. Feriado Nacional de Difuntos, Mantenimiento..."
+                      value={reglaMotivo}
+                      onChange={(e) => setReglaMotivo(e.target.value)}
+                      required
+                      className="h-9 text-xs bg-base-white"
+                    />
+                  </div>
+
+                  {/* Recuadro de Alerta Roja/Ámbar con Contraseña ante Conflicto de Borrado */}
+                  {alertaConflicto && (
+                    <div className="rounded-xl border border-red-300 bg-red-50 p-4 space-y-3 shadow-xs">
+                      <div className="flex items-start gap-2.5 text-red-900">
+                        <AlertTriangle size={20} className="text-red-600 shrink-0 mt-0.5" />
+                        <div className="space-y-1 text-xs">
+                          <p className="font-bold">{alertaConflicto.mensaje}</p>
+                          <p className="text-gray-700">
+                            Fechas con registros:{" "}
+                            <span className="font-mono font-bold text-red-800">
+                              {alertaConflicto.fechasConRegistros.join(", ")}
+                            </span>{" "}
+                            ({alertaConflicto.totalRegistrosAfectados} registros afectados).
+                          </p>
+                        </div>
                       </div>
 
+                      <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+                        <div className="relative flex-1">
+                          <Lock size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                          <Input
+                            type="password"
+                            placeholder="Ingrese su contraseña actual..."
+                            value={passwordConfirmacion}
+                            onChange={(e) => setPasswordConfirmacion(e.target.value)}
+                            className="pl-9 h-9 text-xs border-red-300 bg-base-white text-base-eerieBlack focus:border-red-600 focus:ring-red-200"
+                          />
+                        </div>
+
+                        <Button
+                          type="button"
+                          onClick={() => handleGuardarReglaNoLaborable(undefined, passwordConfirmacion)}
+                          disabled={guardandoRegla || !passwordConfirmacion.trim()}
+                          className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold h-9 px-4 shrink-0 shadow-xs"
+                        >
+                          {guardandoRegla ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin mr-1.5" />
+                              Eliminando...
+                            </>
+                          ) : (
+                            <>
+                              <Trash2 size={14} className="mr-1.5" />
+                              Confirmar y Eliminar
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!alertaConflicto && (
+                    <div className="flex justify-end pt-2">
                       <Button
-                        type="button"
-                        onClick={() => handleGuardarReglaNoLaborable(undefined, passwordConfirmacion)}
-                        disabled={guardandoRegla || !passwordConfirmacion.trim()}
-                        className="bg-red-700 hover:bg-red-800 text-white text-xs font-bold h-9 px-4 shrink-0 shadow-xs"
+                        type="submit"
+                        disabled={guardandoRegla || !reglaMotivo.trim()}
+                        className="w-full sm:w-auto bg-amber-600 hover:bg-amber-700 text-base-white text-xs font-bold h-9 px-5 shadow-xs"
                       >
                         {guardandoRegla ? (
                           <>
                             <Loader2 size={14} className="animate-spin mr-1.5" />
-                            Eliminando y Guardando...
+                            Guardando...
                           </>
                         ) : (
                           <>
-                            <Trash2 size={14} className="mr-1.5" />
-                            Confirmar y Eliminar Asistencias
+                            <CheckCircle2 size={14} className="mr-1.5" />
+                            Guardar Día(s) No Laborable(s)
                           </>
                         )}
                       </Button>
                     </div>
-                  </div>
-                )}
+                  )}
+                </form>
+              </div>
 
-                {!alertaConflicto && (
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      type="submit"
-                      disabled={guardandoRegla || !reglaMotivo.trim()}
-                      className="bg-amber-600 hover:bg-amber-700 text-base-white text-xs font-bold h-9 px-5 shadow-xs"
-                    >
-                      {guardandoRegla ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin mr-1.5" />
-                          Guardando...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle2 size={14} className="mr-1.5" />
-                          Guardar Día(s) No Laborable(s)
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </form>
-
-              {/* Listado de Reglas Activas */}
-              <div className="space-y-3">
+              {/* Columna Derecha: Listado de Reglas Activas (lg:col-span-7) */}
+              <div className="lg:col-span-7 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Reglas de Días No Laborables Activas ({reglasNoLab.length})

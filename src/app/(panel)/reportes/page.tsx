@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
   Download,
+  FileSpreadsheet,
   Search,
   X,
   Loader2,
@@ -25,13 +26,15 @@ import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 import {
-  ESTADO_COLORES,
-  ESTADO_LABELS,
   normalizeText,
   formatearNovedadesReporte,
   exportarReporteAsistenciaPDF,
+  compararCodigosPuesto,
   type ReporteItem,
+  type EstadoReporteCelda,
 } from "./components/reportes-pdf.utils";
+import { exportarReporteAsistenciaExcel } from "./components/reportes-excel.utils";
+import { ReportesTabla } from "./components/ReportesTabla";
 
 // ── Página de Reportes ───────────────────────────────────────────────────────
 
@@ -42,6 +45,8 @@ export default function ReportesPage() {
   const [asistenciaData, setAsistenciaData] = useState<RegistroAsistencia[]>([]);
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [cargandoReporte, setCargandoReporte] = useState(false);
+  const [exportandoPDF, setExportandoPDF] = useState(false);
+  const [exportandoExcel, setExportandoExcel] = useState(false);
 
   const [selectedNaveId, setSelectedNaveId] = useState("todas");
   const [searchQuery, setSearchQuery] = useState("");
@@ -245,7 +250,7 @@ export default function ReportesPage() {
     };
   }, [selectedNaveId, fechaInicio, fechaFin]);
 
-  // Filtro combinado: Nave + Buscador (apellidos, nombres o cédula)
+  // Filtro combinado: Nave + Buscador + Inclusión de Vacantes al Inicio
   const reporteFiltrado = useMemo<ReporteItem[]>(() => {
     const registrosMap = new Map<string, RegistroAsistencia[]>();
     asistenciaData.forEach((r) => {
@@ -256,6 +261,7 @@ export default function ReportesPage() {
 
     const q = normalizeText(searchQuery.trim());
 
+    // 1. Comerciantes ocupados
     const filtrados = todosLosComerciantes
       .map((com) => {
         const info = comerciantePuestoMap.get(com.idInterno);
@@ -263,7 +269,7 @@ export default function ReportesPage() {
         const naveNombre = info?.naveNombre ?? com.nave ?? "—";
         const puestoCode = info?.puestoCode ?? "—";
 
-        // 1. RBAC: solo naves permitidas para supervisores
+        // RBAC: solo naves permitidas para supervisores
         if (user?.rol === "SUPERVISOR") {
           const naveObj = allNaves.find(
             (n) => n.id === naveId || n.nombre.toUpperCase() === naveNombre.toUpperCase()
@@ -274,17 +280,18 @@ export default function ReportesPage() {
           if (!esPermitida) return null;
         }
 
-        // 2. Filtro de Nave seleccionada
+        // Filtro de Nave seleccionada
         if (selectedNaveId && selectedNaveId !== "todas") {
           if (naveId !== selectedNaveId) return null;
         }
 
-        // 3. Filtro de Buscador (apellidos, nombres o cédula)
+        // Filtro de Buscador (apellidos, nombres o cédula)
         if (q) {
           const matchContribuyente = normalizeText(com.contribuyente).includes(q);
           const matchCedula = normalizeText(com.cedula).includes(q);
           const matchCiu = normalizeText(com.ciu).includes(q);
-          if (!matchContribuyente && !matchCedula && !matchCiu) {
+          const matchPuesto = normalizeText(puestoCode).includes(q);
+          if (!matchContribuyente && !matchCedula && !matchCiu && !matchPuesto) {
             return null;
           }
         }
@@ -293,11 +300,30 @@ export default function ReportesPage() {
         const regFechaMap = new Map<string, RegistroAsistencia>();
         comRegistros.forEach((r) => regFechaMap.set(r.fecha, r));
 
-        const estados = fechas.map((f) => {
+        const estados: EstadoReporteCelda[] = fechas.map((f) => {
           const reg = regFechaMap.get(f);
-          if (reg) return reg.estado;
+          if (reg) {
+            // Detección de "Justificado" (J)
+            if (reg.estado === "Permiso") {
+              const regexJust = /justificaci[oó]n de falta|falta justificada/i;
+              const obsMatch = regexJust.test(reg.observacion || "");
+              const obsListMatch = reg.observaciones?.some((o) => regexJust.test(o.texto));
+              const permMatch = reg.permisos?.some((p) => regexJust.test(p.motivo || ""));
+              const vigMatch = comRegistros.some((cr) =>
+                cr.permisos?.some(
+                  (p) => regexJust.test(p.motivo || "") && f >= p.fechaInicio && f <= p.fechaFin
+                )
+              );
 
-          // Si la nave específica de este puesto tuvo día no laborable en fecha f, mostrar "—"
+              if (obsMatch || obsListMatch || permMatch || vigMatch) {
+                return "Justificado";
+              }
+              return "Permiso";
+            }
+            return reg.estado as EstadoReporteCelda;
+          }
+
+          // Si la nave específica tuvo día no laborable en fecha f, mostrar "—"
           if (naveId) {
             const esNoLabNave = reglasNoLaborables.some((r) => {
               const fechasExp = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
@@ -307,12 +333,13 @@ export default function ReportesPage() {
               return nIds.includes(naveId);
             });
             if (esNoLabNave) {
-              return "—" as const;
+              return "—";
             }
           }
 
           return f === limites.hoy ? "Presente" : "Ausente";
         });
+
         const observaciones = formatearNovedadesReporte(comRegistros);
 
         return {
@@ -322,27 +349,95 @@ export default function ReportesPage() {
           naveId,
           estados,
           observaciones,
+          esVacante: false,
         };
       })
       .filter(Boolean) as ReporteItem[];
 
-    let resultado = filtrados;
+    // 2. Puestos vacantes por nave (solo si !soloObservaciones)
+    const itemsVacantes: ReporteItem[] = [];
+    if (!soloObservaciones) {
+      const navesParaVacantes =
+        selectedNaveId && selectedNaveId !== "todas"
+          ? naves.filter((n) => n.id === selectedNaveId)
+          : naves;
+
+      navesParaVacantes.forEach((nave) => {
+        if (!nave.puestos) return;
+        nave.puestos.forEach((p) => {
+          const esPuestoVacante = p.estado === "Vacante" || !p.comercianteId;
+          if (!esPuestoVacante) return;
+
+          if (q) {
+            const matchPuesto = normalizeText(p.codigo).includes(q);
+            const matchNave = normalizeText(nave.nombre).includes(q);
+            const matchPalabraVacante = "vacante".includes(q);
+            if (!matchPuesto && !matchNave && !matchPalabraVacante) {
+              return;
+            }
+          }
+
+          const estados: EstadoReporteCelda[] = fechas.map((f) => {
+            const esNoLabNave = reglasNoLaborables.some((r) => {
+              const fechasExp = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
+              if (!fechasExp.includes(f)) return false;
+              if (r.aplicaTodasNaves) return true;
+              const nIds = Array.isArray(r.navesIds) ? (r.navesIds as string[]) : [];
+              return nIds.includes(nave.id);
+            });
+            if (esNoLabNave) return "—";
+            return "Vacante";
+          });
+
+          itemsVacantes.push({
+            esVacante: true,
+            comerciante: {
+              idInterno: `vacante-${nave.id}-${p.id}`,
+              ciu: "-",
+              cedula: "-",
+              contribuyente: "-",
+              actividad: "-",
+              puestoId: p.codigo,
+              nave: nave.nombre,
+              estadoRegistro: "Habilitado",
+            },
+            puestoCode: p.codigo,
+            naveNombre: nave.nombre,
+            naveId: nave.id,
+            estados,
+            observaciones: "",
+          });
+        });
+      });
+    }
+
+    let resultado = [...itemsVacantes, ...filtrados];
+
     if (soloObservaciones) {
       resultado = resultado.filter((row) => row.observaciones.trim().length > 0);
     }
 
-    return resultado.sort((a, b) =>
-      a.puestoCode.localeCompare(b.puestoCode, undefined, {
-        numeric: true,
-        sensitivity: "base",
-      })
-    );
+    // Ordenamiento obligatorio:
+    // Puestos vacantes en la parte superior de cada nave, correlativos por puestoCode
+    return resultado.sort((a, b) => {
+      if (a.naveNombre !== b.naveNombre) {
+        const compNave = a.naveNombre.localeCompare(b.naveNombre, undefined, {
+          numeric: true,
+          sensitivity: "base",
+        });
+        if (compNave !== 0) return compNave;
+      }
+      if (a.esVacante && !b.esVacante) return -1;
+      if (!a.esVacante && b.esVacante) return 1;
+      return compararCodigosPuesto(a.puestoCode, b.puestoCode);
+    });
   }, [
     allNaves,
     todosLosComerciantes,
     asistenciaData,
     comerciantePuestoMap,
     user,
+    naves,
     navesPermitidasIds,
     selectedNaveId,
     searchQuery,
@@ -354,20 +449,45 @@ export default function ReportesPage() {
 
   const hayDatos = reporteFiltrado.length > 0;
 
-  // ── Exportar / Imprimir PDF ────────────────────────────────────────────────
+  // ── Exportación a PDF y Excel ──────────────────────────────────────────────
 
-  async function imprimirPDF() {
-    await exportarReporteAsistenciaPDF({
-      reporteFiltrado,
-      fechas,
-      fechaInicio,
-      fechaFin,
-      soloObservaciones,
-      incluirObservaciones,
-    });
+  async function handleDescargarPDF() {
+    if (!hayDatos || exportandoPDF) return;
+    setExportandoPDF(true);
+    try {
+      await exportarReporteAsistenciaPDF({
+        reporteFiltrado,
+        fechas,
+        fechaInicio,
+        fechaFin,
+        soloObservaciones,
+        incluirObservaciones,
+        navesDisponibles: naves,
+        reglasNoLaborables,
+      });
+    } finally {
+      setExportandoPDF(false);
+    }
   }
 
-  const handleExportPDF = imprimirPDF;
+  async function handleDescargarExcel() {
+    if (!hayDatos || exportandoExcel) return;
+    setExportandoExcel(true);
+    try {
+      await exportarReporteAsistenciaExcel({
+        reporteFiltrado,
+        fechas,
+        fechaInicio,
+        fechaFin,
+        soloObservaciones,
+        incluirObservaciones,
+        navesDisponibles: naves,
+        reglasNoLaborables,
+      });
+    } finally {
+      setExportandoExcel(false);
+    }
+  }
 
   return (
     <div className="flex flex-col min-h-[100dvh] md:h-[100dvh] bg-institucional-whiteSmoke px-4 py-6 sm:px-6 lg:px-10">
@@ -392,9 +512,9 @@ export default function ReportesPage() {
             <div className="rounded-2xl bg-base-white p-5 shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 shrink-0">
               <div className="flex flex-col md:flex-row md:flex-wrap md:items-end gap-4 w-full">
                 {/* Buscador de Comerciantes */}
-                <div className="flex flex-col gap-1.5 w-full md:flex-1 md:min-w-[240px]">
+                <div className="flex flex-col gap-1.5 w-full md:flex-1 md:min-w-[220px]">
                   <label className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                    Buscar Comerciante
+                    Buscar Comerciante / Puesto
                   </label>
                   <div className="relative w-full">
                     <Search
@@ -403,7 +523,7 @@ export default function ReportesPage() {
                     />
                     <Input
                       type="text"
-                      placeholder="Buscar por apellidos, nombres o cédula..."
+                      placeholder="Buscar por apellidos, nombres, cédula o puesto..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="h-9 pl-9 pr-8 text-xs bg-base-white border-institucional-whiteSmokeBlack/30 focus-visible:ring-institucional-green"
@@ -516,7 +636,9 @@ export default function ReportesPage() {
                     />
                     <label
                       htmlFor="toggle-obs"
-                      className={`text-xs font-semibold uppercase tracking-wider cursor-pointer select-none ${soloObservaciones ? "text-gray-400" : "text-gray-700"}`}
+                      className={`text-xs font-semibold uppercase tracking-wider cursor-pointer select-none ${
+                        soloObservaciones ? "text-gray-400" : "text-gray-700"
+                      }`}
                     >
                       Incluir Observaciones
                     </label>
@@ -542,211 +664,49 @@ export default function ReportesPage() {
                   </div>
                 </div>
 
-                {/* Botón Descargar PDF */}
-                <button
-                  type="button"
-                  onClick={handleExportPDF}
-                  disabled={!hayDatos}
-                  className={[
-                    "flex items-center justify-center gap-2 h-9 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors w-full md:w-auto shrink-0 mt-2 md:mt-0",
-                    hayDatos
-                      ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2 cursor-pointer"
-                      : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",
-                  ].join(" ")}
-                >
-                  <Download size={14} />
-                  Descargar PDF
-                </button>
-              </div>
-            </div>
+                {/* Botones de Descarga: PDF y Excel */}
+                <div className="flex items-center gap-2.5 w-full md:w-auto shrink-0 mt-2 md:mt-0">
+                  <button
+                    type="button"
+                    onClick={handleDescargarPDF}
+                    disabled={!hayDatos || exportandoPDF}
+                    className={[
+                      "flex items-center justify-center gap-2 h-9 rounded-lg px-4 text-xs font-semibold shadow-sm transition-colors cursor-pointer",
+                      hayDatos && !exportandoPDF
+                        ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 active:bg-acento-verdeOliva2"
+                        : "bg-institucional-whiteSmokeBlack/30 text-gray-500 cursor-not-allowed",
+                    ].join(" ")}
+                  >
+                    {exportandoPDF ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    Descargar PDF
+                  </button>
 
-            {/* ── Tabla de resultados ── */}
-            <div className="flex-1 flex flex-col min-h-0 rounded-2xl bg-base-white shadow-sm ring-1 ring-institucional-whiteSmokeBlack/20 overflow-hidden">
-              <div className="flex-1 overflow-x-auto overflow-y-auto min-h-0">
-                <table className="w-full text-xs" id="tabla-reporte">
-                  <thead className="sticky top-0 z-20 bg-[#e6efe9] text-base-eerieBlack">
-                    <tr className="bg-[#e6efe9] text-base-eerieBlack border-b border-institucional-whiteSmokeBlack/15">
-                      <th className="sticky left-0 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold z-30">
-                        #
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[80px] z-20">
-                        CIU
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[90px] z-20">
-                        CÉDULA
-                      </th>
-                      <th className="sticky left-8 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[260px] lg:min-w-[320px] z-30">
-                        CONTRIBUYENTE
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold w-[160px] min-w-[140px] max-w-[180px] z-20">
-                        ACTIVIDAD
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[100px] z-20">
-                        NAVE
-                      </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-2 py-2.5 text-center font-semibold min-w-[60px] z-20">
-                        PUESTO
-                      </th>
-                      {soloObservaciones ? (
-                        <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[320px] z-20">
-                          OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS
-                        </th>
-                      ) : (
-                        <>
-                          {fechas.map((f) => (
-                            <th
-                              key={f}
-                              className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-1 py-2.5 text-center font-semibold min-w-[36px] z-20"
-                            >
-                              {format(new Date(f + "T00:00:00"), "dd")}
-                              <br />
-                              <span className="font-normal text-gray-700">
-                                {format(new Date(f + "T00:00:00"), "MMM", {
-                                  locale: es,
-                                })}
-                              </span>
-                            </th>
-                          ))}
-                          {incluirObservaciones && (
-                            <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[150px] z-20">
-                              Observaciones
-                            </th>
-                          )}
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cargandoReporte ? (
-                      <tr>
-                        <td
-                          colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
-                          className="px-4 py-12 text-center text-sm text-gray-700"
-                        >
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <div className="h-6 w-6 rounded-full border-2 border-institucional-green/30 border-t-institucional-green animate-spin" />
-                            <span>Generando reporte de asistencia...</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : reporteFiltrado.length === 0 ? (
-                      <tr>
-                        <td
-                          colSpan={soloObservaciones ? 8 : (7 + fechas.length + (incluirObservaciones ? 1 : 0))}
-                          className="px-4 py-12 text-center text-sm text-gray-500"
-                        >
-                          <div className="flex flex-col items-center justify-center gap-2">
-                            <Search size={24} className="text-gray-400" />
-                            <span>No se encontraron comerciantes que coincidan con los criterios de búsqueda.</span>
-                          </div>
-                        </td>
-                      </tr>
-                    ) : (
-                      reporteFiltrado.map((row, i) => (
-                        <tr
-                          key={row.comerciante.idInterno}
-                          className="border-t border-institucional-whiteSmokeBlack/10 hover:bg-institucional-whiteSmoke/50 transition-colors"
-                        >
-                          <td className="sticky left-0 bg-base-white px-3 py-2 text-gray-700 font-medium z-10">
-                            {i + 1}
-                          </td>
-                          <td className="px-3 py-2 text-sm font-mono font-medium text-acento-azul1">
-                            {row.comerciante.ciu}
-                          </td>
-                          <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
-                            {row.comerciante.cedula}
-                          </td>
-                          <td className="sticky left-8 bg-base-white px-3 py-2 text-sm font-semibold text-base-eerieBlack z-10">
-                            <div className="truncate max-w-[280px] lg:max-w-[360px]" title={row.comerciante.contribuyente}>
-                              {row.comerciante.contribuyente}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-sm font-semibold text-gray-900">
-                            <div className="truncate max-w-[160px]" title={row.comerciante.actividad}>
-                              {row.comerciante.actividad}
-                            </div>
-                          </td>
-                          <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
-                            {row.naveNombre}
-                          </td>
-                          <td className="px-2 py-2 text-center text-sm font-mono font-medium text-base-eerieBlack">
-                            {row.puestoCode}
-                          </td>
-                          {soloObservaciones ? (
-                            <td className="px-3 py-2 text-xs font-semibold text-gray-900">
-                              {row.observaciones ? (
-                                <div className="space-y-1.5 whitespace-pre-line leading-relaxed">
-                                  {row.observaciones.split("\n").map((line, idx) => (
-                                    <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
-                                      {line}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span className="text-gray-400 font-normal">—</span>
-                              )}
-                            </td>
-                          ) : (
-                            <>
-                              {row.estados.map((estado, j) => {
-                                if (estado === "—") {
-                                  return (
-                                    <td key={j} className="px-0.5 py-1 text-center">
-                                      <span className="inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold bg-gray-200 text-gray-500">
-                                        —
-                                      </span>
-                                    </td>
-                                  );
-                                }
-                                const config =
-                                  ESTADO_COLORES[estado] ?? ESTADO_COLORES["Presente"];
-                                return (
-                                  <td key={j} className="px-0.5 py-1 text-center">
-                                    <span
-                                      className={`inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                                    >
-                                      {ESTADO_LABELS[estado]}
-                                    </span>
-                                  </td>
-                                );
-                              })}
-                              {incluirObservaciones && (
-                                <td className="px-3 py-2 max-w-[200px]">
-                                  <span className="line-clamp-2 text-xs font-semibold text-gray-900 whitespace-pre-line">
-                                    {row.observaciones || "—"}
-                                  </span>
-                                </td>
-                              )}
-                            </>
-                          )}
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Leyenda en el pie de la tarjeta */}
-              {!soloObservaciones && (
-                <div className="shrink-0 border-t border-institucional-whiteSmokeBlack/15 px-4 py-2.5 bg-base-white flex flex-wrap items-center gap-4 text-xs text-gray-700">
-                  <span className="font-semibold text-base-eerieBlack">Leyenda:</span>
-                  {Object.entries(ESTADO_LABELS).map(([estado, label]) => {
-                    const config = ESTADO_COLORES[estado];
-                    if (!config) return null;
-                    return (
-                      <div key={estado} className="flex items-center gap-1.5">
-                        <span
-                          className={`inline-flex h-5 w-6 items-center justify-center rounded text-xs font-bold ${config.bg} ${config.text}`}
-                        >
-                          {label}
-                        </span>
-                        <span>{estado}</span>
-                      </div>
-                    );
-                  })}
+                  <button
+                    type="button"
+                    onClick={handleDescargarExcel}
+                    disabled={!hayDatos || exportandoExcel}
+                    className={[
+                      "flex items-center justify-center gap-2 h-9 rounded-lg px-4 text-xs font-semibold shadow-sm transition-colors cursor-pointer",
+                      hayDatos && !exportandoExcel
+                        ? "bg-emerald-800 text-base-white hover:bg-emerald-900 active:bg-emerald-950"
+                        : "bg-institucional-whiteSmokeBlack/30 text-gray-500 cursor-not-allowed",
+                    ].join(" ")}
+                  >
+                    {exportandoExcel ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+                    Descargar Excel
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
+
+            {/* ── Tabla Modular de Reportes ── */}
+            <ReportesTabla
+              reporteFiltrado={reporteFiltrado}
+              fechas={fechas}
+              soloObservaciones={soloObservaciones}
+              incluirObservaciones={incluirObservaciones}
+              cargandoReporte={cargandoReporte}
+            />
           </>
         )}
       </div>
