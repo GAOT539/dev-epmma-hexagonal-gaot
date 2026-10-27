@@ -48,6 +48,20 @@ export default function ReportesPage() {
   const [incluirObservaciones, setIncluirObservaciones] = useState(true);
   const [soloObservaciones, setSoloObservaciones] = useState(false);
 
+  const [reglasNoLaborables, setReglasNoLaborables] = useState<
+    Array<{
+      id: string;
+      motivo: string;
+      tipoRegla: string;
+      fechaInicio: string;
+      fechaFin: string;
+      diasSemana?: number[];
+      aplicaTodasNaves: boolean;
+      navesIds?: string[];
+      fechasExpandidas: string[];
+    }>
+  >([]);
+
   // Límites dinámicos de fechas obtenidos de la base de datos
   const [limites, setLimites] = useState<{ minFecha: string; maxFecha: string; hoy: string }>({
     minFecha: format(new Date(), "yyyy-MM-dd"),
@@ -115,6 +129,21 @@ export default function ReportesPage() {
     };
   }, []);
 
+  // Carga de reglas de días no laborables
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/v1/auditoria/dias-no-laborables")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!activo || !data?.reglas) return;
+        setReglasNoLaborables(data.reglas);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
+
   // RBAC: Supervisores solo ven sus naves asignadas
   const naves = useMemo(() => {
     return allNaves.filter((n) => esNavePermitidaParaUsuario(n, user));
@@ -149,7 +178,7 @@ export default function ReportesPage() {
     return s;
   }, [asistenciaData, limites.hoy]);
 
-  // Rango de fechas filtrado estrictamente: entre minFecha y hoyStr, con registros reales
+  // Rango de fechas filtrado estrictamente: omitiendo días no laborables
   const fechas = useMemo(() => {
     if (!fechaInicio || !fechaFin) return [];
     try {
@@ -158,16 +187,36 @@ export default function ReportesPage() {
         end: new Date(fechaFin + "T00:00:00"),
       }).map((d) => format(d, "yyyy-MM-dd"));
 
-      return allDays.filter(
-        (f) =>
-          f >= limites.minFecha &&
-          f <= limites.hoy &&
-          fechasConRegistros.has(f)
-      );
+      return allDays.filter((f) => {
+        if (f < limites.minFecha || f > limites.hoy || !fechasConRegistros.has(f)) {
+          return false;
+        }
+
+        // Si hay una nave específica seleccionada: omitir si es día no laborable en esa nave
+        if (selectedNaveId && selectedNaveId !== "todas") {
+          const esNoLab = reglasNoLaborables.some((r) => {
+            const fechasExp = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
+            if (!fechasExp.includes(f)) return false;
+            if (r.aplicaTodasNaves) return true;
+            const nIds = Array.isArray(r.navesIds) ? (r.navesIds as string[]) : [];
+            return nIds.includes(selectedNaveId);
+          });
+          if (esNoLab) return false;
+        } else {
+          // Si selectedNaveId === "todas": omitir si es día no laborable global
+          const esNoLabGlobal = reglasNoLaborables.some((r) => {
+            const fechasExp = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
+            return r.aplicaTodasNaves && fechasExp.includes(f);
+          });
+          if (esNoLabGlobal) return false;
+        }
+
+        return true;
+      });
     } catch {
       return [];
     }
-  }, [fechaInicio, fechaFin, limites.minFecha, limites.hoy, fechasConRegistros]);
+  }, [fechaInicio, fechaFin, limites.minFecha, limites.hoy, fechasConRegistros, selectedNaveId, reglasNoLaborables]);
 
   // Carga asíncrona de datos de asistencia
   useEffect(() => {
@@ -244,9 +293,26 @@ export default function ReportesPage() {
         const regFechaMap = new Map<string, RegistroAsistencia>();
         comRegistros.forEach((r) => regFechaMap.set(r.fecha, r));
 
-        const estados = fechas.map(
-          (f) => regFechaMap.get(f)?.estado ?? (f === limites.hoy ? "Presente" : "Ausente")
-        );
+        const estados = fechas.map((f) => {
+          const reg = regFechaMap.get(f);
+          if (reg) return reg.estado;
+
+          // Si la nave específica de este puesto tuvo día no laborable en fecha f, mostrar "—"
+          if (naveId) {
+            const esNoLabNave = reglasNoLaborables.some((r) => {
+              const fechasExp = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
+              if (!fechasExp.includes(f)) return false;
+              if (r.aplicaTodasNaves) return true;
+              const nIds = Array.isArray(r.navesIds) ? (r.navesIds as string[]) : [];
+              return nIds.includes(naveId);
+            });
+            if (esNoLabNave) {
+              return "—" as const;
+            }
+          }
+
+          return f === limites.hoy ? "Presente" : "Ausente";
+        });
         const observaciones = formatearNovedadesReporte(comRegistros);
 
         return {
@@ -283,6 +349,7 @@ export default function ReportesPage() {
     fechas,
     soloObservaciones,
     limites.hoy,
+    reglasNoLaborables,
   ]);
 
   const hayDatos = reporteFiltrado.length > 0;
@@ -622,6 +689,15 @@ export default function ReportesPage() {
                           ) : (
                             <>
                               {row.estados.map((estado, j) => {
+                                if (estado === "—") {
+                                  return (
+                                    <td key={j} className="px-0.5 py-1 text-center">
+                                      <span className="inline-flex min-h-5 min-w-7 px-1 py-0.5 items-center justify-center rounded text-xs font-bold bg-gray-200 text-gray-500">
+                                        —
+                                      </span>
+                                    </td>
+                                  );
+                                }
                                 const config =
                                   ESTADO_COLORES[estado] ?? ESTADO_COLORES["Presente"];
                                 return (

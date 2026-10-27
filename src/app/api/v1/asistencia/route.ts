@@ -10,6 +10,7 @@ import {
   asegurarAsistenciaInicialDelDia,
   iniciarCronAsistenciaDiaria2AM,
 } from "@/infrastructure/database/daily-attendance.service";
+import { verificarDiaNoLaborableNave } from "@/infrastructure/database/calendario-operativo.service";
 import { getAccessibleNaveIds, userCanAccessComerciante, userCanAccessNave } from "@/infrastructure/auth/authorization";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
@@ -241,6 +242,16 @@ export async function POST(request: Request) {
           comercianteId: comerciante.idInterno,
         },
       });
+    }
+
+    const checkNoLab = await verificarDiaNoLaborableNave(puestoObj.naveId, fecha);
+    if (checkNoLab.esNoLaborable) {
+      return NextResponse.json(
+        {
+          error: `No se permite registrar asistencia ni observaciones porque la fecha ${fecha} está configurada como Día No Laborable en esta nave (${checkNoLab.motivo}).`,
+        },
+        { status: 400 }
+      );
     }
 
     // Upsert registro de asistencia

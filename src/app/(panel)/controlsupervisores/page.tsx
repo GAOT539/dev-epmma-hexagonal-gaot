@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Download,
   Loader2,
+  UserCheck,
+  CalendarOff,
 } from "lucide-react";
 import { format, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -28,6 +30,7 @@ import {
   BadgeControl,
   ModalDetalleControl,
 } from "./components/ModalDetalleControl";
+import { ModalGestionSupervisores } from "./components/ModalGestionSupervisores";
 
 const ITEMS_POR_PAGINA = 10;
 
@@ -57,6 +60,11 @@ export default function ControlSupervisoresPage() {
 
   // Modal de Detalle
   const [sesionSeleccionada, setSesionSeleccionada] = useState<SesionControlSupervisor | null>(null);
+
+  // Modal de Gestión Operativa (Permisos / Días No Laborables)
+  const [modalGestionOpen, setModalGestionOpen] = useState(false);
+  const [tabModalGestion, setTabModalGestion] = useState<"permisos" | "diasNoLaborables">("permisos");
+  const [versionCarga, setVersionCarga] = useState(0);
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
   const fechaHastaStr = fechaFin ? format(fechaFin, "yyyy-MM-dd") : undefined;
@@ -115,7 +123,7 @@ export default function ControlSupervisoresPage() {
     return () => {
       cancel = true;
     };
-  }, [busqueda, supervisorSeleccionado, fechaDesdeStr, fechaHastaStr]);
+  }, [busqueda, supervisorSeleccionado, fechaDesdeStr, fechaHastaStr, versionCarga]);
 
   // Manejadores de fechas independientes con validación
   function handleSelectFechaInicio(date: Date | undefined) {
@@ -183,20 +191,48 @@ export default function ControlSupervisoresPage() {
           </p>
         </div>
 
-        <Button
-          type="button"
-          onClick={handleExportPDFGeneral}
-          disabled={sesiones.length === 0}
-          className={[
-            "flex items-center gap-2 h-10 rounded-lg px-5 text-xs font-semibold shadow-sm transition-colors",
-            sesiones.length > 0
-              ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
-              : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",
-          ].join(" ")}
-        >
-          <Download size={15} />
-          <span>Descargar PDF</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setTabModalGestion("permisos");
+              setModalGestionOpen(true);
+            }}
+            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green/40 text-institucional-green hover:bg-institucional-green/10 shadow-2xs"
+          >
+            <UserCheck size={15} />
+            <span>Permisos y Cobertura</span>
+          </Button>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setTabModalGestion("diasNoLaborables");
+              setModalGestionOpen(true);
+            }}
+            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-amber-600/40 text-amber-700 hover:bg-amber-50 shadow-2xs"
+          >
+            <CalendarOff size={15} />
+            <span>Días No Laborables</span>
+          </Button>
+
+          <Button
+            type="button"
+            onClick={handleExportPDFGeneral}
+            disabled={sesiones.length === 0}
+            className={[
+              "flex items-center gap-2 h-10 rounded-lg px-4 text-xs font-semibold shadow-sm transition-colors",
+              sesiones.length > 0
+                ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
+                : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",
+            ].join(" ")}
+          >
+            <Download size={15} />
+            <span>Descargar PDF</span>
+          </Button>
+        </div>
       </header>
 
       <div className="flex-1 flex flex-col min-h-0 space-y-4">
@@ -503,6 +539,16 @@ export default function ControlSupervisoresPage() {
         sesion={sesionSeleccionada}
         onCerrar={() => setSesionSeleccionada(null)}
         onExportarPDF={handleExportPDFIndividual}
+      />
+
+      {/* ── Modal de Gestión Operativa (Permisos / Días No Laborables) ── */}
+      <ModalGestionSupervisores
+        key={`${modalGestionOpen}-${tabModalGestion}`}
+        isOpen={modalGestionOpen}
+        onClose={() => setModalGestionOpen(false)}
+        tabInicial={tabModalGestion}
+        supervisores={supervisores}
+        onCambioRealizado={() => setVersionCarga((v) => v + 1)}
       />
     </div>
   );

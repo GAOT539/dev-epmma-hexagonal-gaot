@@ -18,6 +18,7 @@ import {
   Building2,
   Calendar as CalendarIcon,
   CalendarDays,
+  CalendarOff,
   ChevronDown,
   CopyCheck,
   Search,
@@ -83,7 +84,41 @@ export default function ListasPage() {
   const { user } = useAuth();
   const esModoConsultaLista = user?.rol === "JEFE_OPERATIVO" || user?.rol === "DIRECTOR";
   const esFechaPasada = !isToday(selectedDate);
-  const esSoloLectura = esModoConsultaLista || esFechaPasada;
+  const fechaStr = formatDate(selectedDate);
+
+  const [reglasNoLaborables, setReglasNoLaborables] = useState<
+    Array<{
+      id: string;
+      motivo: string;
+      tipoRegla: string;
+      fechaInicio: string;
+      fechaFin: string;
+      diasSemana?: number[];
+      aplicaTodasNaves: boolean;
+      navesIds?: string[];
+      fechasExpandidas: string[];
+    }>
+  >([]);
+
+  let diaNoLaborableActual: { esNoLaborable: boolean; motivo?: string } = { esNoLaborable: false };
+  if (selectedNaveId) {
+    for (const r of reglasNoLaborables) {
+      const fechas = Array.isArray(r.fechasExpandidas) ? (r.fechasExpandidas as string[]) : [];
+      if (fechas.includes(fechaStr)) {
+        if (r.aplicaTodasNaves) {
+          diaNoLaborableActual = { esNoLaborable: true, motivo: r.motivo };
+          break;
+        }
+        const nIds = Array.isArray(r.navesIds) ? (r.navesIds as string[]) : [];
+        if (nIds.includes(selectedNaveId)) {
+          diaNoLaborableActual = { esNoLaborable: true, motivo: r.motivo };
+          break;
+        }
+      }
+    }
+  }
+
+  const esSoloLectura = esModoConsultaLista || esFechaPasada || diaNoLaborableActual.esNoLaborable;
 
   const [modalPersistenciaOpen, setModalPersistenciaOpen] = useState(false);
   const [comentarioPersistencia, setComentarioPersistencia] = useState("");
@@ -139,13 +174,27 @@ export default function ListasPage() {
     };
   }, []);
 
+  // Carga de reglas de días no laborables
+  useEffect(() => {
+    let activo = true;
+    fetch("/api/v1/auditoria/dias-no-laborables")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!activo || !data?.reglas) return;
+        setReglasNoLaborables(data.reglas);
+      })
+      .catch(() => {});
+    return () => {
+      activo = false;
+    };
+  }, []);
+
   // Naves filtradas según permisos de rol (Supervisores solo ven sus naves asignadas)
   const navesPermitidas = useMemo(() => {
     return naves.filter((n) => esNavePermitidaParaUsuario(n, user));
   }, [naves, user]);
 
   const nave = navesPermitidas.find((n) => n.id === selectedNaveId) ?? null;
-  const fechaStr = formatDate(selectedDate);
 
   // Carga asíncrona del plano espacial de la nave seleccionada
   useEffect(() => {
@@ -654,6 +703,15 @@ export default function ListasPage() {
       </header>
 
       <div className="w-full flex flex-col gap-4">
+        {nave && diaNoLaborableActual.esNoLaborable && (
+          <div className="w-full rounded-xl border border-amber-300 bg-amber-50 p-4 shadow-xs text-amber-900 flex items-start sm:items-center gap-3">
+            <CalendarOff className="h-5 w-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" />
+            <div className="text-xs sm:text-sm font-medium">
+              <span className="font-bold">📅 Día No Laborable en {nave.nombre}:</span> No se toma lista de asistencia ni se registran observaciones en esta fecha. Motivo: <span className="font-semibold">{diaNoLaborableActual.motivo}</span>
+            </div>
+          </div>
+        )}
+
         {cargando ? (
           <div className="flex flex-col items-center justify-center py-20 gap-3 text-institucional-green">
             <Loader2 className="h-8 w-8 animate-spin" />

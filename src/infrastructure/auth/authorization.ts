@@ -1,5 +1,6 @@
 import { prisma } from "@/infrastructure/database/prisma";
 import { AUTH_COOKIE_NAME, verificarTokenJwt } from "@/infrastructure/auth/jwt.utils";
+import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 
 export async function getAuthenticatedUser(request: Request) {
   let userId = request.headers.get("x-user-id");
@@ -60,7 +61,23 @@ export async function userCanAccessNave(request: Request, naveId: string): Promi
     : [];
   const matchSupervisores = supervisoresNave.includes(nombreCompleto);
 
-  return matchAsignadas || matchSupervisores;
+  if (matchAsignadas || matchSupervisores) return true;
+
+  // Comprobar reemplazo temporal vigente hoy
+  const hoyStr = obtenerFechaHoyEcuador();
+  const reemplazoActivo = await prisma.coberturaNaveSupervisor.findFirst({
+    where: {
+      naveId,
+      supervisorReemplazoId: user.id,
+      tipoCobertura: "REEMPLAZO_TEMPORAL",
+      estado: "ACTIVO",
+      fechaInicio: { lte: hoyStr },
+      fechaFin: { gte: hoyStr },
+      permiso: { estado: "ACTIVO" },
+    },
+  });
+
+  return Boolean(reemplazoActivo);
 }
 
 export async function userCanAccessComerciante(
@@ -101,13 +118,31 @@ export async function getAccessibleNaveIds(request: Request): Promise<string[] |
 
   const nombreCompleto = `${user.nombres} ${user.apellidos}`.trim().toLowerCase();
 
-  const todasNaves = await prisma.nave.findMany({
-    where: { estadoRegistro: { not: "Deshabilitado" } },
-    select: { id: true, nombre: true, supervisores: true },
-  });
+  const hoyStr = obtenerFechaHoyEcuador();
+  const [todasNaves, coberturasTemporales] = await Promise.all([
+    prisma.nave.findMany({
+      where: { estadoRegistro: { not: "Deshabilitado" } },
+      select: { id: true, nombre: true, supervisores: true },
+    }),
+    prisma.coberturaNaveSupervisor.findMany({
+      where: {
+        supervisorReemplazoId: user.id,
+        tipoCobertura: "REEMPLAZO_TEMPORAL",
+        estado: "ACTIVO",
+        fechaInicio: { lte: hoyStr },
+        fechaFin: { gte: hoyStr },
+        permiso: { estado: "ACTIVO" },
+      },
+      select: { naveId: true },
+    }),
+  ]);
+
+  const naveIdsTemporales = new Set(coberturasTemporales.map((c) => c.naveId));
 
   return todasNaves
     .filter((nave) => {
+      if (naveIdsTemporales.has(nave.id)) return true;
+
       const idNorm = nave.id.normalize("NFC").trim().toLowerCase();
       const nombreNorm = nave.nombre.normalize("NFC").trim().toLowerCase();
       const matchAsignadas = asignadas.includes(idNorm) || asignadas.includes(nombreNorm);

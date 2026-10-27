@@ -6,6 +6,7 @@ import {
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
+import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
 
 export async function GET(request: Request) {
@@ -52,21 +53,48 @@ export async function GET(request: Request) {
       )
     );
 
-    const formattedNaves = naves.map((n) => ({
-      id: n.id,
-      nombre: n.nombre,
-      cantidadPuestos: n.cantidadPuestos,
-      limitePuestos: n.limitePuestos,
-      supervisores: Array.isArray(n.supervisores) ? (n.supervisores as string[]) : [],
-      estadoRegistro: n.estadoRegistro,
-      puestos: n.puestos.map((p) => ({
-        id: p.id,
-        codigo: p.codigo,
-        naveId: p.naveId,
-        estado: p.estado,
-        comercianteId: p.comercianteId ?? undefined,
-      })),
-    }));
+    const hoyStr = obtenerFechaHoyEcuador();
+    const reemplazosActivos = await prisma.coberturaNaveSupervisor.findMany({
+      where: {
+        tipoCobertura: "REEMPLAZO_TEMPORAL",
+        estado: "ACTIVO",
+        fechaInicio: { lte: hoyStr },
+        fechaFin: { gte: hoyStr },
+        permiso: { estado: "ACTIVO" },
+      },
+    });
+
+    const mapaReemplazosPorNave = new Map<string, string[]>();
+    for (const r of reemplazosActivos) {
+      if (r.supervisorReemplazoNombre) {
+        const arr = mapaReemplazosPorNave.get(r.naveId) || [];
+        arr.push(r.supervisorReemplazoNombre);
+        mapaReemplazosPorNave.set(r.naveId, arr);
+      }
+    }
+
+    const formattedNaves = naves.map((n) => {
+      const supervisoresBase = Array.isArray(n.supervisores) ? (n.supervisores as string[]) : [];
+      const reemplazosHoy = mapaReemplazosPorNave.get(n.id) || [];
+      const supervisoresTotales = Array.from(new Set([...supervisoresBase, ...reemplazosHoy]));
+
+      return {
+        id: n.id,
+        nombre: n.nombre,
+        cantidadPuestos: n.cantidadPuestos,
+        limitePuestos: n.limitePuestos,
+        supervisores: supervisoresTotales,
+        reemplazosTemporalesHoy: reemplazosHoy,
+        estadoRegistro: n.estadoRegistro,
+        puestos: n.puestos.map((p) => ({
+          id: p.id,
+          codigo: p.codigo,
+          naveId: p.naveId,
+          estado: p.estado,
+          comercianteId: p.comercianteId ?? undefined,
+        })),
+      };
+    });
 
     return NextResponse.json({
       naves: formattedNaves,

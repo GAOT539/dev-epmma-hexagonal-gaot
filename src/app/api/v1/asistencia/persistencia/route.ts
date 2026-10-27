@@ -7,6 +7,7 @@ import type { PermisoDetalle } from "@/domain/models/asistencia.model";
 import type { DetalleComercianteControl } from "@/domain/models/auditoria.model";
 import { parseISO, subDays, format, isAfter, isBefore, isEqual } from "date-fns";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
+import { verificarDiaNoLaborableNave } from "@/infrastructure/database/calendario-operativo.service";
 import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
 
 export async function POST(request: Request) {
@@ -36,6 +37,17 @@ export async function POST(request: Request) {
     if (!(await userCanAccessNave(request, naveId))) {
       return NextResponse.json({ error: "La nave no pertenece al ámbito autorizado." }, { status: 403 });
     }
+
+    const checkNoLab = await verificarDiaNoLaborableNave(naveId, fechaHasta);
+    if (checkNoLab.esNoLaborable) {
+      return NextResponse.json(
+        {
+          error: `No se permite registrar asistencia ni observaciones porque la fecha ${fechaHasta} está configurada como Día No Laborable en esta nave (${checkNoLab.motivo}).`,
+        },
+        { status: 400 }
+      );
+    }
+
     const actor = await getAuthenticatedUser(request);
     if (!actor) {
       return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });

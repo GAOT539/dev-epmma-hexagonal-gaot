@@ -4,6 +4,10 @@ import { prisma, verificarConexionBD } from "@/infrastructure/database/prisma";
 import { logInfo, logError } from "@/infrastructure/logger/system-logger";
 import type { Prisma } from "@prisma/client";
 import crypto from "crypto";
+import {
+  verificarDiaNoLaborableNave,
+  ejecutarPersistenciaAutomaticaSupervisor,
+} from "@/infrastructure/database/calendario-operativo.service";
 
 declare global {
   var __epmma_cron_2am_initialized: boolean | undefined;
@@ -114,6 +118,18 @@ async function ejecutarAsegurarAsistencia(hoyStr: string): Promise<{
     return { totalInicializados: 0, fecha: hoyStr };
   }
 
+  // Filtrar naves donde hoy esté configurado como Día No Laborable
+  const naveIdsUnicas = Array.from(new Set(puestosOcupados.map((p) => p.naveId)));
+  const navesNoLaborablesSet = new Set<string>();
+  for (const nId of naveIdsUnicas) {
+    const checkNoLab = await verificarDiaNoLaborableNave(nId, hoyStr);
+    if (checkNoLab.esNoLaborable) {
+      navesNoLaborablesSet.add(nId);
+    }
+  }
+
+  const puestosLaborables = puestosOcupados.filter((p) => !navesNoLaborablesSet.has(p.naveId));
+
   // 2. Comerciantes que ya cuentan con registro en la fecha de hoy
   const existentes = await prisma.registroAsistencia.findMany({
     where: { fecha: hoyStr },
@@ -122,7 +138,7 @@ async function ejecutarAsegurarAsistencia(hoyStr: string): Promise<{
   const existentesSet = new Set(existentes.map((r) => r.comercianteId));
 
   // 3. Filtrar comerciantes que aún no tienen registro para hoy
-  const faltantes = puestosOcupados.filter(
+  const faltantes = puestosLaborables.filter(
     (p) => p.comerciante && !existentesSet.has(p.comerciante.idInterno)
   );
 
@@ -216,6 +232,44 @@ async function ejecutarAsegurarAsistencia(hoyStr: string): Promise<{
         }
       }
     }
+  }
+
+  // 6. Ejecutar persistencia automática para coberturas activas del día de hoy
+  try {
+    const coberturasPersistenciaHoy = await prisma.coberturaNaveSupervisor.findMany({
+      where: {
+        estado: "ACTIVO",
+        tipoCobertura: "PERSISTENCIA_AUTOMATICA",
+        fechaInicio: { lte: hoyStr },
+        fechaFin: { gte: hoyStr },
+        permiso: { estado: "ACTIVO" },
+      },
+      include: {
+        permiso: true,
+      },
+    });
+
+    for (const cob of coberturasPersistenciaHoy) {
+      const sesionExistente = await prisma.sesionControlSupervisor.findFirst({
+        where: {
+          naveId: cob.naveId,
+          fechaJornada: hoyStr,
+          esPersistencia: true,
+        },
+      });
+
+      if (!sesionExistente) {
+        await ejecutarPersistenciaAutomaticaSupervisor({
+          naveId: cob.naveId,
+          fechaStr: hoyStr,
+          supervisorId: cob.permiso.supervisorId,
+          supervisorNombre: cob.permiso.supervisorNombre,
+          motivoPermiso: cob.permiso.motivo,
+        });
+      }
+    }
+  } catch (err) {
+    logError("PERSISTENCIA-AUTO", "Error al procesar coberturas automáticas de supervisor", err);
   }
 
   globalThis.__epmma_last_sync_timestamp = Date.now();

@@ -92,7 +92,7 @@ export interface ReporteItem {
   puestoCode: string;
   naveNombre: string;
   naveId: string;
-  estados: EstadoAsistencia[];
+  estados: (EstadoAsistencia | "—")[];
   observaciones: string;
 }
 

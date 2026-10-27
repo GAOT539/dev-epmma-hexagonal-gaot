@@ -89,6 +89,7 @@ model Nave {
   plano           PlanoNave?
   puestos         Puesto[]
   sesionesControl SesionControlSupervisor[]
+  coberturas      CoberturaNaveSupervisor[]
 
   @@map("naves")
 }
@@ -210,3 +211,66 @@ model SesionControlSupervisor {
   @@index([naveId, fechaJornada])
   @@map("sesiones_control_supervisor")
 }
+
+model PermisoSupervisor {
+  id              String                    @id @default(uuid())
+  supervisorId    String
+  supervisorNombre String                   @db.VarChar(200)
+  fechaInicio     String                    @db.VarChar(10) // YYYY-MM-DD
+  fechaFin        String                    @db.VarChar(10) // YYYY-MM-DD
+  motivo          String                    @db.VarChar(500)
+  estado          String                    @default("ACTIVO") @db.VarChar(30) // ACTIVO | FINALIZADO | REVOCADO
+  creadoPorId     String
+  creadoPorNombre String                    @db.VarChar(200)
+  creadoEn        DateTime                  @default(now())
+  actualizadoEn   DateTime                  @updatedAt
+
+  // Relaciones
+  coberturas      CoberturaNaveSupervisor[]
+
+  @@index([supervisorId, estado])
+  @@index([fechaInicio, fechaFin])
+  @@map("permisos_supervisores")
+}
+
+model CoberturaNaveSupervisor {
+  id                        String            @id @default(uuid())
+  permisoSupervisorId       String
+  naveId                    String
+  naveNombre                String            @db.VarChar(100)
+  tipoCobertura             String            @db.VarChar(40) // REEMPLAZO_TEMPORAL | PERSISTENCIA_AUTOMATICA
+  supervisorReemplazoId     String?
+  supervisorReemplazoNombre String?           @db.VarChar(200)
+  fechaInicio               String            @db.VarChar(10) // YYYY-MM-DD
+  fechaFin                  String            @db.VarChar(10) // YYYY-MM-DD
+  motivo                    String            @db.VarChar(500)
+  estado                    String            @default("ACTIVO") @db.VarChar(30) // ACTIVO | REVOCADO
+
+  // Relaciones
+  permiso                   PermisoSupervisor @relation(fields: [permisoSupervisorId], references: [id], onDelete: Cascade)
+  nave                      Nave              @relation(fields: [naveId], references: [id], onDelete: Cascade)
+
+  @@index([naveId, fechaInicio, fechaFin, estado])
+  @@index([supervisorReemplazoId, fechaInicio, fechaFin, estado])
+  @@map("coberturas_naves_supervisores")
+}
+
+model ReglaDiaNoLaborable {
+  id               String   @id @default(uuid())
+  motivo           String   @db.VarChar(300)
+  tipoRegla        String   @db.VarChar(40) // DIA_UNICO | RANGO_CONTINUO | RECURRENTE_SEMANAL
+  fechaInicio      String   @db.VarChar(10) // YYYY-MM-DD
+  fechaFin         String   @db.VarChar(10) // YYYY-MM-DD
+  diasSemana       Json?    // Array de números [0..6]
+  aplicaTodasNaves Boolean  @default(true)
+  navesIds         Json?    // Array de string
+  navesNombres     Json?    // Array de string
+  fechasExpandidas Json     // Array de strings YYYY-MM-DD
+  creadoPorId      String
+  creadoPorNombre  String   @db.VarChar(200)
+  creadoEn         DateTime @default(now())
+
+  @@index([fechaInicio, fechaFin])
+  @@map("reglas_dias_no_laborables")
+}
+
