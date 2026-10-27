@@ -528,9 +528,14 @@ export default function ListasPage() {
     }
   }
 
-  function handlePermisoAsignado(inicio: string, fin: string) {
+  function handlePermisoAsignado(inicio: string, fin: string, motivo?: string) {
     if (!modalData) return;
-    handleAsignarPermisoDirecto(modalData.comerciante.idInterno, inicio, fin);
+    handleAsignarPermisoDirecto(
+      modalData.comerciante.idInterno,
+      inicio,
+      fin,
+      motivo || "Permiso concedido"
+    );
     setModalData(null);
   }
 

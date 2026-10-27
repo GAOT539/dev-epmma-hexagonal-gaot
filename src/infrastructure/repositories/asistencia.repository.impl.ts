@@ -209,6 +209,24 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     }
     return await res.json();
   }
+
+  async justificarFaltaComerciante(
+    comercianteId: string,
+    fechaInicio: string,
+    fechaFin: string,
+    motivo: string
+  ): Promise<{ diasJustificados: number }> {
+    const res = await fetch("/api/v1/asistencia/justificar-falta", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comercianteId, fechaInicio, fechaFin, motivo }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al justificar la falta");
+    }
+    return await res.json();
+  }
 }
 
 export const asistenciaRepository = new AsistenciaRepositoryImpl();

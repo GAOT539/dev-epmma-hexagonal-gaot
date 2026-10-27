@@ -204,7 +204,7 @@ export function getColorZonaClasses(
   }
   // Tipo PUESTO
   if (esVacante) {
-    return "bg-yellow-200/90 border-yellow-500 text-yellow-950 font-bold shadow-xs";
+    return "bg-amber-200/85 border-amber-500 text-amber-950 font-bold shadow-xs";
   }
   if (colorZona === "amarillo") return "bg-amber-100/90 border-amber-300 text-amber-950";
   if (colorZona === "rosado") return "bg-pink-100/90 border-pink-300 text-pink-950";

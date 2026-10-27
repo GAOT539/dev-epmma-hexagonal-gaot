@@ -71,4 +71,10 @@ export interface IAsistenciaRepository {
     supervisorNombre: string,
     comentario?: string
   ): Promise<{ fechaOrigen: string; diasCubiertos: number }>;
+  justificarFaltaComerciante(
+    comercianteId: string,
+    fechaInicio: string,
+    fechaFin: string,
+    motivo: string
+  ): Promise<{ diasJustificados: number }>;
 }

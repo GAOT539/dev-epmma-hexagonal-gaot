@@ -13,6 +13,31 @@ function extraerNumero(codigo: string): number | null {
   return match ? parseInt(match[0], 10) : null;
 }
 
+function sonCodigosPuestosEquivalentes(codA: string, codB: string): boolean {
+  const normA = codA.trim().toUpperCase();
+  const normB = codB.trim().toUpperCase();
+  if (normA === normB) return true;
+  const numA = extraerNumero(normA);
+  const numB = extraerNumero(normB);
+  if (numA !== null && numB !== null && numA === numB) {
+    const prefA = normA.replace(/\d+/g, "").trim();
+    const prefB = normB.replace(/\d+/g, "").trim();
+    return prefA === prefB || !prefA || !prefB;
+  }
+  return false;
+}
+
+function coincideNave(naveCom: string | null | undefined, naveEntry: { id: string; nombre: string }): boolean {
+  if (!naveCom) return false;
+  const nCom = naveCom.normalize("NFC").trim().toUpperCase();
+  const nNombre = naveEntry.nombre.normalize("NFC").trim().toUpperCase();
+  const nId = naveEntry.id.normalize("NFC").trim().toUpperCase();
+  if (nCom === nNombre || nCom === nId) return true;
+  const nComSinPrefijo = nCom.replace(/^NAVE\s+/i, "").trim();
+  const nNombreSinPrefijo = nNombre.replace(/^NAVE\s+/i, "").trim();
+  return nComSinPrefijo === nNombreSinPrefijo;
+}
+
 function clasificarEspacioComercial(codigo: string): string {
   if (/\bBODEGA\b/i.test(codigo)) return "BODEGA";
   if (/\bCUB[IÍ]CULO\b/i.test(codigo)) return "CUBÍCULO";
@@ -106,8 +131,8 @@ export async function GET() {
       }
     }
 
-    // Identificar puestos que no resolvieron en P1 para consultar P2
-    const puestosPendientesP2: VacanteEntry[] = [];
+    // Identificar puestos que no resolvieron en Parámetro 1A para consultar 1B
+    const puestosPendientesP1B: VacanteEntry[] = [];
     const giroPorPuestoId = new Map<string, string>();
 
     for (const entry of todosVacantes) {
@@ -115,52 +140,40 @@ export async function GET() {
       if (asis && esActividadValida(asis.comerciante?.actividad)) {
         giroPorPuestoId.set(entry.puesto.id, asis.comerciante.actividad.trim().toUpperCase());
       } else {
-        puestosPendientesP2.push(entry);
+        puestosPendientesP1B.push(entry);
       }
     }
 
-    // Prioridad 2: Historial de Comerciantes en esa Nave/Puesto
-    if (puestosPendientesP2.length > 0) {
-      const codigosBuscados = Array.from(new Set(puestosPendientesP2.map((p) => p.puesto.codigo)));
+    // Parámetro 1B: Comerciantes históricos de ese mismo puesto en ESA MISMA NAVE
+    // (ELIMINADO el mapa global comMapPorPuesto para evitar cualquier cruce entre naves)
+    if (puestosPendientesP1B.length > 0) {
       const comerciantesHistoricos = await prisma.comerciante.findMany({
         where: {
-          puestoId: { in: codigosBuscados },
+          puestoId: { not: null },
         },
         orderBy: { actualizadoEn: "desc" },
       });
 
-      // Indexar comerciantes históricos por nave+puestoId y por puestoId
-      const comMapPorNaveYPuesto = new Map<string, (typeof comerciantesHistoricos)[0]>();
-      const comMapPorPuesto = new Map<string, (typeof comerciantesHistoricos)[0]>();
+      for (const entry of puestosPendientesP1B) {
+        // Filtrar obligatoriamente primero por la misma nave y verificar coincidencia del puesto
+        const com = comerciantesHistoricos.find(
+          (c) =>
+            coincideNave(c.nave, entry.nave) &&
+            sonCodigosPuestosEquivalentes(c.puestoId || "", entry.puesto.codigo) &&
+            esActividadValida(c.actividad)
+        );
 
-      for (const com of comerciantesHistoricos) {
-        if (com.puestoId) {
-          if (!comMapPorPuesto.has(com.puestoId)) {
-            comMapPorPuesto.set(com.puestoId, com);
-          }
-          if (com.nave) {
-            const key = `${com.nave.trim().toUpperCase()}__${com.puestoId.trim().toUpperCase()}`;
-            if (!comMapPorNaveYPuesto.has(key)) {
-              comMapPorNaveYPuesto.set(key, com);
-            }
-          }
-        }
-      }
-
-      for (const entry of puestosPendientesP2) {
-        const keyExacta = `${entry.nave.nombre.trim().toUpperCase()}__${entry.puesto.codigo.trim().toUpperCase()}`;
-        const com = comMapPorNaveYPuesto.get(keyExacta) || comMapPorPuesto.get(entry.puesto.codigo);
-
-        if (com && esActividadValida(com.actividad)) {
+        if (com && com.actividad) {
           giroPorPuestoId.set(entry.puesto.id, com.actividad.trim().toUpperCase());
         }
       }
     }
 
-    // Prioridad 3: Inferencia por Vecindad en la Misma Sección de la Nave
+    // Parámetro 2: Búsqueda por Vecindad Alternada en su PROPIA NAVE (primero N - 1, luego N + 1, luego N - 2, N + 2...)
     for (const entry of todosVacantes) {
       if (giroPorPuestoId.has(entry.puesto.id)) continue;
 
+      // Puestos ocupados actuales de ESA MISMA NAVE con comerciante y actividad válida
       const ocupadosNave = (entry.nave.puestos || []).filter(
         (p) =>
           p.estado === "Ocupado" &&
@@ -175,24 +188,34 @@ export async function GET() {
 
       const numVacante = extraerNumero(entry.puesto.codigo);
       if (numVacante !== null) {
-        let mejorPuesto = ocupadosNave[0];
-        let menorDistancia = Infinity;
+        // Filtrar puestos ocupados de la misma nave que tengan número
+        const candidatos = ocupadosNave
+          .map((p) => ({ puesto: p, num: extraerNumero(p.codigo) }))
+          .filter((c): c is { puesto: typeof c.puesto; num: number } => c.num !== null);
 
-        for (const pOcup of ocupadosNave) {
-          const numOcup = extraerNumero(pOcup.codigo);
-          if (numOcup !== null) {
-            const dist = Math.abs(numVacante - numOcup);
-            if (dist < menorDistancia) {
-              menorDistancia = dist;
-              mejorPuesto = pOcup;
+        if (candidatos.length > 0) {
+          candidatos.sort((a, b) => {
+            const distA = Math.abs(numVacante - a.num);
+            const distB = Math.abs(numVacante - b.num);
+            // 1. Menor distancia absoluta primero
+            if (distA !== distB) {
+              return distA - distB;
             }
-          }
-        }
+            // 2. Desempate a igual distancia (distA === distB):
+            // Gana SIEMPRE el puesto anterior/inferior (numA < numVacante) sobre el puesto siguiente (numB > numVacante)
+            return a.num - b.num;
+          });
 
-        giroPorPuestoId.set(
-          entry.puesto.id,
-          mejorPuesto.comerciante!.actividad.trim().toUpperCase()
-        );
+          giroPorPuestoId.set(
+            entry.puesto.id,
+            candidatos[0].puesto.comerciante!.actividad.trim().toUpperCase()
+          );
+        } else {
+          giroPorPuestoId.set(
+            entry.puesto.id,
+            ocupadosNave[0].comerciante!.actividad.trim().toUpperCase()
+          );
+        }
       } else {
         giroPorPuestoId.set(
           entry.puesto.id,

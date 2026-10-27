@@ -124,6 +124,13 @@ export function PuestoCard({
   const [openFin, setOpenFin] = useState(false);
   const [permisoMotivo, setPermisoMotivo] = useState("Permiso concedido");
   const [permisoError, setPermisoError] = useState("");
+  const [fechaInicioJust, setFechaInicioJust] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
+  const [fechaFinJust, setFechaFinJust] = useState<Date | undefined>(() => new Date(fecha + "T00:00:00"));
+  const [openInicioJust, setOpenInicioJust] = useState(false);
+  const [openFinJust, setOpenFinJust] = useState(false);
+  const [motivoJust, setMotivoJust] = useState("");
+  const [justificandoFalta, setJustificandoFalta] = useState(false);
+  const [justificarError, setJustificarError] = useState("");
 
   // Estado para eliminación segura con confirmación (Fase 4)
   const [itemAEliminar, setItemAEliminar] = useState<{
@@ -135,16 +142,16 @@ export function PuestoCard({
   if (isVacante) {
     return (
       <article
-        className={`flex items-center gap-3 rounded-xl bg-base-white/60 px-4 py-3 ring-1 ${config.ring} opacity-60`}
+        className="flex items-center gap-3 rounded-xl bg-amber-50/70 px-4 py-3 ring-1 ring-amber-400/50"
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-institucional-whiteSmokeBlack/10 text-xs font-bold text-gray-700">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-xs font-bold text-white">
           —
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-gray-700">
             {puesto.codigo}
           </p>
-          <span className="inline-flex items-center rounded-full bg-institucional-whiteSmokeBlack/15 px-2 py-0.5 text-xs font-semibold text-gray-700 mt-0.5">
+          <span className="inline-flex items-center rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white mt-0.5">
             Vacante
           </span>
         </div>
@@ -207,6 +214,44 @@ export function PuestoCard({
     );
     if (onActualizarAsistencia) {
       await onActualizarAsistencia();
+    }
+  }
+
+  async function handleJustificarFalta(e: React.MouseEvent) {
+    e.stopPropagation();
+    setJustificarError("");
+    if (!comerciante) return;
+    if (!fechaInicioJust || !fechaFinJust) {
+      setJustificarError("Debe seleccionar la Fecha de Inicio y la Fecha de Fin.");
+      return;
+    }
+    if (fechaFinJust < fechaInicioJust) {
+      setJustificarError("La Fecha de Fin no puede ser anterior a la Fecha de Inicio.");
+      return;
+    }
+    if (!motivoJust.trim()) {
+      setJustificarError("Debe ingresar el Motivo / N° Doc.");
+      return;
+    }
+    try {
+      setJustificandoFalta(true);
+      const iniStr = format(fechaInicioJust, "yyyy-MM-dd");
+      const finStr = format(fechaFinJust, "yyyy-MM-dd");
+      await asistenciaService.justificarFaltaComerciante(
+        comerciante.idInterno,
+        iniStr,
+        finStr,
+        motivoJust.trim()
+      );
+      toast.success("Falta justificada y anotada en las observaciones de la fecha seleccionada.");
+      setMotivoJust("");
+      if (onActualizarAsistencia) {
+        await onActualizarAsistencia();
+      }
+    } catch (err: unknown) {
+      setJustificarError(err instanceof Error ? err.message : "Error al justificar falta");
+    } finally {
+      setJustificandoFalta(false);
     }
   }
 
@@ -630,13 +675,13 @@ export function PuestoCard({
 
               <div>
                 <label className="text-xs font-medium text-gray-700">
-                  Motivo del Permiso
+                  Motivo / N° Doc.
                 </label>
                 <input
                   type="text"
                   value={permisoMotivo}
                   onChange={(e) => setPermisoMotivo(e.target.value)}
-                  placeholder="Ej. Cita médica, Trámite personal..."
+                  placeholder="Ej. Cita médica, Oficio #123..."
                   className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
                 />
               </div>
@@ -712,6 +757,121 @@ export function PuestoCard({
                   onClick={handleGuardarPermiso}
                 >
                   Confirmar Permiso
+                </Button>
+              </div>
+
+              {/* Apartado: Justificar Falta (Días Anteriores) */}
+              <div className="pt-3 mt-3 border-t border-purple-200/80 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                  <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                  <span>Justificar Falta (Días Anteriores)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                      Fecha de Inicio
+                    </label>
+                    <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
+                      <PopoverTrigger
+                        type="button"
+                        className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                      >
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                        <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={fechaInicioJust}
+                          onSelect={(d) => {
+                            if (d) {
+                              setFechaInicioJust(d);
+                              setOpenInicioJust(false);
+                              setJustificarError("");
+                              if (fechaFinJust && d > fechaFinJust) {
+                                setFechaFinJust(d);
+                              }
+                            }
+                          }}
+                          disabled={(date) => {
+                            const hoy = new Date();
+                            hoy.setHours(23, 59, 59, 999);
+                            return date > hoy;
+                          }}
+                          locale={es}
+                          autoFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                      Fecha de Fin
+                    </label>
+                    <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
+                      <PopoverTrigger
+                        type="button"
+                        className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                      >
+                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                        <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={fechaFinJust}
+                          onSelect={(d) => {
+                            if (d) {
+                              setFechaFinJust(d);
+                              setOpenFinJust(false);
+                              setJustificarError("");
+                            }
+                          }}
+                          disabled={(date) => {
+                            const hoy = new Date();
+                            hoy.setHours(23, 59, 59, 999);
+                            if (date > hoy) return true;
+                            if (fechaInicioJust) {
+                              const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
+                              return date < iniDate;
+                            }
+                            return false;
+                          }}
+                          locale={es}
+                          autoFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-medium text-gray-700 block">
+                    Motivo / N° Doc. <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={motivoJust}
+                    onChange={(e) => setMotivoJust(e.target.value)}
+                    placeholder="Ej. Certificado médico #452, calamidad..."
+                    className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
+                  />
+                </div>
+
+                {justificarError && (
+                  <p className="text-xs text-base-red font-medium">{justificarError}</p>
+                )}
+
+                <Button
+                  type="button"
+                  onClick={handleJustificarFalta}
+                  disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
+                  size="sm"
+                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                >
+                  {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
                 </Button>
               </div>
             </>
@@ -857,7 +1017,7 @@ export function TreemapView({
               Presente: "bg-green-700 text-white",
               Ausente: "bg-red-700 text-white",
               Permiso: "bg-purple-700 text-white",
-              Vacante: "bg-gray-700 text-white",
+              Vacante: "bg-amber-500 text-white",
             };
 
             const isInteractive = !!comerciante && estado !== "Vacante";
@@ -923,7 +1083,7 @@ export function TreemapView({
             Presente: "bg-green-700",
             Ausente: "bg-red-700",
             Permiso: "bg-purple-700",
-            Vacante: "bg-gray-700",
+            Vacante: "bg-amber-500",
           };
           return (
             <div key={key} className="flex items-center gap-1.5">

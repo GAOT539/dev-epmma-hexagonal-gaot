@@ -150,6 +150,20 @@ export class AsistenciaService {
       comentario
     );
   }
+
+  async justificarFaltaComerciante(
+    comercianteId: string,
+    fechaInicio: string,
+    fechaFin: string,
+    motivo: string
+  ): Promise<{ diasJustificados: number }> {
+    return this.repository.justificarFaltaComerciante(
+      comercianteId,
+      fechaInicio,
+      fechaFin,
+      motivo
+    );
+  }
 }
 
 export const asistenciaService = new AsistenciaService(asistenciaRepository);

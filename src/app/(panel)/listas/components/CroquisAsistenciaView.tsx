@@ -256,7 +256,7 @@ export function CroquisAsistenciaView({
                   Presente: "bg-green-700 text-white",
                   Ausente: "bg-red-700 text-white",
                   Permiso: "bg-purple-700 text-white",
-                  Vacante: "bg-gray-700 text-white",
+                  Vacante: "bg-amber-500 text-white",
                 };
 
                 const estadoLabel = ESTADO_CONFIG[estado]?.label ?? estado;
@@ -275,7 +275,7 @@ export function CroquisAsistenciaView({
                     }}
                     className={[
                       "p-2.5 rounded-lg flex flex-col justify-between transition-all relative shadow-sm min-h-[84px]",
-                      bgColorMap[estado] ?? "bg-gray-700 text-white",
+                      bgColorMap[estado] ?? "bg-amber-500 text-white",
                       coincideBusqueda ? "opacity-100" : "opacity-25",
                       isInteractive
                         ? "cursor-pointer hover:scale-[1.02] hover:shadow-md hover:z-10 active:scale-98"
@@ -333,7 +333,7 @@ export function CroquisAsistenciaView({
             Presente: "bg-green-700",
             Ausente: "bg-red-700",
             Permiso: "bg-purple-700",
-            Vacante: "bg-gray-700",
+            Vacante: "bg-amber-500",
           };
           return (
             <div key={key} className="flex items-center gap-1.5">

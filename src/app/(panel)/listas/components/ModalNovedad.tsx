@@ -59,9 +59,9 @@ export const ESTADO_CONFIG: Record<
     label: "Permiso",
   },
   Vacante: {
-    bg: "bg-gray-700",
+    bg: "bg-amber-500",
     text: "text-white",
-    ring: "ring-gray-700/30",
+    ring: "ring-amber-500/35",
     label: "Vacante",
   },
 };
@@ -239,7 +239,7 @@ export function ComercianteModal({
   estado: EstadoAsistencia;
   fecha: string;
   onClose: () => void;
-  onPermisoAsignado: (inicio: string, fin: string) => void;
+  onPermisoAsignado: (inicio: string, fin: string, motivo?: string) => void;
   onNovedadGuardada: (comercianteId: string, texto: string, tipo?: TipoObservacion, numeroDocumento?: string) => Promise<void> | void;
   onEstadoChange: (estado: EstadoAsistencia) => void;
   soloLectura?: boolean;
@@ -250,6 +250,7 @@ export function ComercianteModal({
   const [novedadTexto, setNovedadTexto] = useState("");
   const [tipoObservacion, setTipoObservacion] = useState<TipoObservacion>("ObservacionesGeneral");
   const [numeroDocumentoObs, setNumeroDocumentoObs] = useState("");
+  const [permisoMotivo, setPermisoMotivo] = useState("");
   const [fechaInicioPermiso, setFechaInicioPermiso] = useState<Date | undefined>(
     () => new Date(fecha + "T00:00:00")
   );
@@ -259,6 +260,17 @@ export function ComercianteModal({
   const [openInicio, setOpenInicio] = useState(false);
   const [openFin, setOpenFin] = useState(false);
   const [permisoError, setPermisoError] = useState("");
+  const [fechaInicioJust, setFechaInicioJust] = useState<Date | undefined>(
+    () => new Date(fecha + "T00:00:00")
+  );
+  const [fechaFinJust, setFechaFinJust] = useState<Date | undefined>(
+    () => new Date(fecha + "T00:00:00")
+  );
+  const [openInicioJust, setOpenInicioJust] = useState(false);
+  const [openFinJust, setOpenFinJust] = useState(false);
+  const [motivoJust, setMotivoJust] = useState("");
+  const [justificandoFalta, setJustificandoFalta] = useState(false);
+  const [justificarError, setJustificarError] = useState("");
   const [itemAEliminar, setItemAEliminar] = useState<{
     id: string;
     tipo: "observacion" | "permiso";
@@ -401,11 +413,15 @@ export function ComercianteModal({
       setPermisoError("La Fecha de Fin no puede ser anterior a la Fecha de Inicio.");
       return;
     }
+    if (!permisoMotivo.trim()) {
+      setPermisoError("Debe ingresar el Motivo / N° Doc. del permiso.");
+      return;
+    }
     if (yaExistePermisoRango) {
       setPermisoError("Ya existe un permiso registrado para este rango de fechas.");
       return;
     }
-    await onPermisoAsignado(fechaInicioSel, fechaFinSel);
+    await onPermisoAsignado(fechaInicioSel, fechaFinSel, permisoMotivo.trim());
     setEstadoActual("Permiso");
     onEstadoChange("Permiso");
     const actualizado = await asistenciaService.obtenerAsistenciaComerciantePorFecha(
@@ -416,6 +432,50 @@ export function ComercianteModal({
     toast.success("Permiso asignado exitosamente", {
       description: `Vigencia: ${fechaInicioSel} al ${fechaFinSel}.`,
     });
+  }
+
+  async function handleJustificarFalta() {
+    setJustificarError("");
+    if (!fechaInicioJust || !fechaFinJust) {
+      setJustificarError("Debe seleccionar la Fecha de Inicio y la Fecha de Fin.");
+      return;
+    }
+    if (fechaFinJust < fechaInicioJust) {
+      setJustificarError("La Fecha de Fin no puede ser anterior a la Fecha de Inicio.");
+      return;
+    }
+    if (!motivoJust.trim()) {
+      setJustificarError("Debe ingresar el Motivo / N° Doc. de la justificación.");
+      return;
+    }
+    try {
+      setJustificandoFalta(true);
+      const iniStr = format(fechaInicioJust, "yyyy-MM-dd");
+      const finStr = format(fechaFinJust, "yyyy-MM-dd");
+      await asistenciaService.justificarFaltaComerciante(
+        comerciante.idInterno,
+        iniStr,
+        finStr,
+        motivoJust.trim()
+      );
+      toast.success("Falta justificada y anotada en las observaciones de la fecha seleccionada.");
+      setMotivoJust("");
+      const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
+      const [actual, ayer] = await Promise.all([
+        asistenciaService.obtenerAsistenciaComerciantePorFecha(comerciante.idInterno, fecha),
+        asistenciaService.obtenerAsistenciaComerciantePorFecha(comerciante.idInterno, fechaAyer),
+      ]);
+      setRegistroActual(actual);
+      setRegistroAyer(ayer);
+      if (actual) {
+        setEstadoActual(actual.estado);
+        onEstadoChange(actual.estado);
+      }
+    } catch (err: unknown) {
+      setJustificarError(err instanceof Error ? err.message : "Error al justificar falta");
+    } finally {
+      setJustificandoFalta(false);
+    }
   }
 
   async function handleConfirmarEliminacion() {
@@ -834,6 +894,19 @@ export function ComercianteModal({
                     </div>
                   </div>
 
+                  <div>
+                    <label className="text-xs font-medium text-gray-700">
+                      Motivo / N° Doc. <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={permisoMotivo}
+                      onChange={(e) => setPermisoMotivo(e.target.value)}
+                      placeholder="Ej. Cita médica, Oficio #123..."
+                      className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
+                    />
+                  </div>
+
                   {/* Alerta proactiva si la fecha ya tiene un permiso */}
                   {yaExistePermisoRango && (
                     <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
@@ -893,6 +966,121 @@ export function ComercianteModal({
                   >
                     Confirmar Permiso
                   </Button>
+
+                  {/* Apartado: Justificar Falta de Días Anteriores */}
+                  <div className="pt-3 mt-3 border-t border-purple-200/80 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60">
+                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                      <span>Justificar Falta de Días Anteriores</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                          Fecha de Inicio
+                        </label>
+                        <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
+                          <PopoverTrigger
+                            type="button"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                          >
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                            <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaInicioJust}
+                              onSelect={(d) => {
+                                if (d) {
+                                  setFechaInicioJust(d);
+                                  setOpenInicioJust(false);
+                                  setJustificarError("");
+                                  if (fechaFinJust && d > fechaFinJust) {
+                                    setFechaFinJust(d);
+                                  }
+                                }
+                              }}
+                              disabled={(date) => {
+                                const hoy = new Date();
+                                hoy.setHours(23, 59, 59, 999);
+                                return date > hoy;
+                              }}
+                              locale={es}
+                              autoFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                          Fecha de Fin
+                        </label>
+                        <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
+                          <PopoverTrigger
+                            type="button"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                          >
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                            <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaFinJust}
+                              onSelect={(d) => {
+                                if (d) {
+                                  setFechaFinJust(d);
+                                  setOpenFinJust(false);
+                                  setJustificarError("");
+                                }
+                              }}
+                              disabled={(date) => {
+                                const hoy = new Date();
+                                hoy.setHours(23, 59, 59, 999);
+                                if (date > hoy) return true;
+                                if (fechaInicioJust) {
+                                  const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
+                                  return date < iniDate;
+                                }
+                                return false;
+                              }}
+                              locale={es}
+                              autoFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-gray-700 block">
+                        Motivo / N° Doc. <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={motivoJust}
+                        onChange={(e) => setMotivoJust(e.target.value)}
+                        placeholder="Ej. Certificado médico #452, calamidad..."
+                        className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
+                      />
+                    </div>
+
+                    {justificarError && (
+                      <p className="text-xs text-base-red font-medium">{justificarError}</p>
+                    )}
+
+                    <Button
+                      type="button"
+                      onClick={handleJustificarFalta}
+                      disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
+                      size="sm"
+                      className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                    >
+                      {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
+                    </Button>
+                  </div>
                 </>
               )}
             </div>

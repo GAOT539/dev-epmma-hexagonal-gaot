@@ -8,7 +8,7 @@ export const ESTADO_COLORES: Record<string, { bg: string; text: string; hex: str
   Presente: { bg: "bg-green-700", text: "text-white", hex: "#15803D" },
   Ausente: { bg: "bg-red-700", text: "text-white", hex: "#B91C1C" },
   Permiso: { bg: "bg-purple-700", text: "text-white", hex: "#7E22CE" },
-  Vacante: { bg: "bg-gray-700", text: "text-white", hex: "#374151" },
+  Vacante: { bg: "bg-amber-500", text: "text-white", hex: "#D97706" },
 };
 
 export const ESTADO_LABELS: Record<string, string> = {
@@ -245,7 +245,7 @@ export async function exportarReporteAsistenciaPDF({
           P: [21, 128, 61],
           A: [185, 28, 28],
           Pm: [126, 34, 206],
-          V: [55, 65, 81],
+          V: [217, 119, 6],
         };
         const color = colorMap[value];
         if (color) {
