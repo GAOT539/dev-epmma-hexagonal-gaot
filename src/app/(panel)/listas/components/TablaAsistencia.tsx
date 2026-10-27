@@ -9,6 +9,8 @@ import {
   X,
   Trash2,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -131,6 +133,7 @@ export function PuestoCard({
   const [motivoJust, setMotivoJust] = useState("");
   const [justificandoFalta, setJustificandoFalta] = useState(false);
   const [justificarError, setJustificarError] = useState("");
+  const [mostrarJustificarFalta, setMostrarJustificarFalta] = useState(false);
 
   // Estado para eliminación segura con confirmación (Fase 4)
   const [itemAEliminar, setItemAEliminar] = useState<{
@@ -245,6 +248,7 @@ export function PuestoCard({
       );
       toast.success("Falta justificada y anotada en las observaciones de la fecha seleccionada.");
       setMotivoJust("");
+      setMostrarJustificarFalta(false);
       if (onActualizarAsistencia) {
         await onActualizarAsistencia();
       }
@@ -377,7 +381,13 @@ export function PuestoCard({
             isActive={estado === "Permiso" || panelActivo === "permiso"}
             onClick={(e) => {
               e.stopPropagation();
-              setPanelActivo((curr) => (curr === "permiso" ? null : "permiso"));
+              setPanelActivo((curr) => {
+                if (curr === "permiso") {
+                  setMostrarJustificarFalta(false);
+                  return null;
+                }
+                return "permiso";
+              });
             }}
           />
         </div>
@@ -539,7 +549,10 @@ export function PuestoCard({
             </h4>
             <button
               type="button"
-              onClick={() => setPanelActivo(null)}
+              onClick={() => {
+                setPanelActivo(null);
+                setMostrarJustificarFalta(false);
+              }}
               className="rounded p-1 text-institucional-whiteSmokeBlack hover:text-base-eerieBlack transition-colors"
               aria-label="Cerrar panel de permiso"
             >
@@ -598,7 +611,10 @@ export function PuestoCard({
                   variant="outline"
                   size="sm"
                   className="h-8 text-xs"
-                  onClick={() => setPanelActivo(null)}
+                  onClick={() => {
+                    setPanelActivo(null);
+                    setMostrarJustificarFalta(false);
+                  }}
                 >
                   Cerrar
                 </Button>
@@ -761,118 +777,137 @@ export function PuestoCard({
               </div>
 
               {/* Apartado: Justificar Falta (Días Anteriores) */}
-              <div className="pt-3 mt-3 border-t border-purple-200/80 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60">
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
-                  <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                  <span>Justificar Falta (Días Anteriores)</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div>
-                    <label className="text-[11px] font-medium text-gray-700 block mb-1">
-                      Fecha de Inicio
-                    </label>
-                    <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
-                      <PopoverTrigger
-                        type="button"
-                        className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
-                      >
-                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
-                        <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={fechaInicioJust}
-                          onSelect={(d) => {
-                            if (d) {
-                              setFechaInicioJust(d);
-                              setOpenInicioJust(false);
-                              setJustificarError("");
-                              if (fechaFinJust && d > fechaFinJust) {
-                                setFechaFinJust(d);
-                              }
-                            }
-                          }}
-                          disabled={(date) => {
-                            const hoy = new Date();
-                            hoy.setHours(23, 59, 59, 999);
-                            return date > hoy;
-                          }}
-                          locale={es}
-                          autoFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-medium text-gray-700 block mb-1">
-                      Fecha de Fin
-                    </label>
-                    <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
-                      <PopoverTrigger
-                        type="button"
-                        className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
-                      >
-                        <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
-                        <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={fechaFinJust}
-                          onSelect={(d) => {
-                            if (d) {
-                              setFechaFinJust(d);
-                              setOpenFinJust(false);
-                              setJustificarError("");
-                            }
-                          }}
-                          disabled={(date) => {
-                            const hoy = new Date();
-                            hoy.setHours(23, 59, 59, 999);
-                            if (date > hoy) return true;
-                            if (fechaInicioJust) {
-                              const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
-                              return date < iniDate;
-                            }
-                            return false;
-                          }}
-                          locale={es}
-                          autoFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] font-medium text-gray-700 block">
-                    Motivo / N° Doc. <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={motivoJust}
-                    onChange={(e) => setMotivoJust(e.target.value)}
-                    placeholder="Ej. Certificado médico #452, calamidad..."
-                    className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
-                  />
-                </div>
-
-                {justificarError && (
-                  <p className="text-xs text-base-red font-medium">{justificarError}</p>
-                )}
-
-                <Button
+              <div className="pt-2 mt-2 border-t border-purple-200/80">
+                <button
                   type="button"
-                  onClick={handleJustificarFalta}
-                  disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
-                  size="sm"
-                  className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMostrarJustificarFalta((prev) => !prev);
+                    setJustificarError("");
+                  }}
+                  className="w-full flex items-center justify-between rounded-lg bg-amber-50/80 hover:bg-amber-100/70 px-3 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-300/70 transition-colors cursor-pointer"
                 >
-                  {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
-                </Button>
+                  <span className="flex items-center gap-1.5">
+                    <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                    <span>Justificar Falta (Días Anteriores)</span>
+                  </span>
+                  {mostrarJustificarFalta ? (
+                    <ChevronUp className="text-amber-800 shrink-0" size={15} />
+                  ) : (
+                    <ChevronDown className="text-amber-800 shrink-0" size={15} />
+                  )}
+                </button>
+
+                {mostrarJustificarFalta && (
+                  <div className="mt-2 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60 animate-in fade-in-50 duration-150">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                          Fecha de Inicio
+                        </label>
+                        <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
+                          <PopoverTrigger
+                            type="button"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                          >
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                            <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaInicioJust}
+                              onSelect={(d) => {
+                                if (d) {
+                                  setFechaInicioJust(d);
+                                  setOpenInicioJust(false);
+                                  setJustificarError("");
+                                  if (fechaFinJust && d > fechaFinJust) {
+                                    setFechaFinJust(d);
+                                  }
+                                }
+                              }}
+                              disabled={(date) => {
+                                const hoy = new Date();
+                                hoy.setHours(23, 59, 59, 999);
+                                return date > hoy;
+                              }}
+                              locale={es}
+                              autoFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                          Fecha de Fin
+                        </label>
+                        <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
+                          <PopoverTrigger
+                            type="button"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                          >
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                            <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={fechaFinJust}
+                              onSelect={(d) => {
+                                if (d) {
+                                  setFechaFinJust(d);
+                                  setOpenFinJust(false);
+                                  setJustificarError("");
+                                }
+                              }}
+                              disabled={(date) => {
+                                const hoy = new Date();
+                                hoy.setHours(23, 59, 59, 999);
+                                if (date > hoy) return true;
+                                if (fechaInicioJust) {
+                                  const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
+                                  return date < iniDate;
+                                }
+                                return false;
+                              }}
+                              locale={es}
+                              autoFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-medium text-gray-700 block">
+                        Motivo / N° Doc. <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={motivoJust}
+                        onChange={(e) => setMotivoJust(e.target.value)}
+                        placeholder="Ej. Certificado médico #452, calamidad..."
+                        className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
+                      />
+                    </div>
+
+                    {justificarError && (
+                      <p className="text-xs text-base-red font-medium">{justificarError}</p>
+                    )}
+
+                    <Button
+                      type="button"
+                      onClick={handleJustificarFalta}
+                      disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
+                      size="sm"
+                      className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                    >
+                      {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
+                    </Button>
+                  </div>
+                )}
               </div>
             </>
           )}

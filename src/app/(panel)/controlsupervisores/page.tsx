@@ -30,7 +30,8 @@ import {
   BadgeControl,
   ModalDetalleControl,
 } from "./components/ModalDetalleControl";
-import { ModalGestionSupervisores } from "./components/ModalGestionSupervisores";
+import { ModalPermisosSupervisores } from "./components/ModalPermisosSupervisores";
+import { ModalDiasNoLaborables } from "./components/ModalDiasNoLaborables";
 
 const ITEMS_POR_PAGINA = 10;
 
@@ -61,9 +62,9 @@ export default function ControlSupervisoresPage() {
   // Modal de Detalle
   const [sesionSeleccionada, setSesionSeleccionada] = useState<SesionControlSupervisor | null>(null);
 
-  // Modal de Gestión Operativa (Permisos / Días No Laborables)
-  const [modalGestionOpen, setModalGestionOpen] = useState(false);
-  const [tabModalGestion, setTabModalGestion] = useState<"permisos" | "diasNoLaborables">("permisos");
+  // Modales de Gestión Operativa Independientes (Permisos / Días No Laborables)
+  const [modalPermisosOpen, setModalPermisosOpen] = useState(false);
+  const [modalDiasNoLabOpen, setModalDiasNoLabOpen] = useState(false);
   const [versionCarga, setVersionCarga] = useState(0);
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
@@ -195,11 +196,8 @@ export default function ControlSupervisoresPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setTabModalGestion("permisos");
-              setModalGestionOpen(true);
-            }}
-            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green/40 text-institucional-green hover:bg-institucional-green/10 shadow-2xs"
+            onClick={() => setModalPermisosOpen(true)}
+            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green/40 text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
           >
             <UserCheck size={15} />
             <span>Permisos y Cobertura</span>
@@ -208,11 +206,8 @@ export default function ControlSupervisoresPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setTabModalGestion("diasNoLaborables");
-              setModalGestionOpen(true);
-            }}
-            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-amber-600/40 text-amber-700 hover:bg-amber-50 shadow-2xs"
+            onClick={() => setModalDiasNoLabOpen(true)}
+            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-amber-600/40 text-amber-700 hover:bg-amber-50 shadow-2xs cursor-pointer"
           >
             <CalendarOff size={15} />
             <span>Días No Laborables</span>
@@ -541,13 +536,17 @@ export default function ControlSupervisoresPage() {
         onExportarPDF={handleExportPDFIndividual}
       />
 
-      {/* ── Modal de Gestión Operativa (Permisos / Días No Laborables) ── */}
-      <ModalGestionSupervisores
-        key={`${modalGestionOpen}-${tabModalGestion}`}
-        isOpen={modalGestionOpen}
-        onClose={() => setModalGestionOpen(false)}
-        tabInicial={tabModalGestion}
+      {/* ── Modales de Gestión Operativa Independientes ── */}
+      <ModalPermisosSupervisores
+        isOpen={modalPermisosOpen}
+        onClose={() => setModalPermisosOpen(false)}
         supervisores={supervisores}
+        onCambioRealizado={() => setVersionCarga((v) => v + 1)}
+      />
+
+      <ModalDiasNoLaborables
+        isOpen={modalDiasNoLabOpen}
+        onClose={() => setModalDiasNoLabOpen(false)}
         onCambioRealizado={() => setVersionCarga((v) => v + 1)}
       />
     </div>

@@ -6,6 +6,8 @@ import { format, subDays } from "date-fns";
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Eye as EyeIcon,
   MessageSquareWarning,
   ShieldAlert,
@@ -271,6 +273,7 @@ export function ComercianteModal({
   const [motivoJust, setMotivoJust] = useState("");
   const [justificandoFalta, setJustificandoFalta] = useState(false);
   const [justificarError, setJustificarError] = useState("");
+  const [mostrarJustificarFalta, setMostrarJustificarFalta] = useState(false);
   const [itemAEliminar, setItemAEliminar] = useState<{
     id: string;
     tipo: "observacion" | "permiso";
@@ -340,6 +343,7 @@ export function ComercianteModal({
     }
 
     setPanelActivo(null);
+    setMostrarJustificarFalta(false);
     setEstadoActual(nuevoEstado);
     await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado);
     onEstadoChange(nuevoEstado);
@@ -353,6 +357,7 @@ export function ComercianteModal({
     setFechaInicioPermiso(undefined);
     setFechaFinPermiso(undefined);
     setPanelActivo(null);
+    setMostrarJustificarFalta(false);
     setEstadoActual(nuevoEstado);
     await asistenciaService.registrarAsistencia(comerciante.idInterno, fecha, nuevoEstado, undefined, undefined);
     onEstadoChange(nuevoEstado);
@@ -365,10 +370,17 @@ export function ComercianteModal({
 
   function handleToggleObservacion() {
     setPanelActivo((actual) => (actual === "observacion" ? null : "observacion"));
+    setMostrarJustificarFalta(false);
   }
 
   function handleTogglePermiso() {
-    setPanelActivo((actual) => (actual === "permiso" ? null : "permiso"));
+    setPanelActivo((actual) => {
+      if (actual === "permiso") {
+        setMostrarJustificarFalta(false);
+        return null;
+      }
+      return "permiso";
+    });
   }
 
   const fechaInicioSel = fechaInicioPermiso ? format(fechaInicioPermiso, "yyyy-MM-dd") : "";
@@ -460,6 +472,7 @@ export function ComercianteModal({
       );
       toast.success("Falta justificada y anotada en las observaciones de la fecha seleccionada.");
       setMotivoJust("");
+      setMostrarJustificarFalta(false);
       const fechaAyer = formatDate(subDays(new Date(fecha + "T00:00:00"), 1));
       const [actual, ayer] = await Promise.all([
         asistenciaService.obtenerAsistenciaComerciantePorFecha(comerciante.idInterno, fecha),
@@ -518,10 +531,10 @@ export function ComercianteModal({
     <Dialog open={true} disablePointerDismissal={true} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
         showCloseButton={false}
-        className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0 rounded-2xl gap-0"
+        className="w-[95vw] max-w-[95vw] sm:max-w-2xl lg:max-w-4xl max-h-[90dvh] flex flex-col p-0 overflow-hidden rounded-2xl gap-0 shadow-2xl border-0"
       >
         {/* Header con botón X explícito */}
-        <div className="bg-institucional-green px-6 py-4 flex items-center justify-between">
+        <div className="bg-institucional-green px-6 py-4 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-base-white/20 text-base-white font-bold text-lg">
               {comerciante.contribuyente.charAt(0)}
@@ -546,9 +559,9 @@ export function ComercianteModal({
         </div>
 
         {/* Contenido del modal */}
-        <div className="px-6 py-5 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
           {/* Info del comerciante */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <InfoItem label="Cédula" value={comerciante.cedula} />
             <InfoItem label="CIU" value={comerciante.ciu} />
             <InfoItem label="Actividad" value={comerciante.actividad} />
@@ -573,7 +586,7 @@ export function ComercianteModal({
           </div>
 
           {/* 1. Acciones Rápidas (4 Botones o 2 en modo consulta) */}
-          <div className="grid grid-cols-2 gap-3 mb-3">
+          <div className={soloLectura ? "grid grid-cols-2 gap-3 mb-3" : "grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3"}>
             {!soloLectura && (
               <>
                 {/* Presente */}
@@ -652,112 +665,147 @@ export function ComercianteModal({
                 {soloLectura ? "Observaciones Registradas" : "Registrar Observación"}
               </h3>
 
-              {/* Listado Histórico de Observaciones */}
-              {registroActual?.observaciones && registroActual.observaciones.length > 0 ? (
-                <div className="space-y-1.5 pb-2">
-                  <span className="text-xs font-semibold text-blue-900 block">
-                    Observaciones registradas ({registroActual.observaciones.length}):
-                  </span>
-                  <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                    {registroActual.observaciones.map((obs) => (
-                      <div
-                        key={obs.id}
-                        className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
-                      >
-                        <div className="min-w-0 flex-1 leading-snug space-y-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-semibold text-blue-700 text-xs">
-                              {obs.fechaHora}
-                            </span>
-                            <BadgeTipoObservacion tipo={obs.tipo} numeroDocumento={obs.numeroDocumento} />
+              {soloLectura ? (
+                registroActual?.observaciones && registroActual.observaciones.length > 0 ? (
+                  <div className="space-y-1.5 pb-2">
+                    <span className="text-xs font-semibold text-blue-900 block">
+                      Observaciones registradas ({registroActual.observaciones.length}):
+                    </span>
+                    <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                      {registroActual.observaciones.map((obs) => (
+                        <div
+                          key={obs.id}
+                          className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
+                        >
+                          <div className="min-w-0 flex-1 leading-snug space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-semibold text-blue-700 text-xs">
+                                {obs.fechaHora}
+                              </span>
+                              <BadgeTipoObservacion tipo={obs.tipo} numeroDocumento={obs.numeroDocumento} />
+                            </div>
+                            <p className="text-gray-800 break-words text-xs">{obs.texto}</p>
                           </div>
-                          <p className="text-gray-800 break-words text-xs">{obs.texto}</p>
                         </div>
-                        {!soloLectura && (
-                          <button
-                            type="button"
-                            onClick={() => setItemAEliminar({ id: obs.id, tipo: "observacion" })}
-                            className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                            title="Eliminar observación"
-                            aria-label="Eliminar observación"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ) : soloLectura ? (
-                <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-blue-100">
-                  Sin observaciones registradas en esta jornada.
-                </p>
-              ) : null}
-
-              {!soloLectura && (
-                <>
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-700">Tipo de Observación</label>
-                    <select
-                      value={tipoObservacion}
-                      onChange={(e) => setTipoObservacion(e.target.value as TipoObservacion)}
-                      className="w-full h-8 rounded-lg border border-gray-300 bg-base-white px-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="ObservacionesGeneral">Observación General</option>
-                      <option value="Citaciones">Citación</option>
-                      <option value="Notificación">Notificación</option>
-                    </select>
-                  </div>
-
-                  {(tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") && (
+                ) : (
+                  <p className="text-xs text-gray-600 italic py-2 text-center bg-base-white/60 rounded-lg border border-blue-100">
+                    Sin observaciones registradas en esta jornada.
+                  </p>
+                )
+              ) : (
+                <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 items-start">
+                  {/* Izquierda: Formulario (lg:col-span-6) */}
+                  <div className="space-y-3 lg:col-span-6">
                     <div className="space-y-1">
-                      <label className="text-xs font-semibold text-gray-700">
-                        Número de Referencia / Documento <span className="text-red-500">*</span>
-                      </label>
-                      <Input
-                        placeholder="Ingrese Nro. de referencia o documento..."
-                        value={numeroDocumentoObs}
-                        onChange={(e) => setNumeroDocumentoObs(e.target.value)}
-                        className="text-xs border-blue-200 focus-visible:ring-blue-500 bg-base-white"
+                      <label className="text-xs font-semibold text-gray-700">Tipo de Observación</label>
+                      <select
+                        value={tipoObservacion}
+                        onChange={(e) => setTipoObservacion(e.target.value as TipoObservacion)}
+                        className="w-full h-8 rounded-lg border border-gray-300 bg-base-white px-2 text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="ObservacionesGeneral">Observación General</option>
+                        <option value="Citaciones">Citación</option>
+                        <option value="Notificación">Notificación</option>
+                      </select>
+                    </div>
+
+                    {(tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") && (
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-gray-700">
+                          Número de Referencia / Documento <span className="text-red-500">*</span>
+                        </label>
+                        <Input
+                          placeholder="Ingrese Nro. de referencia o documento..."
+                          value={numeroDocumentoObs}
+                          onChange={(e) => setNumeroDocumentoObs(e.target.value)}
+                          className="text-xs border-blue-200 focus-visible:ring-blue-500 bg-base-white"
+                        />
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-gray-700">Detalle de la Observación</label>
+                      <Textarea
+                        placeholder="Escriba la nueva observación o situación a reportar..."
+                        value={novedadTexto}
+                        onChange={(e) => setNovedadTexto(e.target.value)}
+                        rows={3}
+                        className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
                       />
                     </div>
-                  )}
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-gray-700">Detalle de la Observación</label>
-                    <Textarea
-                      placeholder="Escriba la nueva observación o situación a reportar..."
-                      value={novedadTexto}
-                      onChange={(e) => setNovedadTexto(e.target.value)}
-                      rows={3}
-                      className="resize-none text-xs bg-base-white border-blue-200 focus-visible:ring-blue-500"
-                    />
+                    <Button
+                      type="button"
+                      onClick={handleGuardarObservacion}
+                      disabled={
+                        !novedadTexto.trim() ||
+                        ((tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") &&
+                          !numeroDocumentoObs.trim())
+                      }
+                      size="sm"
+                      className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
+                    >
+                      {tieneObservacionPrevia ? "Registrar Novedad Adicional" : "Registrar Observación"}
+                    </Button>
                   </div>
 
-                  <Button
-                    type="button"
-                    onClick={handleGuardarObservacion}
-                    disabled={
-                      !novedadTexto.trim() ||
-                      ((tipoObservacion === "Citaciones" || tipoObservacion === "Notificación") &&
-                        !numeroDocumentoObs.trim())
-                    }
-                    size="sm"
-                    className="w-full bg-blue-600 text-white hover:bg-blue-700 font-semibold"
-                  >
-                    {tieneObservacionPrevia ? "Registrar Novedad Adicional" : "Registrar Observación"}
-                  </Button>
-                </>
-              )}
+                  {/* Derecha: Historial y observación anterior (lg:col-span-6) */}
+                  <div className="space-y-3 lg:col-span-6">
+                    {registroActual?.observaciones && registroActual.observaciones.length > 0 ? (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold text-blue-900 block">
+                          Observaciones registradas ({registroActual.observaciones.length}):
+                        </span>
+                        <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
+                          {registroActual.observaciones.map((obs) => (
+                            <div
+                              key={obs.id}
+                              className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-blue-200 text-xs shadow-xs"
+                            >
+                              <div className="min-w-0 flex-1 leading-snug space-y-0.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-blue-700 text-xs">
+                                    {obs.fechaHora}
+                                  </span>
+                                  <BadgeTipoObservacion tipo={obs.tipo} numeroDocumento={obs.numeroDocumento} />
+                                </div>
+                                <p className="text-gray-800 break-words text-xs">{obs.texto}</p>
+                              </div>
+                              {!soloLectura && (
+                                <button
+                                  type="button"
+                                  onClick={() => setItemAEliminar({ id: obs.id, tipo: "observacion" })}
+                                  className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                                  title="Eliminar observación"
+                                  aria-label="Eliminar observación"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 italic py-2 text-center bg-base-white/60 rounded-lg border border-blue-100">
+                        Sin observaciones previas registradas en esta jornada.
+                      </p>
+                    )}
 
-              {observacionAnterior && (
-                <div className="mt-2 rounded-lg bg-blue-100/60 p-3 ring-1 ring-blue-200">
-                  <p className="text-xs font-semibold text-blue-700 mb-1">
-                    📋 Observación anterior:
-                  </p>
-                  <p className="text-xs text-blue-900 leading-relaxed">
-                    {observacionAnterior}
-                  </p>
+                    {observacionAnterior && (
+                      <div className="rounded-lg bg-blue-100/60 p-3 ring-1 ring-blue-200">
+                        <p className="text-xs font-semibold text-blue-700 mb-1">
+                          📋 Observación anterior:
+                        </p>
+                        <p className="text-xs text-blue-900 leading-relaxed">
+                          {observacionAnterior}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -789,7 +837,7 @@ export function ComercianteModal({
                       <span className="text-xs font-semibold text-purple-900 block">
                         Permisos activos / registrados:
                       </span>
-                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                      <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1">
                         {registroActual?.permisos && registroActual.permisos.length > 0 ? (
                           registroActual.permisos.map((perm) => (
                             <div
@@ -827,185 +875,36 @@ export function ComercianteModal({
                   )}
                 </div>
               ) : (
-                <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Fecha de Inicio
-                      </label>
-                      <Popover open={openInicio} onOpenChange={setOpenInicio}>
-                        <PopoverTrigger
-                          type="button"
-                          className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                        >
-                          <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                          <span className="truncate">{fechaInicioPermiso ? format(fechaInicioPermiso, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={fechaInicioPermiso}
-                            onSelect={(d) => {
-                              if (d) {
-                                setFechaInicioPermiso(d);
-                                setOpenInicio(false);
-                                setPermisoError("");
-                                if (fechaFinPermiso && d > fechaFinPermiso) {
-                                  setFechaFinPermiso(d);
-                                }
-                              }
-                            }}
-                            locale={es}
-                            autoFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-700 block mb-1">
-                        Fecha de Fin
-                      </label>
-                      <Popover open={openFin} onOpenChange={setOpenFin}>
-                        <PopoverTrigger
-                          type="button"
-                          className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
-                        >
-                          <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
-                          <span className="truncate">{fechaFinPermiso ? format(fechaFinPermiso, "dd/MM/yyyy") : "Seleccionar fin"}</span>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={fechaFinPermiso}
-                            onSelect={(d) => {
-                              if (d) {
-                                setFechaFinPermiso(d);
-                                setOpenFin(false);
-                                setPermisoError("");
-                              }
-                            }}
-                            disabled={(date) => (fechaInicioPermiso ? date < fechaInicioPermiso : false)}
-                            locale={es}
-                            autoFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-medium text-gray-700">
-                      Motivo / N° Doc. <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="text"
-                      value={permisoMotivo}
-                      onChange={(e) => setPermisoMotivo(e.target.value)}
-                      placeholder="Ej. Cita médica, Oficio #123..."
-                      className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
-                    />
-                  </div>
-
-                  {/* Alerta proactiva si la fecha ya tiene un permiso */}
-                  {yaExistePermisoRango && (
-                    <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
-                      <AlertTriangle size={14} className="shrink-0 text-amber-600" />
-                      <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
-                    </div>
-                  )}
-
-                  {permisoError && (
-                    <p className="text-xs text-base-red font-medium">{permisoError}</p>
-                  )}
-
-                  {/* Listado Histórico de Permisos (Parte Inferior) */}
-                  {registroActual?.permisos && registroActual.permisos.length > 0 && (
-                    <div className="space-y-1.5 pt-2 border-t border-purple-200">
-                      <span className="text-xs font-semibold text-purple-900 block">
-                        Permisos registrados ({registroActual.permisos.length}):
-                      </span>
-                      <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                        {registroActual.permisos.map((perm) => (
-                          <div
-                            key={perm.id}
-                            className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
-                          >
-                            <div className="min-w-0 flex-1 leading-snug">
-                              <span className="font-semibold text-acento-morado mr-1.5">
-                                {perm.fecha}:
-                              </span>
-                              <span className="text-gray-800 break-words">{perm.motivo}</span>
-                              {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
-                                <span className="block text-[11px] text-gray-500">
-                                  (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
-                                </span>
-                              )}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => setItemAEliminar({ id: perm.id, tipo: "permiso" })}
-                              className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
-                              title="Eliminar permiso"
-                              aria-label="Eliminar permiso"
-                            >
-                              <Trash2 size={13} />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <Button
-                    type="button"
-                    onClick={handleGuardarPermiso}
-                    disabled={yaExistePermisoRango || !fechaInicioSel}
-                    size="sm"
-                    className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
-                  >
-                    Confirmar Permiso
-                  </Button>
-
-                  {/* Apartado: Justificar Falta de Días Anteriores */}
-                  <div className="pt-3 mt-3 border-t border-purple-200/80 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
-                      <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                      <span>Justificar Falta de Días Anteriores</span>
-                    </div>
-
+                <div className="space-y-3 lg:space-y-0 lg:grid lg:grid-cols-12 lg:gap-5 items-start">
+                  {/* Izquierda: Formulario de Permiso (lg:col-span-6) */}
+                  <div className="space-y-3 lg:col-span-6">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                       <div>
-                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
                           Fecha de Inicio
                         </label>
-                        <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
+                        <Popover open={openInicio} onOpenChange={setOpenInicio}>
                           <PopoverTrigger
                             type="button"
-                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
                           >
-                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
-                            <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                            <span className="truncate">{fechaInicioPermiso ? format(fechaInicioPermiso, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
                             <Calendar
                               mode="single"
-                              selected={fechaInicioJust}
+                              selected={fechaInicioPermiso}
                               onSelect={(d) => {
                                 if (d) {
-                                  setFechaInicioJust(d);
-                                  setOpenInicioJust(false);
-                                  setJustificarError("");
-                                  if (fechaFinJust && d > fechaFinJust) {
-                                    setFechaFinJust(d);
+                                  setFechaInicioPermiso(d);
+                                  setOpenInicio(false);
+                                  setPermisoError("");
+                                  if (fechaFinPermiso && d > fechaFinPermiso) {
+                                    setFechaFinPermiso(d);
                                   }
                                 }
                               }}
-                              disabled={(date) => {
-                                const hoy = new Date();
-                                hoy.setHours(23, 59, 59, 999);
-                                return date > hoy;
-                              }}
                               locale={es}
                               autoFocus
                             />
@@ -1014,38 +913,29 @@ export function ComercianteModal({
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                        <label className="text-xs font-medium text-gray-700 block mb-1">
                           Fecha de Fin
                         </label>
-                        <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
+                        <Popover open={openFin} onOpenChange={setOpenFin}>
                           <PopoverTrigger
                             type="button"
-                            className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                            className="w-full inline-flex items-center justify-start rounded-lg border border-purple-200 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-purple-50/50 transition-colors cursor-pointer"
                           >
-                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
-                            <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                            <CalendarIcon className="mr-2 h-3.5 w-3.5 text-acento-morado shrink-0" />
+                            <span className="truncate">{fechaFinPermiso ? format(fechaFinPermiso, "dd/MM/yyyy") : "Seleccionar fin"}</span>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0" align="start">
                             <Calendar
                               mode="single"
-                              selected={fechaFinJust}
+                              selected={fechaFinPermiso}
                               onSelect={(d) => {
                                 if (d) {
-                                  setFechaFinJust(d);
-                                  setOpenFinJust(false);
-                                  setJustificarError("");
+                                  setFechaFinPermiso(d);
+                                  setOpenFin(false);
+                                  setPermisoError("");
                                 }
                               }}
-                              disabled={(date) => {
-                                const hoy = new Date();
-                                hoy.setHours(23, 59, 59, 999);
-                                if (date > hoy) return true;
-                                if (fechaInicioJust) {
-                                  const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
-                                  return date < iniDate;
-                                }
-                                return false;
-                              }}
+                              disabled={(date) => (fechaInicioPermiso ? date < fechaInicioPermiso : false)}
                               locale={es}
                               autoFocus
                             />
@@ -1055,33 +945,216 @@ export function ComercianteModal({
                     </div>
 
                     <div>
-                      <label className="text-[11px] font-medium text-gray-700 block">
+                      <label className="text-xs font-medium text-gray-700">
                         Motivo / N° Doc. <span className="text-red-500">*</span>
                       </label>
                       <input
                         type="text"
-                        value={motivoJust}
-                        onChange={(e) => setMotivoJust(e.target.value)}
-                        placeholder="Ej. Certificado médico #452, calamidad..."
-                        className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
+                        value={permisoMotivo}
+                        onChange={(e) => setPermisoMotivo(e.target.value)}
+                        placeholder="Ej. Cita médica, Oficio #123..."
+                        className="mt-1 h-8 w-full rounded-lg border border-purple-200 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-acento-morado focus:ring-1 focus:ring-acento-morado/30"
                       />
                     </div>
 
-                    {justificarError && (
-                      <p className="text-xs text-base-red font-medium">{justificarError}</p>
+                    {/* Alerta proactiva si la fecha ya tiene un permiso */}
+                    {yaExistePermisoRango && (
+                      <div className="flex items-center gap-1.5 rounded-lg bg-amber-50 p-2 text-xs font-medium text-amber-800 border border-amber-200">
+                        <AlertTriangle size={14} className="shrink-0 text-amber-600" />
+                        <span>Ya existe un permiso registrado para el rango seleccionado ({fechaInicioSel} al {fechaFinSel}).</span>
+                      </div>
+                    )}
+
+                    {permisoError && (
+                      <p className="text-xs text-base-red font-medium">{permisoError}</p>
                     )}
 
                     <Button
                       type="button"
-                      onClick={handleJustificarFalta}
-                      disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
+                      onClick={handleGuardarPermiso}
+                      disabled={yaExistePermisoRango || !fechaInicioSel}
                       size="sm"
-                      className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                      className="w-full bg-acento-morado hover:bg-acento-morado/90 text-white font-semibold disabled:opacity-40"
                     >
-                      {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
+                      Confirmar Permiso
                     </Button>
                   </div>
-                </>
+
+                  {/* Derecha: Historial de permisos y Acordeón Justificar Falta (lg:col-span-6) */}
+                  <div className="space-y-3 lg:col-span-6">
+                    {/* Listado Histórico de Permisos */}
+                    {registroActual?.permisos && registroActual.permisos.length > 0 && (
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-semibold text-purple-900 block">
+                          Permisos registrados ({registroActual.permisos.length}):
+                        </span>
+                        <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                          {registroActual.permisos.map((perm) => (
+                            <div
+                              key={perm.id}
+                              className="flex items-center justify-between gap-2 rounded-lg bg-base-white px-2.5 py-1.5 border border-purple-200 text-xs shadow-xs"
+                            >
+                              <div className="min-w-0 flex-1 leading-snug">
+                                <span className="font-semibold text-acento-morado mr-1.5">
+                                  {perm.fecha}:
+                                </span>
+                                <span className="text-gray-800 break-words">{perm.motivo}</span>
+                                {perm.fechaInicio && perm.fechaFin && perm.fechaInicio !== perm.fechaFin && (
+                                  <span className="block text-[11px] text-gray-500">
+                                    (Vigencia: {perm.fechaInicio} al {perm.fechaFin})
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setItemAEliminar({ id: perm.id, tipo: "permiso" })}
+                                className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50 shrink-0"
+                                title="Eliminar permiso"
+                                aria-label="Eliminar permiso"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Apartado Desplegable: Justificar Falta (Días Anteriores) */}
+                    <div className="pt-2 border-t border-purple-200/80">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMostrarJustificarFalta((prev) => !prev);
+                          setJustificarError("");
+                        }}
+                        className="w-full flex items-center justify-between rounded-lg bg-amber-50/80 hover:bg-amber-100/70 px-3 py-2 text-xs font-semibold text-amber-900 ring-1 ring-amber-300/70 transition-colors cursor-pointer"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <ShieldAlert className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                          <span>Justificar Falta (Días Anteriores)</span>
+                        </span>
+                        {mostrarJustificarFalta ? (
+                          <ChevronUp className="text-amber-800 shrink-0" size={15} />
+                        ) : (
+                          <ChevronDown className="text-amber-800 shrink-0" size={15} />
+                        )}
+                      </button>
+
+                      {mostrarJustificarFalta && (
+                        <div className="mt-2 space-y-2.5 rounded-lg bg-amber-50/40 p-3 ring-1 ring-amber-200/60 animate-in fade-in-50 duration-150">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <div>
+                              <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                                Fecha de Inicio
+                              </label>
+                              <Popover open={openInicioJust} onOpenChange={setOpenInicioJust}>
+                                <PopoverTrigger
+                                  type="button"
+                                  className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                                >
+                                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                                  <span className="truncate">{fechaInicioJust ? format(fechaInicioJust, "dd/MM/yyyy") : "Seleccionar inicio"}</span>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={fechaInicioJust}
+                                    onSelect={(d) => {
+                                      if (d) {
+                                        setFechaInicioJust(d);
+                                        setOpenInicioJust(false);
+                                        setJustificarError("");
+                                        if (fechaFinJust && d > fechaFinJust) {
+                                          setFechaFinJust(d);
+                                        }
+                                      }
+                                    }}
+                                    disabled={(date) => {
+                                      const hoy = new Date();
+                                      hoy.setHours(23, 59, 59, 999);
+                                      return date > hoy;
+                                    }}
+                                    locale={es}
+                                    autoFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+
+                            <div>
+                              <label className="text-[11px] font-medium text-gray-700 block mb-1">
+                                Fecha de Fin
+                              </label>
+                              <Popover open={openFinJust} onOpenChange={setOpenFinJust}>
+                                <PopoverTrigger
+                                  type="button"
+                                  className="w-full inline-flex items-center justify-start rounded-lg border border-amber-300/80 bg-base-white px-2.5 py-1.5 text-xs font-normal text-left shadow-xs hover:bg-amber-50/50 transition-colors cursor-pointer"
+                                >
+                                  <CalendarIcon className="mr-2 h-3.5 w-3.5 text-amber-700 shrink-0" />
+                                  <span className="truncate">{fechaFinJust ? format(fechaFinJust, "dd/MM/yyyy") : "Seleccionar fin"}</span>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={fechaFinJust}
+                                    onSelect={(d) => {
+                                      if (d) {
+                                        setFechaFinJust(d);
+                                        setOpenFinJust(false);
+                                        setJustificarError("");
+                                      }
+                                    }}
+                                    disabled={(date) => {
+                                      const hoy = new Date();
+                                      hoy.setHours(23, 59, 59, 999);
+                                      if (date > hoy) return true;
+                                      if (fechaInicioJust) {
+                                        const iniDate = new Date(format(fechaInicioJust, "yyyy-MM-dd") + "T00:00:00");
+                                        return date < iniDate;
+                                      }
+                                      return false;
+                                    }}
+                                    locale={es}
+                                    autoFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-[11px] font-medium text-gray-700 block">
+                              Motivo / N° Doc. <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={motivoJust}
+                              onChange={(e) => setMotivoJust(e.target.value)}
+                              placeholder="Ej. Certificado médico #452, calamidad..."
+                              className="mt-1 h-8 w-full rounded-lg border border-amber-300/80 bg-base-white px-2.5 text-xs text-base-eerieBlack outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-500/30"
+                            />
+                          </div>
+
+                          {justificarError && (
+                            <p className="text-xs text-base-red font-medium">{justificarError}</p>
+                          )}
+
+                          <Button
+                            type="button"
+                            onClick={handleJustificarFalta}
+                            disabled={justificandoFalta || !fechaInicioJust || !fechaFinJust || !motivoJust.trim()}
+                            size="sm"
+                            className="w-full bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs h-8 disabled:opacity-40"
+                          >
+                            {justificandoFalta ? "Justificando falta..." : "Justificar Falta"}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
           )}
