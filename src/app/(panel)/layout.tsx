@@ -32,7 +32,7 @@ const allLinks: readonly NavLinkItem[] = [
   { href: "/reportes",         label: "Reportes",                shortLabel: "Reportes",      Icon: BarChart3       },
   { href: "/catastro",         label: "Catastro",                shortLabel: "Catastro",      Icon: Monitor         },
   { href: "/naves",            label: "Naves",                   shortLabel: "Naves",         Icon: Building2       },
-  { href: "/auditoria",        label: "Control de Supervisores", shortLabel: "Control",       Icon: ScrollText      },
+  { href: "/controlsupervisores", label: "Control de Supervisores", shortLabel: "Control",       Icon: ScrollText      },
   { href: "/ingreso-catastro", label: "Ingreso de Catastro",     shortLabel: "Ingreso Cat.",  Icon: FileSpreadsheet },
   { href: "/configuracion",    label: "Config",                  shortLabel: "Config",        Icon: Settings        },
 ];

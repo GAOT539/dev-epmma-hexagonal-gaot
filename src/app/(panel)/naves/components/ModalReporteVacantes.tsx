@@ -224,8 +224,27 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
 
   // Generador del PDF
   const handleDescargarPDF = async () => {
-    const normalesExport = items.filter((it) => !it.enProcesoJudicial);
-    const judicialesExport = items.filter((it) => it.enProcesoJudicial);
+    const normalesExport = items
+      .filter((it) => !it.enProcesoJudicial)
+      .map((it) => ({
+        ...it,
+        ubicacionNave: it.ubicacionNave.trim().toUpperCase(),
+        giroNegocio: it.giroNegocio.trim().toUpperCase(),
+        espacioComercializacion: it.espacioComercializacion.trim().toUpperCase(),
+        numeroEspacioComercial: it.numeroEspacioComercial.trim().toUpperCase(),
+        areaM2: it.areaM2.trim(),
+      }));
+
+    const judicialesExport = items
+      .filter((it) => it.enProcesoJudicial)
+      .map((it) => ({
+        ...it,
+        ubicacionNave: it.ubicacionNave.trim().toUpperCase(),
+        giroNegocio: it.giroNegocio.trim().toUpperCase(),
+        espacioComercializacion: it.espacioComercializacion.trim().toUpperCase(),
+        numeroEspacioComercial: it.numeroEspacioComercial.trim().toUpperCase(),
+        areaM2: it.areaM2.trim(),
+      }));
 
     if (normalesExport.length === 0 && judicialesExport.length === 0) {
       toast.error("No existen puestos vacantes para incluir en la certificación.");
@@ -238,9 +257,9 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
         itemsNormales: normalesExport,
         itemsJudiciales: judicialesExport,
         tituloPeriodo: tituloPeriodo.trim() || calcularTituloDefecto(),
-        elaboradoPorNombre: elaboradoPorNombre.trim(),
+        elaboradoPorNombre: elaboradoPorNombre.trim().toUpperCase(),
         elaboradoPorCargo: elaboradoPorCargo.trim(),
-        revisadoPorNombre: revisadoPorNombre.trim(),
+        revisadoPorNombre: revisadoPorNombre.trim().toUpperCase(),
         revisadoPorCargo: revisadoPorCargo.trim(),
       });
       toast.success("Certificación de Espacios Vacantes generada exitosamente.");
@@ -263,8 +282,13 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                 <FileText className="text-institucional-green shrink-0" size={24} />
                 Certificación de Espacios Públicos Vacantes
               </DialogTitle>
-              <DialogDescription className="text-xs text-gray-500 mt-1">
-                Configure el período, los firmantes autorizados y verifique cada puesto vacante antes de expedir el PDF oficial.
+              <DialogDescription className="flex flex-wrap items-center gap-2 mt-1 text-xs text-gray-500">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-md text-[11px] font-bold bg-institucional-green/10 text-institucional-green border border-institucional-green/20">
+                  {tituloPeriodo || calcularTituloDefecto()}
+                </span>
+                <span>
+                  • Configure los firmantes autorizados y verifique los puestos antes de expedir el PDF oficial.
+                </span>
               </DialogDescription>
             </div>
 
@@ -282,25 +306,9 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
           </div>
         </DialogHeader>
 
-        {/* Panel Superior: Parámetros del Documento y Firmantes */}
+        {/* Panel Superior: Parámetros de Firmantes Autorizados */}
         <div className="shrink-0 pt-3 pb-2 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-institucional-whiteSmoke/50 p-3 rounded-xl border border-institucional-whiteSmokeBlack/20">
-            {/* Título de Cabecera */}
-            <div>
-              <label className="block text-[11px] font-semibold text-gray-700 uppercase mb-1">
-                Título del Período en Tabla
-              </label>
-              <Input
-                value={tituloPeriodo}
-                onChange={(e) => setTituloPeriodo(e.target.value)}
-                placeholder="ESPACIOS PÚBLICOS VACANTES..."
-                className="h-8 text-xs font-semibold bg-base-white border-institucional-whiteSmokeBlack/40"
-              />
-              <span className="text-[10px] text-gray-500 mt-0.5 block">
-                Fila combinada superior de la tabla
-              </span>
-            </div>
-
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-institucional-whiteSmoke/50 p-3 rounded-xl border border-institucional-whiteSmokeBlack/20">
             {/* Elaborado Por */}
             <div>
               <label className="block text-[11px] font-semibold text-gray-700 uppercase mb-1">
@@ -308,8 +316,8 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
               </label>
               <Input
                 value={elaboradoPorNombre}
-                onChange={(e) => setElaboradoPorNombre(e.target.value.toUpperCase())}
-                placeholder="ING. NOMBRE APELLIDO"
+                onChange={(e) => setElaboradoPorNombre(e.target.value)}
+                placeholder="Ing. Nombre Apellido, Mg."
                 className="h-8 text-xs font-semibold bg-base-white border-institucional-whiteSmokeBlack/40"
               />
               <span className="text-[10px] text-gray-500 mt-0.5 block truncate" title={elaboradoPorCargo}>
@@ -324,8 +332,8 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
               </label>
               <Input
                 value={revisadoPorNombre}
-                onChange={(e) => setRevisadoPorNombre(e.target.value.toUpperCase())}
-                placeholder="DIRECTOR COMERCIAL..."
+                onChange={(e) => setRevisadoPorNombre(e.target.value)}
+                placeholder="Director Comercial..."
                 className="h-8 text-xs font-semibold bg-base-white border-institucional-whiteSmokeBlack/40"
               />
               <span className="text-[10px] text-gray-500 mt-0.5 block truncate" title={revisadoPorCargo}>
@@ -362,16 +370,6 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
             </Button>
           </div>
         </div>
-
-        {/* Datalist reutilizable para selección rápida de Espacios de Comercialización */}
-        <datalist id="espacios-comerciales-opciones">
-          <option value="PUESTO" />
-          <option value="BODEGA" />
-          <option value="CUBÍCULO" />
-          <option value="NÚCLEO" />
-          <option value="LOCAL" />
-          <option value="COCINA" />
-        </datalist>
 
         {/* Área desplazable: Tablas de Puestos */}
         <div className="flex-1 overflow-y-auto space-y-5 pr-1 mt-1">
@@ -439,7 +437,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "ubicacionNave",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="G, B, C..."
@@ -455,7 +453,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "giroNegocio",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="GIRO DE NEGOCIO..."
@@ -465,19 +463,39 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
 
                             {/* Espacios de Comercialización */}
                             <td className="py-1.5 px-2">
-                              <Input
-                                list="espacios-comerciales-opciones"
-                                value={item.espacioComercializacion}
-                                onChange={(e) =>
-                                  handleActualizarFila(
-                                    item.id,
-                                    "espacioComercializacion",
-                                    e.target.value.toUpperCase()
-                                  )
-                                }
-                                placeholder="PUESTO..."
-                                className="h-7 text-xs text-center font-semibold uppercase"
-                              />
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={item.espacioComercializacion}
+                                  onChange={(e) =>
+                                    handleActualizarFila(
+                                      item.id,
+                                      "espacioComercializacion",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="PUESTO..."
+                                  className="h-7 text-xs text-center font-semibold uppercase flex-1"
+                                />
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleActualizarFila(item.id, "espacioComercializacion", e.target.value);
+                                    }
+                                  }}
+                                  className="h-7 w-4 px-0 text-gray-500 bg-transparent border-0 cursor-pointer text-xs"
+                                  title="Opciones rápidas de tipo de espacio"
+                                >
+                                  <option value="" disabled>▾</option>
+                                  <option value="PUESTO">PUESTO</option>
+                                  <option value="BODEGA">BODEGA</option>
+                                  <option value="CUBÍCULO">CUBÍCULO</option>
+                                  <option value="NÚCLEO">NÚCLEO</option>
+                                  <option value="LOCAL">LOCAL</option>
+                                  <option value="COCINA">COCINA</option>
+                                  <option value="ESPACIO">ESPACIO</option>
+                                </select>
+                              </div>
                             </td>
 
                             {/* Número de Espacio */}
@@ -488,7 +506,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "numeroEspacioComercial",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="001, N-G-004A..."
@@ -596,7 +614,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "ubicacionNave",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="G, B, C..."
@@ -612,7 +630,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "giroNegocio",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="GIRO DE NEGOCIO..."
@@ -622,19 +640,39 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
 
                             {/* Espacios de Comercialización */}
                             <td className="py-1.5 px-2">
-                              <Input
-                                list="espacios-comerciales-opciones"
-                                value={item.espacioComercializacion}
-                                onChange={(e) =>
-                                  handleActualizarFila(
-                                    item.id,
-                                    "espacioComercializacion",
-                                    e.target.value.toUpperCase()
-                                  )
-                                }
-                                placeholder="PUESTO..."
-                                className="h-7 text-xs text-center font-semibold uppercase border-amber-200"
-                              />
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  value={item.espacioComercializacion}
+                                  onChange={(e) =>
+                                    handleActualizarFila(
+                                      item.id,
+                                      "espacioComercializacion",
+                                      e.target.value
+                                    )
+                                  }
+                                  placeholder="PUESTO..."
+                                  className="h-7 text-xs text-center font-semibold uppercase border-amber-200 flex-1"
+                                />
+                                <select
+                                  value=""
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      handleActualizarFila(item.id, "espacioComercializacion", e.target.value);
+                                    }
+                                  }}
+                                  className="h-7 w-4 px-0 text-gray-500 bg-transparent border-0 cursor-pointer text-xs"
+                                  title="Opciones rápidas de tipo de espacio"
+                                >
+                                  <option value="" disabled>▾</option>
+                                  <option value="PUESTO">PUESTO</option>
+                                  <option value="BODEGA">BODEGA</option>
+                                  <option value="CUBÍCULO">CUBÍCULO</option>
+                                  <option value="NÚCLEO">NÚCLEO</option>
+                                  <option value="LOCAL">LOCAL</option>
+                                  <option value="COCINA">COCINA</option>
+                                  <option value="ESPACIO">ESPACIO</option>
+                                </select>
+                              </div>
                             </td>
 
                             {/* Número de Espacio */}
@@ -645,7 +683,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
                                   handleActualizarFila(
                                     item.id,
                                     "numeroEspacioComercial",
-                                    e.target.value.toUpperCase()
+                                    e.target.value
                                   )
                                 }
                                 placeholder="001, N-G-004A..."

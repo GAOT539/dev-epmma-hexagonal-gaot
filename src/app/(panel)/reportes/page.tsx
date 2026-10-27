@@ -9,7 +9,7 @@ import {
   Loader2,
   Calendar as CalendarIcon,
 } from "lucide-react";
-import { format, eachDayOfInterval, startOfDay, endOfDay, parseISO } from "date-fns";
+import { format, eachDayOfInterval, startOfDay, endOfDay, parseISO, subDays } from "date-fns";
 import { es } from "date-fns/locale";
 import { useAuth } from "@/application/services/auth.service";
 import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
@@ -71,11 +71,25 @@ export default function ReportesPage() {
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (!activo || !data) return;
+        const hoyStr = data.hoy || format(new Date(), "yyyy-MM-dd");
+        const minFechaStr = data.minFecha || hoyStr;
+        const maxFechaStr = data.maxFecha || hoyStr;
+
         setLimites({
-          minFecha: data.minFecha || format(new Date(), "yyyy-MM-dd"),
-          maxFecha: data.maxFecha || format(new Date(), "yyyy-MM-dd"),
-          hoy: data.hoy || format(new Date(), "yyyy-MM-dd"),
+          minFecha: minFechaStr,
+          maxFecha: maxFechaStr,
+          hoy: hoyStr,
         });
+
+        const hace15Dias = subDays(parseISO(hoyStr), 15);
+        const minFechaBD = startOfDay(parseISO(minFechaStr));
+
+        if (hace15Dias < minFechaBD) {
+          setFechaInicioDate(minFechaBD);
+        } else {
+          setFechaInicioDate(hace15Dias);
+        }
+        setFechaFinDate(parseISO(hoyStr));
       })
       .catch(() => {});
     return () => {
@@ -494,10 +508,10 @@ export default function ReportesPage() {
                       <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[90px] z-20">
                         CÉDULA
                       </th>
-                      <th className="sticky left-8 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[160px] z-30">
+                      <th className="sticky left-8 top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[260px] lg:min-w-[320px] z-30">
                         CONTRIBUYENTE
                       </th>
-                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[120px] z-20">
+                      <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold w-[160px] min-w-[140px] max-w-[180px] z-20">
                         ACTIVIDAD
                       </th>
                       <th className="sticky top-0 bg-[#e6efe9] text-base-eerieBlack px-3 py-2.5 text-left font-semibold min-w-[100px] z-20">
@@ -576,12 +590,14 @@ export default function ReportesPage() {
                             {row.comerciante.cedula}
                           </td>
                           <td className="sticky left-8 bg-base-white px-3 py-2 text-sm font-semibold text-base-eerieBlack z-10">
-                            <div className="truncate max-w-[200px]">
+                            <div className="truncate max-w-[280px] lg:max-w-[360px]" title={row.comerciante.contribuyente}>
                               {row.comerciante.contribuyente}
                             </div>
                           </td>
                           <td className="px-3 py-2 text-sm font-semibold text-gray-900">
-                            {row.comerciante.actividad}
+                            <div className="truncate max-w-[160px]" title={row.comerciante.actividad}>
+                              {row.comerciante.actividad}
+                            </div>
                           </td>
                           <td className="px-3 py-2 text-sm font-medium text-base-eerieBlack">
                             {row.naveNombre}
