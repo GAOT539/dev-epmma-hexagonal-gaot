@@ -145,6 +145,7 @@ export interface ExportarReportePDFParams {
 export function calcularTextosPeriodo(fechaInicio: string, fechaFin: string) {
   if (!fechaInicio || !fechaFin) {
     return {
+      periodoUnificado: "—",
       periodoTexto: "—",
       textoMes: "—",
       anio: new Date().getFullYear().toString(),
@@ -156,12 +157,25 @@ export function calcularTextosPeriodo(fechaInicio: string, fechaFin: string) {
   const dFin = new Date(fechaFin + "T00:00:00");
   const diaInicio = format(dInicio, "dd");
   const diaFin = format(dFin, "dd");
-  const periodoTexto = `${diaInicio} al ${diaFin}`;
-
   const mesInicioStr = format(dInicio, "MMMM", { locale: es });
   const mesFinStr = format(dFin, "MMMM", { locale: es });
   const anioInicio = format(dInicio, "yyyy");
   const anioFin = format(dFin, "yyyy");
+
+  let periodoUnificado = "";
+  if (mesInicioStr.toLowerCase() === mesFinStr.toLowerCase() && anioInicio === anioFin) {
+    if (diaInicio === diaFin) {
+      periodoUnificado = `${diaInicio} de ${mesInicioStr} de ${anioFin}`;
+    } else {
+      periodoUnificado = `Del ${diaInicio} al ${diaFin} de ${mesInicioStr} de ${anioFin}`;
+    }
+  } else if (anioInicio === anioFin) {
+    periodoUnificado = `${diaInicio} de ${mesInicioStr} al ${diaFin} de ${mesFinStr} de ${anioFin}`;
+  } else {
+    periodoUnificado = `${diaInicio} de ${mesInicioStr} de ${anioInicio} al ${diaFin} de ${mesFinStr} de ${anioFin}`;
+  }
+
+  const periodoTexto = `${diaInicio} al ${diaFin}`;
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
   let textoMes = "";
@@ -173,7 +187,7 @@ export function calcularTextosPeriodo(fechaInicio: string, fechaFin: string) {
     textoMes = `${cap(mesInicioStr)} ${anioInicio} - ${cap(mesFinStr)} ${anioFin}`;
   }
 
-  return { periodoTexto, textoMes, anio: anioFin, diaInicio, diaFin };
+  return { periodoUnificado, periodoTexto, textoMes, anio: anioFin, diaInicio, diaFin };
 }
 
 // ── Exportación a PDF por Nave ──────────────────────────────────────────────
@@ -209,16 +223,16 @@ export async function exportarReporteAsistenciaPDF({
     // Continuar si falla la lectura del logo
   }
 
-  // Agrupar filas por Nave
+  // Agrupar filas por Nave usando clave normalizada en mayúsculas
   const navesMap = new Map<string, { id: string; nombre: string; items: ReporteItem[] }>();
   reporteFiltrado.forEach((item) => {
-    const naveId = item.naveId || "sin-nave";
-    const existing = navesMap.get(naveId);
+    const keyNave = (item.naveNombre || item.naveId || "NAVE").trim().toUpperCase();
+    const existing = navesMap.get(keyNave);
     if (existing) {
       existing.items.push(item);
     } else {
-      navesMap.set(naveId, {
-        id: naveId,
+      navesMap.set(keyNave, {
+        id: item.naveId || keyNave.toLowerCase(),
         nombre: item.naveNombre || "Nave",
         items: [item],
       });
@@ -229,7 +243,7 @@ export async function exportarReporteAsistenciaPDF({
     a.nombre.localeCompare(b.nombre, undefined, { numeric: true, sensitivity: "base" })
   );
 
-  const { periodoTexto, textoMes } = calcularTextosPeriodo(fechaInicio, fechaFin);
+  const { periodoUnificado } = calcularTextosPeriodo(fechaInicio, fechaFin);
 
   gruposNaves.forEach((grupo, idxNave) => {
     if (idxNave > 0) {
@@ -243,10 +257,10 @@ export async function exportarReporteAsistenciaPDF({
     const textoSupervisor =
       supervisoresList.length > 0 ? supervisoresList.join(", ") : "No existe supervisor a cargo";
 
-    // 1. Logo
+    // 1. Logo institucional (x = 10, y = 6, width = 19, height = 19, termina en y = 25)
     if (logoBase64) {
       try {
-        doc.addImage(logoBase64, "PNG", 10, 7, 20, 20);
+        doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
       } catch {
         // Ignorar si hay problema con la imagen
       }
@@ -269,21 +283,20 @@ export async function exportarReporteAsistenciaPDF({
         ? "REPORTE DE OBSERVACIONES Y NOVEDADES POR NAVE"
         : "CONTROL DE ASISTENCIA EP-EMA",
       pageWidth / 2,
-      18,
+      18.5,
       { align: "center" }
     );
 
-    // 3. Cuadro Izquierdo (Datos de la Nave: x = 10, y = 24, ancho = 95mm)
+    // 3. Cuadro Izquierdo (3 filas: Nave, Período, Supervisor - x = 10, y = 28, ancho = 95mm)
     const leftX = 10;
-    const leftY = 24;
+    const leftY = 28;
     const leftW = 95;
-    const rowH = 4.8;
+    const rowH = 5.2;
     const labelW = 24;
 
     const filasIzq = [
       { label: "Nave:", val: grupo.nombre },
-      { label: "Período:", val: periodoTexto },
-      { label: "Mes:", val: textoMes },
+      { label: "Período:", val: periodoUnificado },
       { label: "Supervisor:", val: textoSupervisor },
     ];
 
@@ -300,24 +313,24 @@ export async function exportarReporteAsistenciaPDF({
       doc.setFont("helvetica", "bold");
       doc.setFontSize(7);
       doc.setTextColor(33, 37, 41);
-      doc.text(f.label, leftX + 2, curY + 3.3);
+      doc.text(f.label, leftX + 2, curY + rowH / 2, { baseline: "middle" });
 
       doc.setFont("helvetica", idx === 0 ? "bold" : "normal");
-      doc.setFontSize(idx === 3 && f.val.length > 34 ? 5.8 : 7);
-      doc.text(f.val, leftX + labelW + 2, curY + 3.3);
+      doc.setFontSize(idx === 2 && f.val.length > 34 ? 5.8 : 7);
+      doc.text(f.val, leftX + labelW + 2, curY + rowH / 2, { baseline: "middle" });
     });
 
-    // 4. Cuadro Derecho (Descripción: x = pageWidth - 95, y = 24, ancho = 85mm)
+    // 4. Cuadro Derecho (Descripción: x = pageWidth - 95, y = 28, ancho = 85mm)
     const rightW = 85;
     const rightX = pageWidth - 95;
-    const rightY = 24;
+    const rightY = 28;
 
     doc.setFillColor(230, 239, 233);
-    doc.rect(rightX, rightY, rightW, 4, "FD");
+    doc.rect(rightX, rightY, rightW, 4.5, "FD");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
     doc.setTextColor(33, 37, 41);
-    doc.text("Descripción", rightX + rightW / 2, rightY + 2.8, { align: "center" });
+    doc.text("Descripción", rightX + rightW / 2, rightY + 2.25, { align: "center", baseline: "middle" });
 
     const badges = [
       { key: "P", desc: "Presente", col: [21, 128, 61] as [number, number, number] },
@@ -327,35 +340,41 @@ export async function exportarReporteAsistenciaPDF({
       { key: "V", desc: "Vacante", col: [217, 119, 6] as [number, number, number] },
     ];
 
-    const subH = 5;
+    const subH = 4.8;
+    const colW = 42.5;
     const layout = [
-      { item: badges[0], x: rightX, y: rightY + 4, w: 42.5 },
-      { item: badges[3], x: rightX + 42.5, y: rightY + 4, w: 42.5 },
-      { item: badges[1], x: rightX, y: rightY + 4 + subH, w: 42.5 },
-      { item: badges[4], x: rightX + 42.5, y: rightY + 4 + subH, w: 42.5 },
-      { item: badges[2], x: rightX, y: rightY + 4 + subH * 2, w: 42.5 },
+      { item: badges[0], x: rightX, y: rightY + 4.5, w: colW },
+      { item: badges[3], x: rightX + colW, y: rightY + 4.5, w: colW },
+      { item: badges[1], x: rightX, y: rightY + 4.5 + subH, w: colW },
+      { item: badges[4], x: rightX + colW, y: rightY + 4.5 + subH, w: colW },
+      { item: badges[2], x: rightX, y: rightY + 4.5 + subH * 2, w: colW },
     ];
 
     doc.setFillColor(255, 255, 255);
-    doc.rect(rightX + 42.5, rightY + 4 + subH * 2, 42.5, subH, "FD");
+    doc.rect(rightX + colW, rightY + 4.5 + subH * 2, colW, subH, "FD");
 
     layout.forEach(({ item, x, y, w }) => {
       doc.setFillColor(255, 255, 255);
       doc.rect(x, y, w, subH, "FD");
 
+      const badgeX = x + 1.5;
+      const badgeY = y + 0.8;
       const badgeW = 9;
+      const badgeH = subH - 1.6;
       doc.setFillColor(...item.col);
-      doc.rect(x + 1.5, y + 1, badgeW, subH - 2, "F");
+      doc.rect(badgeX, badgeY, badgeW, badgeH, "F");
+
+      const centerY = badgeY + badgeH / 2;
 
       doc.setFont("helvetica", "bold");
       doc.setFontSize(6.5);
       doc.setTextColor(255, 255, 255);
-      doc.text(item.key, x + 1.5 + badgeW / 2, y + subH / 2 + 0.8, { align: "center", baseline: "middle" });
+      doc.text(item.key, badgeX + badgeW / 2, centerY + 0.15, { align: "center", baseline: "middle" });
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(6.5);
       doc.setTextColor(33, 37, 41);
-      doc.text(item.desc, x + 1.5 + badgeW + 2, y + subH / 2 + 0.8, { baseline: "middle" });
+      doc.text(item.desc, badgeX + badgeW + 2.5, centerY + 0.15, { baseline: "middle" });
     });
 
     // 5. Ordenar filas de la nave: vacantes primero, luego ocupados
@@ -451,9 +470,9 @@ export async function exportarReporteAsistenciaPDF({
     autoTable(doc, {
       head: headers as unknown as string[][],
       body: bodyData,
-      startY: 50,
+      startY: 47,
       theme: "grid",
-      styles: { fontSize: 6, cellPadding: 1.2 },
+      styles: { fontSize: 6, cellPadding: 1.2, valign: "middle" },
       headStyles: {
         fillColor: [51, 117, 51], // institucional-green
         textColor: 255,
@@ -466,7 +485,7 @@ export async function exportarReporteAsistenciaPDF({
             1: { cellWidth: 22, halign: "center" },
             2: { cellWidth: 48, halign: "left" },
             3: { cellWidth: 32, halign: "left" },
-            4: { cellWidth: 16, halign: "center" },
+            4: { cellWidth: 20, halign: "center" },
             5: { cellWidth: "auto", halign: "left" },
           }
         : {
@@ -474,7 +493,7 @@ export async function exportarReporteAsistenciaPDF({
             1: { cellWidth: 18, halign: "center" },
             2: { cellWidth: incluirObservaciones ? 38 : 46, halign: "left" },
             3: { cellWidth: incluirObservaciones ? 26 : 32, halign: "left" },
-            4: { cellWidth: 14, halign: "center" },
+            4: { cellWidth: 20, halign: "center" },
           },
       didDrawCell: (cellData: {
         section: string;
@@ -505,7 +524,7 @@ export async function exportarReporteAsistenciaPDF({
             doc.text(
               value,
               cellData.cell.x + cellData.cell.width / 2,
-              cellData.cell.y + cellData.cell.height / 2 + 0.8,
+              cellData.cell.y + cellData.cell.height / 2 + 0.15,
               { align: "center", baseline: "middle" }
             );
           } else if (value === "—") {
@@ -517,7 +536,7 @@ export async function exportarReporteAsistenciaPDF({
             doc.text(
               value,
               cellData.cell.x + cellData.cell.width / 2,
-              cellData.cell.y + cellData.cell.height / 2 + 0.8,
+              cellData.cell.y + cellData.cell.height / 2 + 0.15,
               { align: "center", baseline: "middle" }
             );
           }
