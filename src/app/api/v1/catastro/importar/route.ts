@@ -14,6 +14,7 @@ import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
   expandirRegistrosMultiPuesto,
+  filtrarDuplicadosExactos100,
   generarSlugNave,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
@@ -23,7 +24,8 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const registrosRaw: ImportacionRegistro[] = body.registros || [];
-    const registros: ImportacionRegistro[] = expandirRegistrosMultiPuesto(registrosRaw);
+    const registrosExpandidos = expandirRegistrosMultiPuesto(registrosRaw);
+    const { registrosUnicos: registros } = filtrarDuplicadosExactos100(registrosExpandidos);
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();

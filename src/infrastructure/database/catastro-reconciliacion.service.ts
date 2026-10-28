@@ -102,8 +102,8 @@ export function expandPuestosHeuristic(codigoPuesto: string): string[] {
     return [codigoLimpio];
   }
 
-  // Caso 3: Subdivisiones con letra -> NO separar
-  if (/^\d+-[A-Za-z]+$/i.test(codigoLimpio)) {
+  // Caso 3: Subdivisiones con letra o sufijo de vehículo (ej. "003-A", "102-A", "001-VEHICULO") -> NO separar
+  if (/^\d+-[A-Za-z]+$/i.test(codigoLimpio) || upper.endsWith("-VEHICULO")) {
     return [codigoLimpio];
   }
 
@@ -135,7 +135,27 @@ export function desglosarCodigosPuestoMultiples(codigoPuesto: string): string[] 
 }
 
 /**
+ * Añade la distinción automática "-VEHICULO" a puestos de comerciantes cuya actividad
+ * contiene la palabra "VEHICULO" o "VEHÍCULO" (ej. en Nave P u otras naves abiertas).
+ */
+export function aplicarSufijoVehiculoPorActividad(puesto: string, actividad?: string): string {
+  if (!puesto) return "";
+  const pNorm = puesto.normalize("NFC").trim();
+  if (!pNorm || pNorm === "-" || pNorm.toUpperCase() === "S/N" || pNorm.toUpperCase() === "SN") {
+    return pNorm;
+  }
+  if (pNorm.toUpperCase().endsWith("-VEHICULO")) {
+    return pNorm;
+  }
+  if (/\bVEH[IÍ]CULO\b/i.test(actividad || "")) {
+    return `${pNorm}-VEHICULO`;
+  }
+  return pNorm;
+}
+
+/**
  * Expande registros con códigos multi-puesto (ej. "024-027") en registros individuales.
+ * Aplica además la distinción automática "-VEHICULO" a cada puesto desglosado.
  */
 export function expandirRegistrosMultiPuesto(
   registros: ImportacionRegistro[]
@@ -144,18 +164,65 @@ export function expandirRegistrosMultiPuesto(
   for (const reg of registros) {
     const desglosados = desglosarCodigosPuestoMultiples(reg.puesto || "-");
     if (desglosados.length <= 1) {
-      expandidos.push(reg);
-    } else {
-      for (const p of desglosados) {
+      const pOriginal = desglosados[0] || reg.puesto || "-";
+      const pConDistincion = aplicarSufijoVehiculoPorActividad(pOriginal, reg.actividad);
+      if (pConDistincion !== pOriginal) {
         expandidos.push({
           ...reg,
-          puesto: p,
-          numBodega: p,
+          puesto: pConDistincion,
+          numBodega: pConDistincion,
+        });
+      } else {
+        expandidos.push(reg);
+      }
+    } else {
+      for (const p of desglosados) {
+        const pConDistincion = aplicarSufijoVehiculoPorActividad(p, reg.actividad);
+        expandidos.push({
+          ...reg,
+          puesto: pConDistincion,
+          numBodega: pConDistincion,
         });
       }
     }
   }
   return expandidos;
+}
+
+/**
+ * Filtra registros 100% duplicados dentro de un lote (mismo nombre + misma actividad + mismo puesto).
+ * Conserva la primera aparición y retorna la lista de duplicados omitidos para auditoría visual.
+ */
+export function filtrarDuplicadosExactos100(
+  registros: ImportacionRegistro[]
+): { registrosUnicos: ImportacionRegistro[]; duplicadosOmitidos: ImportacionRegistro[] } {
+  const registrosUnicos: ImportacionRegistro[] = [];
+  const duplicadosOmitidos: ImportacionRegistro[] = [];
+  const clavesVistas = new Set<string>();
+
+  for (const reg of registros) {
+    const nombreClave = normalizarNombreCompleto(reg.nombre || reg.contribuyente || "");
+    const actividadClave = (reg.actividad || "")
+      .normalize("NFC")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+    const puestoClave = (reg.puesto || "")
+      .normalize("NFC")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
+    const claveExacta = `${nombreClave}||${actividadClave}||${puestoClave}`;
+
+    if (clavesVistas.has(claveExacta)) {
+      duplicadosOmitidos.push(reg);
+    } else {
+      clavesVistas.add(claveExacta);
+      registrosUnicos.push(reg);
+    }
+  }
+
+  return { registrosUnicos, duplicadosOmitidos };
 }
 
 /**

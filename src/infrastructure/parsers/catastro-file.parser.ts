@@ -9,6 +9,8 @@ import {
   expandirRegistrosMultiPuesto,
   expandPuestosHeuristic,
   simplificarCodigoPuesto,
+  aplicarSufijoVehiculoPorActividad,
+  filtrarDuplicadosExactos100,
 } from "../database/catastro-reconciliacion.service";
 
 export {
@@ -17,6 +19,8 @@ export {
   expandirRegistrosMultiPuesto,
   expandPuestosHeuristic,
   simplificarCodigoPuesto,
+  aplicarSufijoVehiculoPorActividad,
+  filtrarDuplicadosExactos100,
 };
 
 // ── Datos de ejemplo para simular un archivo XML/CSV ─────────────────────────
@@ -153,7 +157,12 @@ export function normalizeNave(rawHeaderNave: unknown, fileName?: string): string
   }
   str = str.replace(/[-\s]+$/, "").trim();
 
-  if (!str || str === "(NAVE)" || str === "NO DEFINIDA" || str === "NO IDENTIFICADA") {
+  // Si el encabezado interno de la hoja dice literalmente "NAVE" o "(NAVE)", retorna "NAVE" sin forzar "PUESTOS AMBULANTES" por fileName
+  if (str === "NAVE" || str === "(NAVE)") {
+    return "NAVE";
+  }
+
+  if (!str || str === "NO DEFINIDA" || str === "NO IDENTIFICADA") {
     if (fileName) {
       const fnUpper = fileName.normalize("NFC").toUpperCase();
       if (fnUpper.includes("AMBULANTES")) return "PUESTOS AMBULANTES";
@@ -164,7 +173,7 @@ export function normalizeNave(rawHeaderNave: unknown, fileName?: string): string
       const m = fnUpper.match(/(?:^|[^A-ZÑ0-9])NAVE[_\s"-]*([A-ZÑ0-9]+)(?=$|[^A-ZÑ0-9])/i);
       if (m && m[1]) return `NAVE ${m[1]}`;
     }
-    return str === "(NAVE)" ? "PUESTOS AMBULANTES" : "NO DEFINIDA";
+    return "NO DEFINIDA";
   }
 
   return str;
@@ -512,6 +521,7 @@ export function parsearExcel(
       // Etapa 4: Separación vs Preservación de puestos múltiples
       const puestosDesglosados = expandPuestosHeuristic(puestoFinal);
       for (const p of puestosDesglosados) {
+        const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, actividadFila);
         registros.push({
           ciu,
           cedula: cedulaNorm,
@@ -519,8 +529,8 @@ export function parsearExcel(
           contribuyente: nombreNorm,
           actividad: actividadFila,
           nave: naveDetectada,
-          puesto: p,
-          numBodega: p,
+          puesto: puestoConDistincion,
+          numBodega: puestoConDistincion,
           gen01Codi: "-",
         });
       }
@@ -595,6 +605,7 @@ export function parsearExcel(
       // Etapa 4: Desglose de puestos múltiples
       const puestosDesglosados = expandPuestosHeuristic(rawPuesto);
       for (const p of puestosDesglosados) {
+        const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, actividadFila);
         registros.push({
           ciu,
           cedula: cedulaNorm,
@@ -602,8 +613,8 @@ export function parsearExcel(
           contribuyente: nombreNorm,
           actividad: actividadFila,
           nave: naveDetectada,
-          puesto: p,
-          numBodega: p,
+          puesto: puestoConDistincion,
+          numBodega: puestoConDistincion,
           gen01Codi: "-",
         });
       }
@@ -788,6 +799,7 @@ export function parsearExcel(
 
       const desglosados = expandPuestosHeuristic(puesto);
       for (const p of desglosados) {
+        const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, actividadFila || actividadActual);
         registros.push({
           ciu,
           cedula: cedulaEncontrada,
@@ -795,8 +807,8 @@ export function parsearExcel(
           contribuyente: nombre,
           actividad: actividadFila || actividadActual,
           nave: naveDetectada,
-          puesto: p,
-          numBodega: p,
+          puesto: puestoConDistincion,
+          numBodega: puestoConDistincion,
           gen01Codi: "-",
         });
       }
@@ -831,6 +843,7 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
     const nave = match[1].trim();
     const desglosados = desglosarCodigosPuestoMultiples(puesto);
     for (const p of desglosados) {
+      const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, "General");
       registros.push({
         ciu: "-",
         cedula: `18${String(10000000 + i).padStart(8, "0")}`,
@@ -838,8 +851,8 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
         contribuyente: nombre,
         actividad: "General",
         nave,
-        puesto: p,
-        numBodega: p,
+        puesto: puestoConDistincion,
+        numBodega: puestoConDistincion,
         gen01Codi: match[4].trim(),
       });
     }
@@ -1002,6 +1015,7 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
 
     const puestosDesglosados = desglosarCodigosPuestoMultiples(puesto);
     for (const p of puestosDesglosados) {
+      const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, actividad || "General");
       registros.push({
         ciu: ciu || "S/N",
         cedula,
@@ -1009,8 +1023,8 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
         contribuyente: nombre || "Comerciante",
         actividad: actividad || "General",
         nave: naveFinal,
-        puesto: p,
-        numBodega: p,
+        puesto: puestoConDistincion,
+        numBodega: puestoConDistincion,
         gen01Codi: "-",
       });
     }

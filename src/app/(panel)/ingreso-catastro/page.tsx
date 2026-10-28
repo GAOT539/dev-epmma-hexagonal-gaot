@@ -17,7 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { importadorService } from "@/application/services/importador.service";
+import { importadorService, filtrarDuplicadosExactos100 } from "@/application/services/importador.service";
 import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
 import { useAuth } from "@/application/services/auth.service";
 import type { Nave } from "@/domain/models/nave.model";
@@ -41,6 +41,10 @@ export default function IngresoCatastroPage() {
   const { user } = useAuth();
   const [naves, setNaves] = useState<Nave[]>([]);
   const [registros, setRegistros] = useState<ImportacionRegistro[]>([]);
+  const [duplicadosOmitidos, setDuplicadosOmitidos] = useState<ImportacionRegistro[]>([]);
+  const [mostrarDuplicadosOmitidos, setMostrarDuplicadosOmitidos] = useState(false);
+  const [modalPreguntaAmbulantesOpen, setModalPreguntaAmbulantesOpen] = useState(false);
+  const [registrosPendientesAmbulantes, setRegistrosPendientesAmbulantes] = useState<ImportacionRegistro[]>([]);
   const [resultado, setResultado] = useState<ImportacionResultado | null>(null);
   const [analisis, setAnalisis] = useState<ImportacionResultado | null>(null);
   const [mostrarCambios, setMostrarCambios] = useState(true);
@@ -62,6 +66,17 @@ export default function IngresoCatastroPage() {
     () => naves.filter((n) => esNavePermitidaParaUsuario(n, user)),
     [naves, user]
   );
+
+  const naveAmbulantesAutorizada = useMemo(() => {
+    if (user?.rol !== "SUPERVISOR") return null;
+    return (
+      navesAutorizadas.find((n) => {
+        const nom = n.nombre.trim().toUpperCase();
+        const id = n.id.trim().toLowerCase();
+        return nom.includes("AMBULANTE") || id.includes("ambulante");
+      }) || null
+    );
+  }, [user, navesAutorizadas]);
 
   async function procesarArchivos(files: File[]) {
     if (!files || files.length === 0) return;
@@ -159,27 +174,49 @@ export default function IngresoCatastroPage() {
         }));
       }
 
-      // Validación estricta de aislamiento de naves para el rol SUPERVISOR
-      if (user?.rol === "SUPERVISOR") {
-        const navesDetectadas = Array.from(
-          new Set(
-            todosParsed
-              .map((p) => (p.nave || "").trim().toUpperCase())
-              .filter(Boolean)
-          )
-        );
+      // Filtro de duplicados 100% exactos (mismo nombre + misma actividad + mismo puesto)
+      const { registrosUnicos, duplicadosOmitidos: omitidos } = filtrarDuplicadosExactos100(todosParsed);
+      setDuplicadosOmitidos(omitidos);
+      todosParsed = registrosUnicos;
 
-        const todasPermitidas =
-          navesDetectadas.length > 0 &&
-          navesDetectadas.every((naveDetectada) =>
-            navesAutorizadas.some(
+      if (omitidos.length > 0) {
+        toast.info(
+          `Se omitieron automáticamente ${omitidos.length} registro(s) 100% duplicados (mismo nombre, actividad y puesto).`
+        );
+      }
+
+      const esNaveGenerica = (n: string) => {
+        const u = n.trim().toUpperCase();
+        return (
+          u === "NAVE" ||
+          u === "(NAVE)" ||
+          u === "NO DEFINIDA" ||
+          u === "NO IDENTIFICADA" ||
+          u === "PUESTOS AMBULANTES"
+        );
+      };
+
+      const navesDetectadas = Array.from(
+        new Set(
+          todosParsed
+            .map((p) => (p.nave || "").trim().toUpperCase())
+            .filter(Boolean)
+        )
+      );
+
+      // Validación estricta para el rol SUPERVISOR
+      if (user?.rol === "SUPERVISOR") {
+        const tieneNaveEspecificaNoAutorizada = navesDetectadas.some(
+          (naveDetectada) =>
+            !esNaveGenerica(naveDetectada) &&
+            !navesAutorizadas.some(
               (na) =>
                 na.nombre.trim().toUpperCase() === naveDetectada ||
                 na.id.trim().toLowerCase() === naveDetectada.toLowerCase()
             )
-          );
+        );
 
-        if (!todasPermitidas) {
+        if (tieneNaveEspecificaNoAutorizada) {
           toast.error(
             "Acceso denegado: No tiene permisos sobre la nave detectada en el archivo. Solo puede ingresar catastro de sus naves asignadas."
           );
@@ -187,18 +224,36 @@ export default function IngresoCatastroPage() {
           setArchivoNombre("");
           return;
         }
+
+        const esArchivoGenericoOAmbulantes =
+          navesDetectadas.length === 0 || navesDetectadas.every(esNaveGenerica);
+
+        if (esArchivoGenericoOAmbulantes && naveAmbulantesAutorizada) {
+          // Caso 1: El supervisor tiene a su cargo Ambulantes -> Preguntar mediante Modal
+          setRegistros(todosParsed);
+          setRegistrosPendientesAmbulantes(todosParsed);
+          setModalPreguntaAmbulantesOpen(true);
+          return;
+        }
       }
 
+      // Caso 2: Flujo estándar (otros roles o supervisor sin Ambulantes a cargo)
       setRegistros(todosParsed);
       const opcInicial: OpcionesImportacion = { modoUnificacion: "UNIFICAR" };
       setOpcionesImportacion(opcInicial);
       const sim = await importadorService.simularImportacion(todosParsed, opcInicial);
       setAnalisis(sim);
-      if (sim.reconciliacion?.navesDisponibles && sim.reconciliacion.navesDisponibles.length > 0) {
-        setNaveManualSeleccionada(sim.reconciliacion.navesDisponibles[0].id);
+      const navesDisponiblesInicial =
+        user?.rol === "SUPERVISOR"
+          ? navesAutorizadas
+          : sim.reconciliacion?.navesDisponibles || [];
+      if (navesDisponiblesInicial.length > 0) {
+        setNaveManualSeleccionada(navesDisponiblesInicial[0].id);
       }
       setNombreNuevaNaveInput(
-        sim.reconciliacion?.naveDetectada && sim.reconciliacion.naveDetectada !== "NO IDENTIFICADA"
+        sim.reconciliacion?.naveDetectada &&
+          sim.reconciliacion.naveDetectada !== "NO IDENTIFICADA" &&
+          sim.reconciliacion.naveDetectada !== "NAVE"
           ? sim.reconciliacion.naveDetectada
           : ""
       );
@@ -207,6 +262,59 @@ export default function IngresoCatastroPage() {
     } catch (error) {
       console.error("Error al procesar archivos:", error);
       toast.error("Error al interpretar los archivos. Verifique el formato e intente nuevamente.");
+    } finally {
+      setParseando(false);
+    }
+  }
+
+  async function handleConfirmarEsAmbulantes() {
+    if (!naveAmbulantesAutorizada) return;
+    setParseando(true);
+    setModalPreguntaAmbulantesOpen(false);
+    try {
+      const registrosAmbulantes = registrosPendientesAmbulantes.map((r) => ({
+        ...r,
+        nave: naveAmbulantesAutorizada.nombre,
+      }));
+      setRegistros(registrosAmbulantes);
+      const opc: OpcionesImportacion = {
+        modoUnificacion: "UNIFICAR",
+        naveIdManual: naveAmbulantesAutorizada.id,
+      };
+      setOpcionesImportacion(opc);
+      const sim = await importadorService.simularImportacion(registrosAmbulantes, opc);
+      setAnalisis(sim);
+      setNaveManualSeleccionada(naveAmbulantesAutorizada.id);
+      setPaso("preview");
+      toast.success(`Registros asignados a ${naveAmbulantesAutorizada.nombre}.`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al reconciliar con la nave de Ambulantes.");
+    } finally {
+      setParseando(false);
+    }
+  }
+
+  async function handleRechazarEsAmbulantes() {
+    setParseando(true);
+    setModalPreguntaAmbulantesOpen(false);
+    try {
+      setRegistros(registrosPendientesAmbulantes);
+      const opcInicial: OpcionesImportacion = { modoUnificacion: "UNIFICAR" };
+      setOpcionesImportacion(opcInicial);
+      const sim = await importadorService.simularImportacion(registrosPendientesAmbulantes, opcInicial);
+      setAnalisis(sim);
+      const navesDisponiblesInicial =
+        user?.rol === "SUPERVISOR"
+          ? navesAutorizadas
+          : sim.reconciliacion?.navesDisponibles || [];
+      if (navesDisponiblesInicial.length > 0) {
+        setNaveManualSeleccionada(navesDisponiblesInicial[0].id);
+      }
+      setPaso("preview");
+    } catch (err) {
+      console.error(err);
+      toast.error("Error al procesar la selección manual.");
     } finally {
       setParseando(false);
     }
@@ -244,6 +352,10 @@ export default function IngresoCatastroPage() {
 
   function handleReiniciar() {
     setRegistros([]);
+    setDuplicadosOmitidos([]);
+    setMostrarDuplicadosOmitidos(false);
+    setModalPreguntaAmbulantesOpen(false);
+    setRegistrosPendientesAmbulantes([]);
     setResultado(null);
     setAnalisis(null);
     setOpcionesImportacion({});
@@ -405,7 +517,7 @@ export default function IngresoCatastroPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                  <div className={`grid grid-cols-1 ${user?.rol === "SUPERVISOR" ? "" : "md:grid-cols-2"} gap-4 pt-1`}>
                     {/* Opción 1: Seleccionar Nave Existente */}
                     <div className="rounded-xl border border-amber-200 bg-base-white p-4 shadow-2xs flex flex-col justify-between gap-3">
                       <div>
@@ -421,7 +533,10 @@ export default function IngresoCatastroPage() {
                           onChange={(e) => setNaveManualSeleccionada(e.target.value)}
                           className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xs focus:border-institucional-green focus:outline-hidden"
                         >
-                          {analisis.reconciliacion.navesDisponibles?.map((n) => (
+                          {(user?.rol === "SUPERVISOR"
+                            ? navesAutorizadas
+                            : analisis.reconciliacion.navesDisponibles || naves
+                          ).map((n) => (
                             <option key={n.id} value={n.id}>
                               {n.nombre} ({n.cantidadPuestos} puestos)
                             </option>
@@ -453,52 +568,54 @@ export default function IngresoCatastroPage() {
                       </Button>
                     </div>
 
-                    {/* Opción 2: Crear Nueva Nave */}
-                    <div className="rounded-xl border border-amber-200 bg-base-white p-4 shadow-2xs flex flex-col justify-between gap-3">
-                      <div>
-                        <h4 className="text-xs font-bold text-base-eerieBlack uppercase tracking-wider flex items-center gap-1.5">
-                          <Plus size={15} className="text-amber-600" />
-                          Opción 2: Crear Nueva Nave
-                        </h4>
-                        <p className="text-xs text-gray-600 mt-1">
-                          Crea la nave en la base de datos junto con todos los puestos del archivo ({registros.length} puestos):
-                        </p>
-                        <input
-                          type="text"
-                          placeholder="Nombre de la nueva nave (ej. NAVE B, NAVE TEXTILES)"
-                          value={nombreNuevaNaveInput}
-                          onChange={(e) => setNombreNuevaNaveInput(e.target.value)}
-                          className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xs focus:border-institucional-green focus:outline-hidden uppercase"
-                        />
+                    {/* Opción 2: Crear Nueva Nave (solo si NO es SUPERVISOR) */}
+                    {user?.rol !== "SUPERVISOR" && (
+                      <div className="rounded-xl border border-amber-200 bg-base-white p-4 shadow-2xs flex flex-col justify-between gap-3">
+                        <div>
+                          <h4 className="text-xs font-bold text-base-eerieBlack uppercase tracking-wider flex items-center gap-1.5">
+                            <Plus size={15} className="text-amber-600" />
+                            Opción 2: Crear Nueva Nave
+                          </h4>
+                          <p className="text-xs text-gray-600 mt-1">
+                            Crea la nave en la base de datos junto con todos los puestos del archivo ({registros.length} puestos):
+                          </p>
+                          <input
+                            type="text"
+                            placeholder="Nombre de la nueva nave (ej. NAVE B, NAVE TEXTILES)"
+                            value={nombreNuevaNaveInput}
+                            onChange={(e) => setNombreNuevaNaveInput(e.target.value)}
+                            className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xs focus:border-institucional-green focus:outline-hidden uppercase"
+                          />
+                        </div>
+                        <Button
+                          type="button"
+                          onClick={async () => {
+                            const nombreLimpio = nombreNuevaNaveInput.trim();
+                            if (!nombreLimpio) {
+                              toast.error("Ingrese el nombre para la nueva nave.");
+                              return;
+                            }
+                            setParseando(true);
+                            try {
+                              const opc = { crearNuevaNave: true, nuevoNombreNave: nombreLimpio };
+                              setOpcionesImportacion(opc);
+                              const sim = await importadorService.simularImportacion(registros, opc);
+                              setAnalisis(sim);
+                              toast.success(`Vista previa para crear la nueva nave: ${nombreLimpio}`);
+                            } catch (err) {
+                              console.error(err);
+                              toast.error("Error al preparar la creación de la nueva nave.");
+                            } finally {
+                              setParseando(false);
+                            }
+                          }}
+                          disabled={parseando || !nombreNuevaNaveInput.trim()}
+                          className="w-full bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold"
+                        >
+                          Crear Nueva Nave
+                        </Button>
                       </div>
-                      <Button
-                        type="button"
-                        onClick={async () => {
-                          const nombreLimpio = nombreNuevaNaveInput.trim();
-                          if (!nombreLimpio) {
-                            toast.error("Ingrese el nombre para la nueva nave.");
-                            return;
-                          }
-                          setParseando(true);
-                          try {
-                            const opc = { crearNuevaNave: true, nuevoNombreNave: nombreLimpio };
-                            setOpcionesImportacion(opc);
-                            const sim = await importadorService.simularImportacion(registros, opc);
-                            setAnalisis(sim);
-                            toast.success(`Vista previa para crear la nueva nave: ${nombreLimpio}`);
-                          } catch (err) {
-                            console.error(err);
-                            toast.error("Error al preparar la creación de la nueva nave.");
-                          } finally {
-                            setParseando(false);
-                          }
-                        }}
-                        disabled={parseando || !nombreNuevaNaveInput.trim()}
-                        className="w-full bg-amber-600 text-white hover:bg-amber-700 text-xs font-semibold"
-                      >
-                        Crear Nueva Nave
-                      </Button>
-                    </div>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -595,6 +712,52 @@ export default function IngresoCatastroPage() {
                   )}
                 </div>
               )
+            )}
+
+            {/* Apartado Desplegable: Duplicados 100% Exactos Omitidos Automáticamente */}
+            {duplicadosOmitidos.length > 0 && (
+              <div className="border-b border-institucional-whiteSmokeBlack/15 bg-amber-50/50 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-amber-900">
+                      Duplicados 100% Exactos Omitidos Automáticamente ({duplicadosOmitidos.length})
+                    </span>
+                    <span className="text-[11px] text-amber-800 hidden sm:inline">
+                      (Mismo nombre, actividad y puesto idénticos)
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMostrarDuplicadosOmitidos(!mostrarDuplicadosOmitidos)}
+                    className="text-xs text-amber-900 font-semibold hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>{mostrarDuplicadosOmitidos ? "Ocultar lista" : "Ver lista"}</span>
+                    {mostrarDuplicadosOmitidos ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                </div>
+                {mostrarDuplicadosOmitidos && (
+                  <div className="mt-2.5 max-h-40 overflow-y-auto rounded-lg border border-amber-200/80 bg-white p-2.5 space-y-1.5 text-xs">
+                    {duplicadosOmitidos.map((dup, dIdx) => (
+                      <div
+                        key={dIdx}
+                        className="flex flex-wrap items-center justify-between gap-2 p-1.5 rounded bg-amber-50/40 border border-amber-100 text-gray-700"
+                      >
+                        <div>
+                          <strong className="text-gray-900">{dup.nombre || dup.contribuyente}</strong>
+                          <span className="text-gray-500 ml-2">C.I.: {dup.cedula || "-"}</span>
+                          <span className="text-gray-500 ml-2">Giro: {dup.actividad || "-"}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-amber-900 bg-amber-100 px-2 py-0.5 rounded">
+                            Puesto {dup.puesto}
+                          </span>
+                          <span className="text-[10px] text-gray-400 uppercase font-semibold">Omitido</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
 
             {/* Tabla con scroll interno */}
@@ -810,6 +973,63 @@ export default function IngresoCatastroPage() {
                 className="bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold"
               >
                 Aceptar y Guardar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Modal de Confirmación para Puestos Ambulantes ── */}
+        <Dialog
+          open={modalPreguntaAmbulantesOpen}
+          disablePointerDismissal={true}
+          onOpenChange={(open) => {
+            if (!open && !parseando) {
+              setModalPreguntaAmbulantesOpen(false);
+            }
+          }}
+        >
+          <DialogContent
+            showCloseButton={false}
+            className="sm:max-w-md bg-white rounded-2xl p-6 shadow-2xl border border-slate-200"
+          >
+            <DialogHeader className="text-left space-y-2">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-xl bg-institucional-green/10 text-institucional-green">
+                  <Building2 size={24} />
+                </div>
+                <DialogTitle className="text-base font-bold text-gray-900 leading-snug">
+                  ¿Este archivo corresponde a Puestos Ambulantes?
+                </DialogTitle>
+              </div>
+              <DialogDescription className="text-xs text-gray-600 leading-relaxed pt-1">
+                El archivo cargado registra por defecto el nombre <strong>&quot;NAVE&quot;</strong>, pero usted tiene a su cargo la nave <strong>&quot;{naveAmbulantesAutorizada?.nombre}&quot;</strong>. ¿Confirma que estos <strong>{registrosPendientesAmbulantes.length}</strong> registros corresponden a puestos ambulantes de <strong>&quot;{naveAmbulantesAutorizada?.nombre}&quot;</strong>?
+              </DialogDescription>
+            </DialogHeader>
+
+            <DialogFooter className="mt-5 flex flex-col sm:flex-row gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={parseando}
+                onClick={handleRechazarEsAmbulantes}
+                className="w-full sm:w-auto text-xs"
+              >
+                No, no es Ambulantes (Selección Manual)
+              </Button>
+              <Button
+                type="button"
+                disabled={parseando}
+                onClick={handleConfirmarEsAmbulantes}
+                className="w-full sm:w-auto bg-institucional-green hover:bg-acento-verdeOliva1 text-white text-xs font-bold"
+              >
+                {parseando ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin mr-1.5" />
+                    Asignando...
+                  </>
+                ) : (
+                  `Sí, es ${naveAmbulantesAutorizada?.nombre || "Ambulantes"}`
+                )}
               </Button>
             </DialogFooter>
           </DialogContent>
