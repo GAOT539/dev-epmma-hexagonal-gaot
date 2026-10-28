@@ -87,6 +87,7 @@ export async function exportarReporteSupervisoresPDF(
   const { resumenSupervisores, permisosSupervisoresPeriodo, detallesPorSupervisor, fechaDesde, fechaHasta } =
     data;
 
+  const MARGIN_X = 14;
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.width;
   const logoBase64 = await cargarLogoBase64();
@@ -97,7 +98,7 @@ export async function exportarReporteSupervisoresPDF(
   // 1. Logo institucional
   if (logoBase64) {
     try {
-      doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
+      doc.addImage(logoBase64, "PNG", MARGIN_X, 6, 19, 19);
     } catch {
       // Continuar si falla renderizado de imagen
     }
@@ -122,8 +123,8 @@ export async function exportarReporteSupervisoresPDF(
     { align: "center" }
   );
 
-  // 3. Cuadro superior de información (x=10, y=28, ancho=105mm)
-  const leftX = 10;
+  // 3. Cuadro superior de información (x=14, y=28, ancho=105mm)
+  const leftX = MARGIN_X;
   const leftY = 28;
   const leftW = 105;
   const rowH = 5.2;
@@ -158,8 +159,8 @@ export async function exportarReporteSupervisoresPDF(
   // Título Tabla 1
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
-  doc.setTextColor(21, 128, 61);
-  doc.text("1. RESUMEN CONSOLIDADO DE GESTIÓN POR SUPERVISOR", 10, 47);
+  doc.setTextColor(33, 37, 41);
+  doc.text("1. RESUMEN CONSOLIDADO DE GESTIÓN POR SUPERVISOR", MARGIN_X, 47);
 
   // Tabla 1: Resumen Consolidado de Gestión por Supervisor
   const headersTabla1 = [
@@ -192,6 +193,7 @@ export async function exportarReporteSupervisoresPDF(
     head: headersTabla1,
     body: filasTabla1,
     startY: 50,
+    margin: { left: MARGIN_X, right: MARGIN_X },
     styles: { fontSize: 7, cellPadding: 2, textColor: [33, 37, 41] },
     headStyles: {
       fillColor: [69, 116, 59],
@@ -202,7 +204,7 @@ export async function exportarReporteSupervisoresPDF(
     },
     columnStyles: {
       0: { cellWidth: 10, halign: "center" },
-      1: { cellWidth: 50, fontStyle: "bold" },
+      1: { cellWidth: 52, fontStyle: "bold" },
       2: { cellWidth: 55 },
       3: { cellWidth: 26, halign: "center" },
       4: { cellWidth: 22, halign: "center" },
@@ -219,8 +221,8 @@ export async function exportarReporteSupervisoresPDF(
   const startYTabla2 = finalYTabla1 + 6;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(8.5);
-  doc.setTextColor(21, 128, 61);
-  doc.text("2. REGISTRO DE PERMISOS DE SUPERVISORES Y COBERTURA APLICADA", 10, startYTabla2);
+  doc.setTextColor(33, 37, 41);
+  doc.text("2. REGISTRO DE PERMISOS DE SUPERVISORES Y COBERTURA APLICADA", MARGIN_X, startYTabla2);
 
   const headersTabla2 = [
     [
@@ -247,9 +249,10 @@ export async function exportarReporteSupervisoresPDF(
     head: headersTabla2,
     body: filasTabla2,
     startY: startYTabla2 + 3,
+    margin: { left: MARGIN_X, right: MARGIN_X },
     styles: { fontSize: 7, cellPadding: 2, textColor: [33, 37, 41] },
     headStyles: {
-      fillColor: [44, 82, 130],
+      fillColor: [69, 116, 59],
       textColor: [255, 255, 255],
       fontStyle: "bold",
       valign: "middle",
@@ -259,7 +262,7 @@ export async function exportarReporteSupervisoresPDF(
       1: { cellWidth: 40 },
       2: { cellWidth: 65 },
       3: { cellWidth: 40 },
-      4: { cellWidth: 67 },
+      4: { cellWidth: 69 },
     },
   });
 
@@ -271,7 +274,7 @@ export async function exportarReporteSupervisoresPDF(
     // 1. Logo institucional
     if (logoBase64) {
       try {
-        doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
+        doc.addImage(logoBase64, "PNG", MARGIN_X, 6, 19, 19);
       } catch {
         // Continuar
       }
@@ -321,9 +324,9 @@ export async function exportarReporteSupervisoresPDF(
     });
 
     // 4. Cuadro derecho resumen de contadores del supervisor
-    const rightX = pageWidth - 145;
-    const rightY = 28;
     const rightW = 135;
+    const rightX = pageWidth - MARGIN_X - rightW;
+    const rightY = 28;
     const rightH = rowH * 3;
 
     doc.setFillColor(248, 250, 252);
@@ -372,6 +375,7 @@ export async function exportarReporteSupervisoresPDF(
       head: headersDetalle,
       body: filasDetalle,
       startY: 48,
+      margin: { left: MARGIN_X, right: MARGIN_X },
       styles: { fontSize: 6.8, cellPadding: 1.8, textColor: [33, 37, 41] },
       headStyles: {
         fillColor: [69, 116, 59],
@@ -382,33 +386,13 @@ export async function exportarReporteSupervisoresPDF(
       },
       columnStyles: {
         0: { cellWidth: 18, halign: "center" },
-        1: { cellWidth: 26 },
-        2: { cellWidth: 20, halign: "center" },
+        1: { cellWidth: 25 },
+        2: { cellWidth: 18, halign: "center" },
         3: { cellWidth: 42 },
-        4: { cellWidth: 38, fontStyle: "bold" },
-        5: { cellWidth: 65 },
-        6: { cellWidth: 28, halign: "center" },
+        4: { cellWidth: 36, fontStyle: "bold" },
+        5: { cellWidth: 64 },
+        6: { cellWidth: 26, halign: "center" },
         7: { cellWidth: 40 },
-      },
-      didParseCell: (hookData) => {
-        if (hookData.section === "body") {
-          const raw = hookData.row.raw;
-          const tipo = Array.isArray(raw) ? (raw[4] as string) : "";
-          if (tipo === "SIN INGRESO AL SISTEMA") {
-            hookData.cell.styles.fillColor = [254, 226, 226];
-            hookData.cell.styles.textColor = [153, 27, 27];
-            hookData.cell.styles.fontStyle = "bold";
-          } else if (tipo === "Permiso Asignado" || tipo === "Permiso de Supervisor") {
-            hookData.cell.styles.fillColor = [243, 232, 255];
-            hookData.cell.styles.textColor = [107, 33, 168];
-          } else if (tipo === "Justificación de Falta") {
-            hookData.cell.styles.fillColor = [224, 242, 254];
-            hookData.cell.styles.textColor = [7, 89, 133];
-          } else if (tipo === "Citación") {
-            hookData.cell.styles.fillColor = [254, 243, 199];
-            hookData.cell.styles.textColor = [146, 64, 14];
-          }
-        }
       },
     });
   });
@@ -530,7 +514,7 @@ export async function exportarReporteSupervisoresExcel(
 
   // Título Sección 1
   wsResumen.getCell("A8").value = "1. RESUMEN CONSOLIDADO DE GESTIÓN POR SUPERVISOR";
-  wsResumen.getCell("A8").font = { name: "Arial", size: 10, bold: true, color: { argb: "FF2E6B34" } };
+  wsResumen.getCell("A8").font = { name: "Arial", size: 10, bold: true, color: { argb: "FF212529" } };
   wsResumen.getRow(8).height = 18;
 
   // Cabecera Tabla 1
@@ -584,7 +568,7 @@ export async function exportarReporteSupervisoresExcel(
   // Título Sección 2 (Permisos)
   const filaTitT2 = curRowT1 + 2;
   wsResumen.getCell(`A${filaTitT2}`).value = "2. REGISTRO DE PERMISOS DE SUPERVISORES Y COBERTURA APLICADA";
-  wsResumen.getCell(`A${filaTitT2}`).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF2C5282" } };
+  wsResumen.getCell(`A${filaTitT2}`).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF212529" } };
   wsResumen.getRow(filaTitT2).height = 18;
 
   const headersT2 = [
@@ -600,7 +584,7 @@ export async function exportarReporteSupervisoresExcel(
     const cell = filaCabT2.getCell(idx + 1);
     cell.value = h;
     cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2C5282" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF45743B" } };
     cell.alignment = { vertical: "middle", horizontal: "left" };
     cell.border = bordeFino;
   });
@@ -785,31 +769,9 @@ export async function exportarReporteSupervisoresExcel(
         r.getCell(7).value = ev.documentoRef;
         r.getCell(8).value = ev.vigenciaTexto;
 
-        let bgColor: string | null = null;
-        let fgColor: string = "FF212529";
-        let isBold = false;
-
-        if (ev.tipoEvento === "SIN INGRESO AL SISTEMA") {
-          bgColor = "FFFEE2E2";
-          fgColor = "FF991B1B";
-          isBold = true;
-        } else if (ev.tipoEvento === "Permiso Asignado" || ev.tipoEvento === "Permiso de Supervisor") {
-          bgColor = "FFF3E8FF";
-          fgColor = "FF6B21A8";
-        } else if (ev.tipoEvento === "Justificación de Falta") {
-          bgColor = "FFE0F2FE";
-          fgColor = "FF0369A1";
-        } else if (ev.tipoEvento === "Citación") {
-          bgColor = "FFFEF3C7";
-          fgColor = "FF92400E";
-        }
-
         for (let c = 1; c <= 8; c++) {
           const cell = r.getCell(c);
-          cell.font = { name: "Arial", size: 8.5, bold: isBold || c === 5, color: { argb: fgColor } };
-          if (bgColor) {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
-          }
+          cell.font = { name: "Arial", size: 8.5, bold: c === 5, color: { argb: "FF212529" } };
           cell.alignment = {
             vertical: "middle",
             horizontal: c === 1 || c === 3 || c === 7 ? "center" : "left",

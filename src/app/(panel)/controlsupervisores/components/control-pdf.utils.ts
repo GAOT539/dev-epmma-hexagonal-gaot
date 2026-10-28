@@ -76,10 +76,10 @@ export async function exportarControlSupervisoresGeneralPDF({
   const logoBase64 = await cargarLogoBase64();
   const { periodoUnificado } = calcularTextosPeriodo(fechaDesdeStr, fechaHastaStr);
 
-  // 1. Logo institucional (x=10, y=6, w=19, h=19)
+  // 1. Logo institucional (x=14, y=6, w=19, h=19)
   if (logoBase64) {
     try {
-      doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
+      doc.addImage(logoBase64, "PNG", 14, 6, 19, 19);
     } catch {
       // Continúa si falla
     }
@@ -104,8 +104,8 @@ export async function exportarControlSupervisoresGeneralPDF({
     { align: "center" }
   );
 
-  // 3. Cuadro superior de información (x=10, y=28, w=110mm)
-  const leftX = 10;
+  // 3. Cuadro superior de información (x=14, y=28, w=110mm)
+  const leftX = 14;
   const leftY = 28;
   const leftW = 110;
   const rowH = 5.2;
@@ -197,6 +197,7 @@ export async function exportarControlSupervisoresGeneralPDF({
     head: headers,
     body: data,
     startY: 48,
+    margin: { left: 14, right: 14 },
     styles: { fontSize: 7.5, cellPadding: 2.2, textColor: [33, 37, 41] },
     headStyles: {
       fillColor: [69, 116, 59],
@@ -211,14 +212,6 @@ export async function exportarControlSupervisoresGeneralPDF({
       3: { cellWidth: 44 },
       4: { cellWidth: 80 },
       5: { cellWidth: 49 },
-    },
-    didParseCell: (hookData) => {
-      if (hookData.section === "body") {
-        const raw = hookData.row.raw;
-        if (Array.isArray(raw) && typeof raw[4] === "string" && raw[4].includes("No ingresó al sistema")) {
-          hookData.cell.styles.fillColor = [254, 242, 242];
-        }
-      }
     },
   });
 
@@ -257,7 +250,7 @@ export async function exportarControlSupervisorIndividualPDF(
   // 1. Logo institucional
   if (logoBase64) {
     try {
-      doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
+      doc.addImage(logoBase64, "PNG", 14, 6, 19, 19);
     } catch {
       // Continúa
     }
@@ -283,7 +276,7 @@ export async function exportarControlSupervisorIndividualPDF(
   );
 
   // 3. Cuadro superior descriptivo
-  const leftX = 10;
+  const leftX = 14;
   const leftY = 28;
   const leftW = 95;
   const rowH = 5.2;
@@ -355,7 +348,7 @@ export async function exportarControlSupervisorIndividualPDF(
     doc.setTextColor(29, 78, 216);
     doc.text(
       `Registro con Persistencia: Arrastrado desde ${sesion.fechaOrigenPersistencia || "jornada previa"}. Justificación: "${sesion.comentarioPersistencia || "Automático"}"`,
-      10,
+      14,
       startY
     );
     startY += 5;
@@ -367,7 +360,7 @@ export async function exportarControlSupervisorIndividualPDF(
     doc.setTextColor(194, 65, 12);
     doc.text(
       `Registro con Retraso: ${sesion.detalleRetraso || "Registrado manualmente con posterioridad."}`,
-      10,
+      14,
       startY
     );
     startY += 5;
@@ -430,6 +423,7 @@ export async function exportarControlSupervisorIndividualPDF(
     head: headers,
     body: data,
     startY,
+    margin: { left: 14, right: 14 },
     styles: { fontSize: 7, cellPadding: 2, textColor: [33, 37, 41] },
     headStyles: {
       fillColor: [69, 116, 59],
@@ -445,19 +439,6 @@ export async function exportarControlSupervisorIndividualPDF(
       4: { cellWidth: 20, halign: "center" },
       5: { cellWidth: 60 },
       6: { cellWidth: 14, halign: "center" },
-    },
-    didParseCell: (hookData) => {
-      if (hookData.section === "body") {
-        const raw = hookData.row.raw;
-        const estado = Array.isArray(raw) ? raw[4] : undefined;
-        if (estado === "Presente") {
-          hookData.cell.styles.textColor = [21, 128, 61];
-        } else if (estado === "Ausente") {
-          hookData.cell.styles.textColor = [185, 28, 28];
-        } else if (estado === "Permiso") {
-          hookData.cell.styles.textColor = [126, 34, 206];
-        }
-      }
     },
   });
 
