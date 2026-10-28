@@ -2,12 +2,13 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { parseISO, eachDayOfInterval, format } from "date-fns";
 import type { ObservacionDetalle, PermisoDetalle } from "@/domain/models/asistencia.model";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
-import { userCanAccessComerciante } from "@/infrastructure/auth/authorization";
+import { userCanAccessComerciante, getAuthenticatedUser } from "@/infrastructure/auth/authorization";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
+import { asegurarSesionControlActivaDia } from "@/infrastructure/database/sesion-control-helper";
 
 export async function POST(request: Request) {
   try {
@@ -187,6 +188,16 @@ export async function POST(request: Request) {
         }
       }
     });
+
+    if (puesto?.naveId) {
+      const actor = await getAuthenticatedUser(request);
+      await asegurarSesionControlActivaDia({
+        naveId: puesto.naveId,
+        fechaJornada: hoyStr,
+        usuarioActor: actor,
+        accion: "Justificación de falta comercial",
+      });
+    }
 
     return NextResponse.json({ success: true, diasJustificados: diasRango.length });
   } catch (error) {

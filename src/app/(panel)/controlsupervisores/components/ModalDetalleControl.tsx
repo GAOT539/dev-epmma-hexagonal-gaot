@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import {
   Download,
   CheckCircle2,
   Clock,
   RefreshCw,
   Layers,
+  AlertTriangle,
+  UserCheck,
 } from "lucide-react";
 import type {
   SesionControlSupervisor,
@@ -25,8 +27,41 @@ import {
 
 // ── Componente de Badge / Globito de Control ─────────────────────────────────
 
-export function BadgeControl({ etiqueta }: { etiqueta: EtiquetaControlSupervisor }) {
+export function BadgeControl({
+  etiqueta,
+  fechaJornada,
+  supervisorReemplazoNombre,
+}: {
+  etiqueta: EtiquetaControlSupervisor;
+  fechaJornada?: string;
+  supervisorReemplazoNombre?: string | null;
+}) {
   switch (etiqueta) {
+    case "SIN_INGRESO": {
+      const fechaTexto = fechaJornada
+        ? format(parseISO(fechaJornada), "dd/MM/yyyy")
+        : "";
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-800 shadow-2xs">
+          <AlertTriangle size={11} className="shrink-0 text-red-600" />
+          No ingresó al sistema{fechaTexto ? ` (${fechaTexto})` : ""}
+        </span>
+      );
+    }
+    case "PERMISO_SUPERVISOR_REEMPLAZO":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-purple-300 bg-purple-100 px-2.5 py-0.5 text-xs font-semibold text-purple-800 shadow-2xs">
+          <UserCheck size={11} className="shrink-0 text-purple-600" />
+          Permiso Supervisor (A cargo: {supervisorReemplazoNombre || "Reemplazo"})
+        </span>
+      );
+    case "PERMISO_SUPERVISOR_PERSISTENCIA":
+      return (
+        <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300 bg-cyan-100 px-2.5 py-0.5 text-xs font-semibold text-cyan-800 shadow-2xs">
+          <RefreshCw size={11} className="shrink-0 text-cyan-600" />
+          Permiso Supervisor (Persistencia Automática)
+        </span>
+      );
     case "CON_PERSISTENCIA":
       return (
         <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 shadow-2xs">
@@ -72,7 +107,7 @@ export function ModalDetalleControl({
   onExportarPDF,
 }: ModalDetalleControlProps) {
   const [filtroDetalleModal, setFiltroDetalleModal] = useState<
-    "TODOS" | "PRESENTES" | "AUSENTES" | "PERMISOS" | "MODIFICADOS"
+    "TODOS" | "PRESENTES" | "AUSENTES" | "PERMISOS" | "CON_NOVEDADES"
   >("TODOS");
 
   // Filtrado interno dentro del modal
@@ -86,8 +121,10 @@ export function ModalDetalleControl({
         return list.filter((c) => c.estado === "Ausente");
       case "PERMISOS":
         return list.filter((c) => c.estado === "Permiso");
-      case "MODIFICADOS":
-        return list.filter((c) => c.metodo === "MODIFICADO_TRAS_PERSISTENCIA");
+      case "CON_NOVEDADES":
+        return list.filter(
+          (c) => (c.novedades && c.novedades.length > 0) || c.estado === "Permiso"
+        );
       default:
         return list;
     }
@@ -96,6 +133,7 @@ export function ModalDetalleControl({
   return (
     <Dialog
       open={Boolean(sesion)}
+      disablePointerDismissal={true}
       onOpenChange={(abierto) => {
         if (!abierto) {
           onCerrar();
@@ -218,7 +256,11 @@ export function ModalDetalleControl({
             {/* Cuerpo del Modal con Resumen y Radiografía de Comerciantes */}
             <div className="pt-4 space-y-4">
               {/* Tarjetas de Resumen */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div
+                className={`grid grid-cols-2 ${
+                  (sesion.resumen.justificados ?? 0) > 0 ? "sm:grid-cols-5" : "sm:grid-cols-4"
+                } gap-3`}
+              >
                 <div className="rounded-xl border border-gray-200 bg-base-white p-3.5 text-center min-w-0 shadow-2xs">
                   <span className="text-xs text-gray-700 block">Total Puestos</span>
                   <span className="text-lg font-bold text-base-eerieBlack">
@@ -243,6 +285,14 @@ export function ModalDetalleControl({
                     {sesion.resumen.permisos}
                   </span>
                 </div>
+                {(sesion.resumen.justificados ?? 0) > 0 && (
+                  <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-3.5 text-center min-w-0 shadow-2xs">
+                    <span className="text-xs text-blue-700 block">Justificados</span>
+                    <span className="text-lg font-bold text-blue-800">
+                      {sesion.resumen.justificados}
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* Filtros rápidos / Pestañas de comerciantes */}
@@ -297,18 +347,18 @@ export function ModalDetalleControl({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFiltroDetalleModal("MODIFICADOS")}
+                  onClick={() => setFiltroDetalleModal("CON_NOVEDADES")}
                   className={[
                     "px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors shrink-0",
-                    filtroDetalleModal === "MODIFICADOS"
+                    filtroDetalleModal === "CON_NOVEDADES"
                       ? "bg-amber-600 text-base-white"
                       : "text-amber-800 hover:bg-amber-50",
                   ].join(" ")}
                 >
-                  Modificados tras Persistencia (
+                  Con Observaciones / Permisos / Justificaciones (
                   {
                     sesion.detallesComerciantes.filter(
-                      (c) => c.metodo === "MODIFICADO_TRAS_PERSISTENCIA"
+                      (c) => (c.novedades && c.novedades.length > 0) || c.estado === "Permiso"
                     ).length
                   }
                   )
@@ -325,7 +375,9 @@ export function ModalDetalleControl({
                       <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Cédula</th>
                       <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Contribuyente</th>
                       <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Estado</th>
-                      <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Origen / Método</th>
+                      <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left min-w-[280px]">
+                        Detalle de Permisos / Justificaciones / Observaciones
+                      </th>
                       <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-right">Hora</th>
                     </tr>
                   </thead>
@@ -352,23 +404,6 @@ export function ModalDetalleControl({
                         );
                       }
 
-                      let metodoBadge = null;
-                      if (com.metodo === "PERSISTENCIA") {
-                        metodoBadge = (
-                          <span className="text-blue-700 font-medium">Persistencia</span>
-                        );
-                      } else if (com.metodo === "MODIFICADO_TRAS_PERSISTENCIA") {
-                        metodoBadge = (
-                          <span className="text-amber-800 font-bold">
-                            Modificado tras persistencia
-                          </span>
-                        );
-                      } else {
-                        metodoBadge = (
-                          <span className="text-gray-700 font-medium">Manual</span>
-                        );
-                      }
-
                       return (
                         <tr key={com.comercianteId} className="hover:bg-gray-50/70">
                           <td className="px-3 py-2 font-bold text-base-eerieBlack">
@@ -380,7 +415,94 @@ export function ModalDetalleControl({
                             {com.contribuyente}
                           </td>
                           <td className="px-3 py-2">{estadoBadge}</td>
-                          <td className="px-3 py-2">{metodoBadge}</td>
+                          <td className="px-3 py-2">
+                            {com.novedades && com.novedades.length > 0 ? (
+                              <div className="flex flex-col gap-1.5">
+                                {com.novedades.map((nov, idx) => {
+                                  if (nov.categoria === "JUSTIFICACION") {
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="p-1.5 rounded-md bg-blue-50/80 border border-blue-200 text-[11px] text-blue-900 leading-tight"
+                                      >
+                                        <div className="flex items-center gap-1 font-semibold">
+                                          <span className="rounded px-1.5 py-0.2 bg-blue-600 text-white font-bold text-[10px]">
+                                            Justificación
+                                          </span>
+                                          <span>Motivo / N° Doc: {nov.motivo}</span>
+                                        </div>
+                                        {nov.fechaInicio && nov.fechaFin && (
+                                          <div className="mt-0.5 text-blue-700 font-medium">
+                                            Fechas justificadas: Del {nov.fechaInicio} al {nov.fechaFin} (
+                                            {nov.diasVigencia ?? 1} día(s))
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  if (nov.categoria === "PERMISO") {
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className="p-1.5 rounded-md bg-purple-50/80 border border-purple-200 text-[11px] text-purple-900 leading-tight"
+                                      >
+                                        <div className="flex items-center gap-1 font-semibold">
+                                          <span className="rounded px-1.5 py-0.2 bg-purple-600 text-white font-bold text-[10px]">
+                                            Permiso
+                                          </span>
+                                          <span>Motivo / N° Doc: {nov.motivo}</span>
+                                        </div>
+                                        {nov.fechaInicio && nov.fechaFin && (
+                                          <div className="mt-0.5 text-purple-700 font-medium">
+                                            Vigencia asignada: Del {nov.fechaInicio} al {nov.fechaFin} (
+                                            {nov.diasVigencia ?? 1} día(s))
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  }
+                                  if (nov.categoria === "CITACION" || nov.categoria === "NOTIFICACION") {
+                                    const esCit = nov.categoria === "CITACION";
+                                    return (
+                                      <div
+                                        key={idx}
+                                        className={`p-1.5 rounded-md border text-[11px] leading-tight ${
+                                          esCit
+                                            ? "bg-amber-50/80 border-amber-200 text-amber-900"
+                                            : "bg-blue-50/80 border-blue-200 text-blue-900"
+                                        }`}
+                                      >
+                                        <span
+                                          className={`rounded px-1.5 py-0.2 font-bold text-[10px] mr-1.5 ${
+                                            esCit ? "bg-amber-600 text-white" : "bg-blue-600 text-white"
+                                          }`}
+                                        >
+                                          {esCit ? "Citación" : "Notificación"}
+                                        </span>
+                                        <strong className="font-semibold">
+                                          Doc/Ref: #{nov.numeroDocumento || "S/N"}
+                                        </strong>{" "}
+                                        • {nov.motivo}
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <div
+                                      key={idx}
+                                      className="p-1.5 rounded-md bg-gray-50/80 border border-gray-200 text-[11px] text-gray-800 leading-tight"
+                                    >
+                                      <span className="rounded px-1.5 py-0.2 bg-slate-600 text-white font-bold text-[10px] mr-1.5">
+                                        Observación
+                                      </span>
+                                      {nov.motivo}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 font-medium">—</span>
+                            )}
+                          </td>
                           <td className="px-3 py-2 text-right text-gray-700 font-medium">
                             {com.horaRegistro || "-"}
                           </td>

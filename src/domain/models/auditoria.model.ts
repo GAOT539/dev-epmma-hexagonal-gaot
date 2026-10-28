@@ -19,7 +19,20 @@ export type EtiquetaControlSupervisor =
   | "EN_FECHA"
   | "CON_PERSISTENCIA"
   | "MODIFICADO_TRAS_PERSISTENCIA"
-  | "CON_RETRASO";
+  | "CON_RETRASO"
+  | "SIN_INGRESO"
+  | "PERMISO_SUPERVISOR_REEMPLAZO"
+  | "PERMISO_SUPERVISOR_PERSISTENCIA";
+
+export interface NovedadPuestoControl {
+  categoria: "PERMISO" | "JUSTIFICACION" | "CITACION" | "NOTIFICACION" | "OBSERVACION";
+  motivo: string;
+  numeroDocumento?: string;
+  fechaInicio?: string;
+  fechaFin?: string;
+  diasVigencia?: number;
+  fechaHora?: string;
+}
 
 export interface DetalleComercianteControl {
   comercianteId: string;
@@ -30,6 +43,7 @@ export interface DetalleComercianteControl {
   estado: EstadoAsistencia;
   horaRegistro?: string;
   metodo: "MANUAL" | "PERSISTENCIA" | "MODIFICADO_TRAS_PERSISTENCIA";
+  novedades?: NovedadPuestoControl[];
 }
 
 export interface ResumenSesionControl {
@@ -39,6 +53,7 @@ export interface ResumenSesionControl {
   ausentes: number;
   permisos: number;
   faltantes?: number;
+  justificados?: number;
 }
 
 export interface SesionControlSupervisor {
@@ -60,4 +75,12 @@ export interface SesionControlSupervisor {
   etiquetas: EtiquetaControlSupervisor[];
   resumen: ResumenSesionControl;
   detallesComerciantes: DetalleComercianteControl[];
+  sinIngreso?: boolean;
+  permisoSupervisorInfo?: {
+    fechaInicio: string;
+    fechaFin: string;
+    motivo: string;
+    tipoCobertura: "REEMPLAZO_TEMPORAL" | "PERSISTENCIA_AUTOMATICA";
+    supervisorReemplazoNombre?: string | null;
+  };
 }

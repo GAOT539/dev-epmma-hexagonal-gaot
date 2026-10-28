@@ -6,7 +6,8 @@ import type { Prisma } from "@prisma/client";
 import type { ObservacionDetalle } from "@/domain/models/asistencia.model";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 import { verificarDiaNoLaborableNave } from "@/infrastructure/database/calendario-operativo.service";
-import { userCanAccessComerciante } from "@/infrastructure/auth/authorization";
+import { userCanAccessComerciante, getAuthenticatedUser } from "@/infrastructure/auth/authorization";
+import { asegurarSesionControlActivaDia } from "@/infrastructure/database/sesion-control-helper";
 
 export async function POST(request: Request) {
   try {
@@ -134,6 +135,14 @@ export async function POST(request: Request) {
         },
       });
     }
+
+    const actor = await getAuthenticatedUser(request);
+    await asegurarSesionControlActivaDia({
+      naveId: puesto.naveId,
+      fechaJornada: hoyStr,
+      usuarioActor: actor,
+      accion: `Registro de observación (${nuevaObservacion.tipo})`,
+    });
 
     return NextResponse.json(nuevaObservacion, { status: 201 });
   } catch (error) {

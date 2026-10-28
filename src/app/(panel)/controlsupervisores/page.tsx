@@ -12,6 +12,7 @@ import {
   Loader2,
   UserCheck,
   CalendarOff,
+  FileSpreadsheet,
 } from "lucide-react";
 import { format, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toast } from "sonner";
@@ -32,6 +33,7 @@ import {
 } from "./components/ModalDetalleControl";
 import { ModalPermisosSupervisores } from "./components/ModalPermisosSupervisores";
 import { ModalDiasNoLaborables } from "./components/ModalDiasNoLaborables";
+import { ModalReporteSupervisores } from "./components/ModalReporteSupervisores";
 
 const ITEMS_POR_PAGINA = 10;
 
@@ -62,9 +64,10 @@ export default function ControlSupervisoresPage() {
   // Modal de Detalle
   const [sesionSeleccionada, setSesionSeleccionada] = useState<SesionControlSupervisor | null>(null);
 
-  // Modales de Gestión Operativa Independientes (Permisos / Días No Laborables)
+  // Modales de Gestión Operativa Independientes (Permisos / Días No Laborables / Reporte Consolidado)
   const [modalPermisosOpen, setModalPermisosOpen] = useState(false);
   const [modalDiasNoLabOpen, setModalDiasNoLabOpen] = useState(false);
+  const [modalReporteSupervisoresOpen, setModalReporteSupervisoresOpen] = useState(false);
   const [versionCarga, setVersionCarga] = useState(0);
 
   const fechaDesdeStr = fechaInicio ? format(fechaInicio, "yyyy-MM-dd") : undefined;
@@ -193,6 +196,16 @@ export default function ControlSupervisoresPage() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setModalReporteSupervisoresOpen(true)}
+            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
+          >
+            <FileSpreadsheet size={15} />
+            <span>Reporte de Supervisores</span>
+          </Button>
+
           <Button
             type="button"
             variant="outline"
@@ -354,9 +367,6 @@ export default function ControlSupervisoresPage() {
                     <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[110px]">
                       Fecha de Lista
                     </th>
-                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[140px]">
-                      Inicio Toma (Real)
-                    </th>
                     <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[150px]">
                       Supervisor
                     </th>
@@ -369,7 +379,7 @@ export default function ControlSupervisoresPage() {
                     <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-left font-semibold text-base-eerieBlack min-w-[200px]">
                       Estado / Anotaciones
                     </th>
-                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[130px]">
+                    <th className="sticky top-0 z-20 bg-[#e6efe9] px-4 py-3 text-right font-semibold text-base-eerieBlack min-w-[140px]">
                       Puestos / Asistencia
                     </th>
                   </tr>
@@ -390,19 +400,6 @@ export default function ControlSupervisoresPage() {
                           <span className="font-bold text-base-eerieBlack">
                             {format(new Date(sesion.fechaJornada + "T00:00:00"), "dd/MM/yyyy")}
                           </span>
-                        </td>
-
-                        {/* Inicio Toma Real */}
-                        <td className="flex justify-between items-center py-1 md:px-4 md:py-3.5 text-sm md:table-cell">
-                          <span className="font-semibold text-gray-700 md:hidden">Inicio Toma:</span>
-                          <div className="text-right md:text-left">
-                            <p className="font-medium text-xs text-base-eerieBlack">
-                              {format(new Date(sesion.timestampInicio), "dd/MM/yyyy")}
-                            </p>
-                            <p className="text-xs text-gray-700">
-                              {format(new Date(sesion.timestampInicio), "hh:mm a")}
-                            </p>
-                          </div>
                         </td>
 
                         {/* Supervisor */}
@@ -437,30 +434,55 @@ export default function ControlSupervisoresPage() {
                         {/* Globitos / Badges */}
                         <td className="flex justify-between items-center py-1 md:px-4 md:py-3.5 text-sm md:table-cell">
                           <span className="font-semibold text-gray-700 md:hidden">Estado:</span>
-                          <div className="flex flex-wrap items-center gap-1.5 justify-end md:justify-start">
-                            {sesion.etiquetas.map((etq) => (
-                              <BadgeControl
-                                key={etq}
-                                etiqueta={etq}
-                              />
-                            ))}
+                          <div className="flex flex-col items-end md:items-start gap-1">
+                            <div className="flex flex-wrap items-center gap-1.5 justify-end md:justify-start">
+                              {sesion.etiquetas.map((etq) => (
+                                <BadgeControl
+                                  key={etq}
+                                  etiqueta={etq}
+                                  fechaJornada={sesion.fechaJornada}
+                                  supervisorReemplazoNombre={
+                                    sesion.permisoSupervisorInfo?.supervisorReemplazoNombre
+                                  }
+                                />
+                              ))}
+                            </div>
+                            {sesion.permisoSupervisorInfo && (
+                              <span className="text-[11px] text-gray-600 font-medium leading-tight">
+                                Permiso del {sesion.permisoSupervisorInfo.fechaInicio} al{" "}
+                                {sesion.permisoSupervisorInfo.fechaFin} •{" "}
+                                {sesion.permisoSupervisorInfo.tipoCobertura === "REEMPLAZO_TEMPORAL"
+                                  ? `Dejado a cargo a: ${
+                                      sesion.permisoSupervisorInfo.supervisorReemplazoNombre ||
+                                      "Reemplazo"
+                                    }`
+                                  : "Activado por Persistencia"}
+                              </span>
+                            )}
                           </div>
                         </td>
 
                         {/* Puestos / Asistencia */}
                         <td className="flex justify-between items-center py-1 md:px-4 md:py-3.5 text-sm md:table-cell text-right">
                           <span className="font-semibold text-gray-700 md:hidden">Puestos / Asistencia:</span>
-                          <div className="text-right">
-                            <span className="font-bold text-xs text-base-eerieBlack">
-                              Total: {sesion.resumen.totalOcupados}
+                          <div className="flex flex-col items-end gap-0.5 text-xs leading-tight">
+                            <span className="font-bold text-base-eerieBlack">
+                              Total puestos: {sesion.resumen.totalOcupados}
                             </span>
-                            <div className="text-xs mt-0.5 flex items-center justify-end gap-1.5 font-medium">
-                              <span className="text-green-700 font-semibold">{sesion.resumen.presentes} P</span>
-                              <span>•</span>
-                              <span className="text-red-700 font-semibold">{sesion.resumen.ausentes} A</span>
-                              <span>•</span>
-                              <span className="text-purple-700 font-semibold">{sesion.resumen.permisos} Pm</span>
-                            </div>
+                            <span className="font-semibold text-green-700">
+                              Asistencias: {sesion.resumen.presentes}
+                            </span>
+                            <span className="font-semibold text-red-700">
+                              Ausencias: {sesion.resumen.ausentes}
+                            </span>
+                            <span className="font-semibold text-purple-700">
+                              Permisos: {sesion.resumen.permisos}
+                            </span>
+                            {(sesion.resumen.justificados ?? 0) > 0 && (
+                              <span className="font-semibold text-blue-700">
+                                Justificados: {sesion.resumen.justificados}
+                              </span>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -470,7 +492,7 @@ export default function ControlSupervisoresPage() {
                   {sesionesPaginadas.length === 0 && (
                     <tr className="block md:table-row">
                       <td
-                        colSpan={7}
+                        colSpan={6}
                         className="block md:table-cell px-4 py-12 text-center text-sm text-gray-700"
                       >
                         No se encontraron registros de control con los filtros aplicados.
@@ -548,6 +570,16 @@ export default function ControlSupervisoresPage() {
         isOpen={modalDiasNoLabOpen}
         onClose={() => setModalDiasNoLabOpen(false)}
         onCambioRealizado={() => setVersionCarga((v) => v + 1)}
+      />
+
+      {/* ── Modal Reporte Consolidado y Detallado de Supervisores ── */}
+      <ModalReporteSupervisores
+        isOpen={modalReporteSupervisoresOpen}
+        onClose={() => setModalReporteSupervisoresOpen(false)}
+        supervisores={supervisores}
+        fechaInicioDefault={fechaDesdeStr}
+        fechaFinDefault={fechaHastaStr}
+        supervisorIdDefault={supervisorSeleccionado}
       />
     </div>
   );

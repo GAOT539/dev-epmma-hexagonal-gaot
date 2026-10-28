@@ -5,8 +5,9 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { PermisoDetalle } from "@/domain/models/asistencia.model";
 import { parseISO, format, addDays, isBefore, isEqual } from "date-fns";
-import { userCanAccessComerciante } from "@/infrastructure/auth/authorization";
+import { userCanAccessComerciante, getAuthenticatedUser } from "@/infrastructure/auth/authorization";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
+import { asegurarSesionControlActivaDia } from "@/infrastructure/database/sesion-control-helper";
 
 function generarRangoFechas(fechaInicio: string, fechaFin: string): string[] {
   const fechas: string[] = [];
@@ -153,6 +154,15 @@ export async function POST(request: Request) {
       if (diasRango.includes(hoy)) {
         await actualizarSesionControl(tx, comercianteId, puesto!.naveId, hoy, "Permiso");
       }
+    });
+
+    const hoy = obtenerFechaHoyEcuador();
+    const actor = await getAuthenticatedUser(request);
+    await asegurarSesionControlActivaDia({
+      naveId: puesto!.naveId,
+      fechaJornada: hoy,
+      usuarioActor: actor,
+      accion: "Registro de permiso comercial",
     });
 
     return NextResponse.json(nuevoPermiso, { status: 201 });
