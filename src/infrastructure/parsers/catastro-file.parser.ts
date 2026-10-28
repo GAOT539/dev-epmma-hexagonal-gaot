@@ -11,6 +11,8 @@ import {
   simplificarCodigoPuesto,
   aplicarSufijoVehiculoPorActividad,
   filtrarDuplicadosExactos100,
+  esNaveAmbulantes,
+  aplicarReglaPuestosAmbulantes,
 } from "../database/catastro-reconciliacion.service";
 
 export {
@@ -21,7 +23,41 @@ export {
   simplificarCodigoPuesto,
   aplicarSufijoVehiculoPorActividad,
   filtrarDuplicadosExactos100,
+  esNaveAmbulantes,
+  aplicarReglaPuestosAmbulantes,
 };
+
+/**
+ * REGLA 3: Sanitización y desduplicación de texto en celdas.
+ * Separa por saltos de línea, normaliza espacios internos, desduplica líneas consecutivas/repetidas
+ * y une los términos con un único espacio.
+ * Preserva "NULL" como texto legítimo si está presente.
+ */
+export function limpiarTextoCelda(raw: unknown): string {
+  if (raw === null || raw === undefined) return "";
+  const str = String(raw).normalize("NFC").trim();
+  if (!str) return "";
+
+  const lineas = str
+    .split(/[\r\n]+/)
+    .map((l) => l.trim().replace(/\s+/g, " "))
+    .filter(Boolean);
+
+  if (lineas.length === 0) return "";
+
+  const unicas: string[] = [];
+  const vistas = new Set<string>();
+
+  for (const l of lineas) {
+    const key = l.toUpperCase();
+    if (!vistas.has(key)) {
+      vistas.add(key);
+      unicas.push(l);
+    }
+  }
+
+  return unicas.join(" ");
+}
 
 // ── Datos de ejemplo para simular un archivo XML/CSV ─────────────────────────
 
@@ -453,7 +489,7 @@ export function parsearExcel(
       // Si la fila no tiene cédula, podría ser subtítulo de artículo en col 8
       if (!cedulaNorm) {
         if (row[8] !== null && row[8] !== undefined) {
-          const artCandidate = String(row[8]).trim();
+          const artCandidate = limpiarTextoCelda(row[8]);
           if (
             artCandidate &&
             !esFechaOBasura(row[8], artCandidate) &&
@@ -469,12 +505,12 @@ export function parsearExcel(
       }
 
       // Nombres en col 3
-      const rawNombre = row[3] !== null && row[3] !== undefined ? String(row[3]).trim() : "";
+      const rawNombre = row[3] !== null && row[3] !== undefined ? limpiarTextoCelda(row[3]) : "";
       const nombreNorm = rawNombre ? rawNombre.toUpperCase().replace(/\s+/g, " ") : "SIN NOMBRE";
 
       // Puesto y Descripción
-      let rawPuesto = row[10] !== null && row[10] !== undefined ? String(row[10]).trim() : "";
-      let rawDesc = row[16] !== null && row[16] !== undefined ? String(row[16]).trim() : "";
+      let rawPuesto = row[10] !== null && row[10] !== undefined ? limpiarTextoCelda(row[10]) : "";
+      let rawDesc = row[16] !== null && row[16] !== undefined ? limpiarTextoCelda(row[16]) : "";
 
       // Limpiar sufijos *AGOSTO (/\*[A-Z]+$/i) y glosas COBRO DE VALOR... (/\s+COBRO DE VALOR.*$/i)
       rawPuesto = rawPuesto.replace(/\*[A-Z]+$/i, "").replace(/\s+COBRO DE VALOR.*$/i, "").trim();
@@ -487,10 +523,20 @@ export function parsearExcel(
       const iniciaPrefijoEstructural =
         /^(?:BODEGA|CUBICULO|CUBÍCULO|NUCLEO|NÚCLEO|NUCLEOS|COCINA|LOCAL|N-|ZCF-)/i.test(rawPuesto);
 
-      // Regla B (Prioridad semántica): Si en PUESTO escribieron el giro o empresa
-      // (ej. "MOROCHO", "PAN" en Bodega Nave N; "CHOCHOS", "PLASTICOS" en Nave K)
-      // y en DESCRIPCION está el código estructural, tomar DESCRIPCION como código de puesto y rawPuesto como actividad.
-      if (!iniciaPrefijoEstructural && rawPuesto && esEstructuralDesc) {
+      // REGLA 1 (Exclusiva Nave P): Prioridad de DESCRIPCION cuando contiene formato estandarizado N-P-XX
+      const esCodigoNaveP = /^N-P-\d+[A-Z0-9-]*$/i.test(rawDesc);
+      const esNaveP = (naveDetectada === "NAVE P") || esCodigoNaveP;
+
+      if (esNaveP && esCodigoNaveP) {
+        puestoFinal = rawDesc.toUpperCase();
+        actividadFila = currentArticulo;
+        if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
+          naveDetectada = "NAVE P";
+        }
+      } else if (!iniciaPrefijoEstructural && rawPuesto && esEstructuralDesc) {
+        // Regla B (Prioridad semántica): Si en PUESTO escribieron el giro o empresa
+        // (ej. "MOROCHO", "PAN" en Bodega Nave N; "CHOCHOS", "PLASTICOS" en Nave K)
+        // y en DESCRIPCION está el código estructural, tomar DESCRIPCION como código de puesto y rawPuesto como actividad.
         puestoFinal = rawDesc.toUpperCase();
         actividadFila = rawPuesto.toUpperCase();
       } else if (!rawPuesto && rawDesc) {
@@ -508,7 +554,7 @@ export function parsearExcel(
       // CIU en col 2 si existiera
       let ciu = "S/N";
       if (row[2] !== null && row[2] !== undefined) {
-        const cVal = String(row[2]).trim();
+        const cVal = limpiarTextoCelda(row[2]);
         if (/^\d{3,8}$/.test(cVal)) ciu = cVal;
       }
 
@@ -555,21 +601,21 @@ export function parsearExcel(
       // OCUPANTE en col 5 + colOffset
       const rawNombre =
         row[5 + colOffset] !== null && row[5 + colOffset] !== undefined
-          ? String(row[5 + colOffset]).trim()
+          ? limpiarTextoCelda(row[5 + colOffset])
           : "";
       const nombreNorm = rawNombre ? rawNombre.toUpperCase().replace(/\s+/g, " ") : "SIN NOMBRE";
 
       // Artículo en col 13 + colOffset
       const rawArt =
         row[13 + colOffset] !== null && row[13 + colOffset] !== undefined
-          ? String(row[13 + colOffset]).trim()
+          ? limpiarTextoCelda(row[13 + colOffset])
           : "";
       const actividadFila = rawArt ? rawArt.toUpperCase() : "GENERAL";
 
       // Puesto en col 19 + colOffset
       let rawPuesto =
         row[19 + colOffset] !== null && row[19 + colOffset] !== undefined
-          ? String(row[19 + colOffset]).trim()
+          ? limpiarTextoCelda(row[19 + colOffset])
           : "";
 
       // Si col 19 está vacío, asignar "S/N" sin tomar jamás MTR (col 24) como puesto
@@ -593,7 +639,7 @@ export function parsearExcel(
       // CIU
       let ciu = "S/N";
       if (colOffset > 0 && row[0] !== null && row[0] !== undefined) {
-        const cVal = String(row[0]).trim();
+        const cVal = limpiarTextoCelda(row[0]);
         if (/^\d{3,8}$/.test(cVal)) ciu = cVal;
       }
 
@@ -717,7 +763,7 @@ export function parsearExcel(
       let nombreIndex = -1;
 
       if (colNombre !== -1 && row[colNombre]) {
-        const candidate = String(row[colNombre] ?? "").trim();
+        const candidate = limpiarTextoCelda(row[colNombre]);
         if (
           candidate &&
           !esFechaOBasura(row[colNombre], candidate) &&
@@ -733,7 +779,7 @@ export function parsearExcel(
         for (let c = cedulaIndex + 1; c < Math.min(row.length, cedulaIndex + 6); c++) {
           const val = row[c];
           if (val === null || val === undefined) continue;
-          const strVal = String(val).trim();
+          const strVal = limpiarTextoCelda(val);
           if (!strVal || esFechaOBasura(val, strVal) || /^\d+(\.\d+)?$/.test(strVal)) continue;
           if (/[A-Za-zÁÉÍÓÚÑáéíóúñ]/.test(strVal) && strVal.length > nombre.length) {
             nombre = strVal.toUpperCase().replace(/\s+/g, " ");
@@ -752,19 +798,19 @@ export function parsearExcel(
       let puesto = "-";
 
       if (colArticulo !== -1 && row[colArticulo]) {
-        const artStr = String(row[colArticulo]).trim().toUpperCase();
+        const artStr = limpiarTextoCelda(row[colArticulo]).toUpperCase();
         if (artStr && !esFechaOBasura(row[colArticulo], artStr)) {
           actividadFila = artStr;
         }
       }
 
       if (colPuesto !== -1 && row[colPuesto]) {
-        const pStr = String(row[colPuesto]).trim();
+        const pStr = limpiarTextoCelda(row[colPuesto]);
         if (pStr && !esFechaOBasura(row[colPuesto], pStr)) {
           puesto = pStr;
         }
       } else if (colDescripcion !== -1 && row[colDescripcion]) {
-        const dStr = String(row[colDescripcion]).trim();
+        const dStr = limpiarTextoCelda(row[colDescripcion]);
         if (dStr && !esFechaOBasura(row[colDescripcion], dStr)) {
           puesto = dStr;
         }
@@ -775,7 +821,7 @@ export function parsearExcel(
           if (c === colMts) continue;
           const val = row[c];
           if (val === null || val === undefined) continue;
-          const strVal = String(val).trim();
+          const strVal = limpiarTextoCelda(val);
           if (!strVal || esFechaOBasura(val, strVal)) continue;
           if (/\b(mts?|m2|metros)\b/i.test(strVal)) continue;
           puesto = strVal;
@@ -789,7 +835,7 @@ export function parsearExcel(
 
       let ciu = "S/N";
       if (colCiu !== -1 && row[colCiu]) {
-        ciu = String(row[colCiu]).trim();
+        ciu = limpiarTextoCelda(row[colCiu]);
       }
 
       if (!naveDetectada || naveDetectada === "NO DEFINIDA") {
@@ -824,7 +870,18 @@ export function parsearExcel(
     }
   }
 
-  return registros;
+  // REGLA 2: Asignación secuencial de puestos GeneralXX si la nave o el archivo es Ambulantes
+  const esAmbulantesArchivo =
+    esNaveAmbulantes(naveDetectada) ||
+    esNaveAmbulantes(fileName) ||
+    (fileName ? fileName.toUpperCase().includes("AMBULANTE") : false) ||
+    sheetNameUpper.includes("AMBULANTE");
+
+  const registrosFinales = esAmbulantesArchivo
+    ? aplicarReglaPuestosAmbulantes(registros, fileName || naveDetectada)
+    : registros;
+
+  return registrosFinales;
 }
 
 // ── Parseo de XML y CSV ─────────────────────────────────────────────────────
@@ -838,9 +895,9 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
   let match;
   let i = 1;
   while ((match = regex.exec(contenidoNorm)) !== null) {
-    const nombre = match[2].trim();
-    const puesto = match[3].trim();
-    const nave = match[1].trim();
+    const nombre = limpiarTextoCelda(match[2]);
+    const puesto = limpiarTextoCelda(match[3]);
+    const nave = limpiarTextoCelda(match[1]);
     const desglosados = desglosarCodigosPuestoMultiples(puesto);
     for (const p of desglosados) {
       const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, "General");
@@ -853,7 +910,7 @@ export function parsearXML(contenido: string): ImportacionRegistro[] {
         nave,
         puesto: puestoConDistincion,
         numBodega: puestoConDistincion,
-        gen01Codi: match[4].trim(),
+        gen01Codi: limpiarTextoCelda(match[4]),
       });
     }
     i++;
@@ -964,28 +1021,28 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
 
     if (tieneCabecera && (idxCedula !== -1 || idxNombre !== -1)) {
       if (idxCiu !== -1) {
-        const valCiu = (partes[idxCiu] || "").trim();
+        const valCiu = limpiarTextoCelda(partes[idxCiu]);
         ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
       }
-      if (idxCedula !== -1 && partes[idxCedula]) cedula = partes[idxCedula].trim();
-      if (idxNombre !== -1 && partes[idxNombre]) nombre = partes[idxNombre].trim();
-      if (idxActividad !== -1 && partes[idxActividad]) actividad = partes[idxActividad].trim() || "General";
-      if (idxPuesto !== -1 && partes[idxPuesto]) puesto = partes[idxPuesto].trim() || "-";
-      if (idxNave !== -1 && partes[idxNave]) nave = partes[idxNave].trim();
+      if (idxCedula !== -1 && partes[idxCedula]) cedula = limpiarTextoCelda(partes[idxCedula]);
+      if (idxNombre !== -1 && partes[idxNombre]) nombre = limpiarTextoCelda(partes[idxNombre]);
+      if (idxActividad !== -1 && partes[idxActividad]) actividad = limpiarTextoCelda(partes[idxActividad]) || "General";
+      if (idxPuesto !== -1 && partes[idxPuesto]) puesto = limpiarTextoCelda(partes[idxPuesto]) || "-";
+      if (idxNave !== -1 && partes[idxNave]) nave = limpiarTextoCelda(partes[idxNave]);
     } else {
       if (partes.length >= 5) {
-        const valCiu = (partes[0] || "").trim();
+        const valCiu = limpiarTextoCelda(partes[0]);
         ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
-        cedula = (partes[1] || "").trim();
-        nombre = (partes[2] || "Comerciante").trim();
-        actividad = (partes[3] || "General").trim();
-        puesto = (partes[4] || "-").trim();
-        nave = (partes[5] || "").trim();
+        cedula = limpiarTextoCelda(partes[1]);
+        nombre = limpiarTextoCelda(partes[2]) || "Comerciante";
+        actividad = limpiarTextoCelda(partes[3]) || "General";
+        puesto = limpiarTextoCelda(partes[4]) || "-";
+        nave = limpiarTextoCelda(partes[5]);
       } else if (partes.length >= 4) {
-        nave = (partes[0] || "").trim();
-        nombre = (partes[1] || "Comerciante").trim();
-        puesto = (partes[2] || "-").trim();
-        cedula = (partes[3] || "").trim();
+        nave = limpiarTextoCelda(partes[0]);
+        nombre = limpiarTextoCelda(partes[1]) || "Comerciante";
+        puesto = limpiarTextoCelda(partes[2]) || "-";
+        cedula = limpiarTextoCelda(partes[3]);
       }
     }
 

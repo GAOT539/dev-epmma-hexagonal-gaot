@@ -226,6 +226,88 @@ export function filtrarDuplicadosExactos100(
 }
 
 /**
+ * Identifica si un identificador o nombre corresponde a la nave de Puestos Ambulantes.
+ */
+export function esNaveAmbulantes(nave?: string | null): boolean {
+  if (!nave) return false;
+  const u = nave.normalize("NFC").trim().toUpperCase();
+  return (
+    u === "AMBULANTES" ||
+    u === "PUESTOS AMBULANTES" ||
+    u.includes("AMBULANTE")
+  );
+}
+
+/**
+ * REGLA 2: Asignación secuencial General01, General02, ..., GeneralN EXCLUSIVA para AMBULANTES.
+ * Solo afecta a la nave AMBULANTES.
+ * A puestos nulos, vacíos ("NULL", "S/N", "", "-") o duplicados en el lote de Ambulantes,
+ * les asigna secuencialmente un identificador GeneralXX (sin colisionar con puestos existentes).
+ */
+export function aplicarReglaPuestosAmbulantes(
+  registros: ImportacionRegistro[],
+  contextoNaveOArchivo?: string
+): ImportacionRegistro[] {
+  if (!registros || registros.length === 0) return registros;
+
+  const esAmbulantesPorContexto = Boolean(
+    contextoNaveOArchivo && (
+      esNaveAmbulantes(contextoNaveOArchivo) ||
+      contextoNaveOArchivo.toUpperCase().includes("AMBULANTE") ||
+      contextoNaveOArchivo.toUpperCase() === "NAVE" ||
+      contextoNaveOArchivo.toUpperCase() === "(NAVE)"
+    )
+  );
+
+  const esAmbulantesPorRegistros = registros.some((r) => esNaveAmbulantes(r.nave));
+
+  if (!esAmbulantesPorContexto && !esAmbulantesPorRegistros) {
+    return registros;
+  }
+
+  const esPuestoNuloOVacio = (p?: string | null): boolean => {
+    if (!p) return true;
+    const u = p.normalize("NFC").trim().toUpperCase();
+    return (
+      u === "" ||
+      u === "-" ||
+      u === "NULL" ||
+      u === "S/N" ||
+      u === "SN"
+    );
+  };
+
+  const puestosVistos = new Set<string>();
+  let contadorSecuencial = 1;
+
+  return registros.map((reg) => {
+    const puestoRaw = (reg.puesto || "").normalize("NFC").trim();
+    const puestoUpper = puestoRaw.toUpperCase();
+
+    if (!esPuestoNuloOVacio(puestoRaw) && !puestosVistos.has(puestoUpper)) {
+      puestosVistos.add(puestoUpper);
+      return reg;
+    }
+
+    // Puesto nulo/vacío o duplicado: generar GeneralXX disponible
+    let nuevoCodigo = `General${String(contadorSecuencial).padStart(2, "0")}`;
+    while (puestosVistos.has(nuevoCodigo.toUpperCase())) {
+      contadorSecuencial++;
+      nuevoCodigo = `General${String(contadorSecuencial).padStart(2, "0")}`;
+    }
+
+    puestosVistos.add(nuevoCodigo.toUpperCase());
+    contadorSecuencial++;
+
+    return {
+      ...reg,
+      puesto: nuevoCodigo,
+      numBodega: nuevoCodigo,
+    };
+  });
+}
+
+/**
  * Distingue de forma inteligente entre Códigos de Bodegas/Locales y Códigos Numéricos de Puestos:
  * - Bodegas/Locales: Inician con BODEGA, CUBICULO, NUCLEO, LOCAL, ZCF o tienen formato con prefijo/sufijo de nave (N-H-01, N-02A-H).
  * - Puestos Numéricos: "001", "058-063", "125", "4A", "7".
@@ -308,6 +390,22 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
   }
 
   const upper = codigo.normalize("NFC").trim().toUpperCase().replace(/#/g, "").trim();
+
+  // Protección contra colisiones para puestos de Ambulantes "GeneralXX" (REGLA 2)
+  const matchGeneral = upper.match(/^GENERAL[-_\s]*(\d+)$/i);
+  if (matchGeneral) {
+    const rawNum = matchGeneral[1];
+    const numInt = parseInt(rawNum, 10);
+    const numPad = String(numInt).padStart(2, "0");
+    return {
+      categoria: "",
+      tokenFinal: `GENERAL${numPad}`,
+      numeroBase: String(numInt),
+      sufijoAlfanumerico: "GENERAL",
+      esRangoCompuesto: false,
+      rangoNormalizado: "",
+    };
+  }
 
   // 1. Extraer categoría funcional
   let categoria: "BODEGA" | "CUBICULO" | "NUCLEO" | "" = "";
@@ -713,14 +811,26 @@ export function reconciliarCatastroNaveExistente(
       );
 
       // Si no existe pero el puesto que ocupaba antes era un placeholder sobrante (> maxNumeroPuroExcel),
-      // o coincide con su puesto actual:
+      // o coincide con su puesto actual, o es el único registro para la persona (REGLA 1: actualización de código en sitio):
       if (!puestoDestino) {
         const esPlaceholderSobrante =
           maxNumeroPuroExcel > 0 &&
           /^\d+$/.test(puestoActualMatch.codigo.trim()) &&
           parseInt(puestoActualMatch.codigo.trim(), 10) > maxNumeroPuroExcel;
 
-        if (esPlaceholderSobrante || sonCodigosPuestosEquivalentes(puestoActualMatch.codigo, codigoExcel)) {
+        const esUnicoRegistroParaPersona =
+          candidatos.length === 1 &&
+          !registros.some(
+            (r, rIdx) =>
+              rIdx !== idx &&
+              sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, comMismoPuesto!)
+          );
+
+        if (
+          esPlaceholderSobrante ||
+          sonCodigosPuestosEquivalentes(puestoActualMatch.codigo, codigoExcel) ||
+          esUnicoRegistroParaPersona
+        ) {
           puestoDestino = puestoActualMatch;
         }
       }

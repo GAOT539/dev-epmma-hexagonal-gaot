@@ -16,6 +16,8 @@ import {
   expandirRegistrosMultiPuesto,
   filtrarDuplicadosExactos100,
   generarSlugNave,
+  esNaveAmbulantes,
+  aplicarReglaPuestosAmbulantes,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
@@ -24,12 +26,23 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const registrosRaw: ImportacionRegistro[] = body.registros || [];
-    const registrosExpandidos = expandirRegistrosMultiPuesto(registrosRaw);
-    const { registrosUnicos: registros } = filtrarDuplicadosExactos100(registrosExpandidos);
     const naveIdManual: string | undefined = body.naveIdManual?.trim();
     const crearNuevaNave: boolean = Boolean(body.crearNuevaNave);
     const nuevoNombreNave: string | undefined = body.nuevoNombreNave?.trim();
     const modoUnificacion = "UNIFICAR";
+
+    // REGLA 2: Asignación secuencial de puestos GeneralXX si la nave de destino es Ambulantes
+    const esAmbulantesDestino =
+      esNaveAmbulantes(naveIdManual) ||
+      esNaveAmbulantes(nuevoNombreNave) ||
+      registrosRaw.some((r) => esNaveAmbulantes(r.nave));
+
+    const registrosBase = esAmbulantesDestino
+      ? aplicarReglaPuestosAmbulantes(registrosRaw, naveIdManual || nuevoNombreNave)
+      : registrosRaw;
+
+    const registrosExpandidos = expandirRegistrosMultiPuesto(registrosBase);
+    let { registrosUnicos: registros } = filtrarDuplicadosExactos100(registrosExpandidos);
 
     if (!Array.isArray(registros) || registros.length === 0) {
       return NextResponse.json(
@@ -123,6 +136,14 @@ export async function POST(request: Request) {
           { status: 403 }
         );
       }
+    }
+
+    // Si la nave detectada o existente en BD es Ambulantes y aún no se había aplicado la regla:
+    if (
+      !esAmbulantesDestino &&
+      ((naveExistente && esNaveAmbulantes(naveExistente.nombre)) || esNaveAmbulantes(naveDetectada))
+    ) {
+      registros = aplicarReglaPuestosAmbulantes(registros, naveExistente?.nombre || naveDetectada);
     }
 
     // 2. Si la nave no fue encontrada y NO se indicó crear nueva nave

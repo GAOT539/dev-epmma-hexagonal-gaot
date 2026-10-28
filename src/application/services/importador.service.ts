@@ -5,9 +5,12 @@ import type {
   OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 import { importadorRepository } from "@/infrastructure/repositories/importador.repository.impl";
-import { filtrarDuplicadosExactos100 } from "@/infrastructure/database/catastro-reconciliacion.service";
+import {
+  filtrarDuplicadosExactos100,
+  aplicarReglaPuestosAmbulantes,
+} from "@/infrastructure/database/catastro-reconciliacion.service";
 
-export { filtrarDuplicadosExactos100 };
+export { filtrarDuplicadosExactos100, aplicarReglaPuestosAmbulantes };
 
 export class ImportadorService {
   constructor(private readonly repository: IImportadorRepository) {}

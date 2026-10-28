@@ -17,7 +17,11 @@ import {
   Plus,
 } from "lucide-react";
 import Link from "next/link";
-import { importadorService, filtrarDuplicadosExactos100 } from "@/application/services/importador.service";
+import {
+  importadorService,
+  filtrarDuplicadosExactos100,
+  aplicarReglaPuestosAmbulantes,
+} from "@/application/services/importador.service";
 import { naveService, esNavePermitidaParaUsuario } from "@/application/services/nave.service";
 import { useAuth } from "@/application/services/auth.service";
 import type { Nave } from "@/domain/models/nave.model";
@@ -272,10 +276,14 @@ export default function IngresoCatastroPage() {
     setParseando(true);
     setModalPreguntaAmbulantesOpen(false);
     try {
-      const registrosAmbulantes = registrosPendientesAmbulantes.map((r) => ({
+      const registrosConNave = registrosPendientesAmbulantes.map((r) => ({
         ...r,
         nave: naveAmbulantesAutorizada.nombre,
       }));
+      const registrosAmbulantes = aplicarReglaPuestosAmbulantes(
+        registrosConNave,
+        naveAmbulantesAutorizada.nombre
+      );
       setRegistros(registrosAmbulantes);
       const opc: OpcionesImportacion = {
         modoUnificacion: "UNIFICAR",
