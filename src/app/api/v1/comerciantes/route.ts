@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
+import { invalidarVerificacionNave } from "@/infrastructure/database/nave-puestos-sync.service";
 import {
   generarSlugNave,
   compararCodigosPuesto,
@@ -282,6 +283,12 @@ export async function POST(request: Request) {
 
       return nuevo;
     });
+
+    if (resultado?.nave) {
+      invalidarVerificacionNave(resultado.nave);
+    } else {
+      invalidarVerificacionNave();
+    }
 
     if (puestoId) {
       await asegurarAsistenciaInicialDelDia(undefined, true);

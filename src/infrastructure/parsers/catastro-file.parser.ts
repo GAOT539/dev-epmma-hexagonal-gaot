@@ -1089,3 +1089,40 @@ export function parsearCSV(contenido: string): ImportacionRegistro[] {
 
   return registros;
 }
+
+/**
+ * Obtiene los nombres de las hojas disponibles en un libro Excel.
+ */
+export function obtenerHojasExcel(data: ArrayBuffer | Uint8Array): string[] {
+  try {
+    const workbook = XLSX.read(data, { type: "array" });
+    return workbook.SheetNames || [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Parser unificado de archivos de catastro (.xls, .xlsx, .csv, .xml).
+ */
+export function parsearArchivoCatastro(
+  data: ArrayBuffer | Uint8Array | string,
+  fileName?: string
+): ImportacionRegistro[] {
+  const ext = (fileName || "").toLowerCase().split(".").pop();
+  if (typeof data === "string") {
+    if (ext === "xml" || data.trim().startsWith("<")) {
+      return parsearXML(data);
+    }
+    return parsearCSV(data);
+  }
+  if (ext === "csv") {
+    const decoder = new TextDecoder("utf-8");
+    return parsearCSV(decoder.decode(data));
+  }
+  if (ext === "xml") {
+    const decoder = new TextDecoder("utf-8");
+    return parsearXML(decoder.decode(data));
+  }
+  return parsearExcel(data, fileName);
+}

@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { PlanoEspacialNave, CeldaPlanoNave } from "@/domain/models/nave.model";
+import { invalidarVerificacionNave } from "@/infrastructure/database/nave-puestos-sync.service";
 import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
@@ -105,6 +106,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
         planoJson: celdas as unknown as Prisma.InputJsonValue,
       },
     });
+
+    invalidarVerificacionNave(id);
 
     return NextResponse.json({
       naveId: planoGuardado.naveId,

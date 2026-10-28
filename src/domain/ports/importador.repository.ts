@@ -16,11 +16,28 @@ export interface IImportadorRepository {
     registros: ImportacionRegistro[],
     opciones?: OpcionesImportacion
   ): Promise<ImportacionResultado>;
+  ejecutarImportacion(
+    registros: ImportacionRegistro[],
+    opciones?: OpcionesImportacion
+  ): Promise<ImportacionResultado>;
   parsearExcel(
     data: ArrayBuffer | Uint8Array,
     fileName?: string
   ): Promise<ImportacionRegistro[]>;
+  parsearArchivoCatastro(
+    data: ArrayBuffer | Uint8Array | string,
+    fileName?: string
+  ): Promise<ImportacionRegistro[]>;
+  obtenerHojasExcel(data: ArrayBuffer | Uint8Array): Promise<string[]>;
   parsearXML(contenido: string): Promise<ImportacionRegistro[]>;
   parsearCSV(contenido: string): Promise<ImportacionRegistro[]>;
   generarRegistrosEjemplo(cantidad?: number): Promise<ImportacionRegistro[]>;
+  filtrarDuplicadosExactos100(registros: ImportacionRegistro[]): {
+    registrosUnicos: ImportacionRegistro[];
+    duplicadosOmitidos: ImportacionRegistro[];
+  };
+  aplicarReglaPuestosAmbulantes(
+    registros: ImportacionRegistro[],
+    naveDestino?: string
+  ): ImportacionRegistro[];
 }

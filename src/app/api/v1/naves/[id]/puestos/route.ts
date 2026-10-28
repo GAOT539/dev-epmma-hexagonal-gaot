@@ -4,6 +4,7 @@ import type { Prisma } from "@prisma/client";
 import {
   sincronizarPuestosDeNaveEnBD,
   generarSlugNave,
+  invalidarVerificacionNave,
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { ordenarPuestos } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { logError } from "@/infrastructure/logger/system-logger";
@@ -197,6 +198,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
       return ordenarPuestos(puestosActualizados);
     });
+
+    invalidarVerificacionNave(id);
 
     return NextResponse.json({
       success: true,

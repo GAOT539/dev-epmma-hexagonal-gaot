@@ -101,16 +101,19 @@ const navesYaVerificadasEnSesion = new Set<string>();
 
 /**
  * Invalida el caché de naves verificadas en memoria cuando se modifica o crea una nave,
- * o cuando se importa un nuevo catastro.
+ * comerciantes, puestos, planos, o cuando se importa un nuevo catastro.
  */
-export function invalidarNavesYaVerificadas(naveId?: string): void {
+export function invalidarVerificacionNave(naveId?: string): void {
   if (naveId) {
     navesYaVerificadasEnSesion.delete(naveId);
     navesYaVerificadasEnSesion.delete(generarSlugNave(naveId));
+    navesYaVerificadasEnSesion.delete(naveId.toLowerCase());
   } else {
     navesYaVerificadasEnSesion.clear();
   }
 }
+
+export const invalidarNavesYaVerificadas = invalidarVerificacionNave;
 
 /**
  * Entrada pública con deduplicación de promesas en vuelo y memoria de naves verificadas.
@@ -378,8 +381,8 @@ async function ejecutarSincronizacionPuestosDeNaveEnBD(naveIdONombre: string): P
   }
 
   const totalPuestos = puestosFinales.length;
-  if (totalPuestos < capacidadObjetivo) {
-    const faltantes = capacidadObjetivo - totalPuestos;
+  const faltantesParaCapacidad = capacidadObjetivo - totalPuestos;
+  if (faltantesParaCapacidad > 0) {
     const codigosExistentes = new Set(puestosFinales.map((p) => p.codigo.trim().toUpperCase()));
     const numerosExistentes = new Set(
       puestosFinales
@@ -393,7 +396,7 @@ async function ejecutarSincronizacionPuestosDeNaveEnBD(naveIdONombre: string): P
     const nuevosVacantes = [];
     let num = 1;
 
-    for (let i = 0; i < faltantes; i++) {
+    for (let i = 0; i < faltantesParaCapacidad; i++) {
       while (codigosExistentes.has(String(num)) || numerosExistentes.has(num)) {
         num++;
       }

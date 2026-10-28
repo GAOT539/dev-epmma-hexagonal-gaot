@@ -344,7 +344,7 @@ export default function IngresoCatastroPage() {
   async function handleConfirmarImportacion() {
     setProcesando(true);
     try {
-      const res = await importadorService.guardarImportacion(registros, opcionesImportacion);
+      const res = await importadorService.ejecutarImportacion(registros, opcionesImportacion);
       setResultado(res);
       setPaso("resultado");
 

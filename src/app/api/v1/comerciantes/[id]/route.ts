@@ -5,6 +5,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { invalidarVerificacionNave } from "@/infrastructure/database/nave-puestos-sync.service";
 import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
@@ -232,6 +233,12 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return com;
     });
 
+    if (actualizado?.nave || actual?.nave) {
+      invalidarVerificacionNave((actualizado?.nave || actual?.nave) ?? undefined);
+    } else {
+      invalidarVerificacionNave();
+    }
+
     if (puestoNuevo) {
       await asegurarAsistenciaInicialDelDia(undefined, true);
     }
@@ -274,6 +281,12 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         },
       });
     });
+
+    if (actual?.nave) {
+      invalidarVerificacionNave(actual.nave ?? undefined);
+    } else {
+      invalidarVerificacionNave();
+    }
 
     return NextResponse.json({ success: true, message: "Comerciante deshabilitado exitosamente." });
   } catch (error) {
