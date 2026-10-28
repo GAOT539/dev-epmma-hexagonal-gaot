@@ -76,9 +76,9 @@ export default function ReportesPage() {
   // Cargar límites de fechas reales de la base de datos
   useEffect(() => {
     let activo = true;
-    fetch("/api/v1/asistencia?meta=limites")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    asistenciaService
+      .obtenerLimitesFechas()
+      .then((data: { minFecha: string | null; maxFecha: string | null; hoy?: string } | null) => {
         if (!activo || !data) return;
         const hoyStr = data.hoy || format(new Date(), "yyyy-MM-dd");
         const minFechaStr = data.minFecha || hoyStr;

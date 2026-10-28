@@ -14,7 +14,7 @@ import {
   Building,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useAuth } from "@/infrastructure/auth/auth-context";
+import { useAuth } from "@/application/services/auth.service";
 import { naveService } from "@/application/services/nave.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

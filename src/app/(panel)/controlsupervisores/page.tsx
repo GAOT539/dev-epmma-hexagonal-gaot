@@ -18,6 +18,7 @@ import { format, isBefore, startOfDay, endOfDay, parseISO } from "date-fns";
 import { toast } from "sonner";
 import { auditoriaService } from "@/application/services/auditoria.service";
 import { usuarioService } from "@/application/services/usuario.service";
+import { asistenciaService } from "@/application/services/asistencia.service";
 import type { SesionControlSupervisor } from "@/domain/models/auditoria.model";
 import type { Usuario } from "@/domain/models/usuario.model";
 import { Button } from "@/components/ui/button";
@@ -77,9 +78,9 @@ export default function ControlSupervisoresPage() {
   // Cargar límites de fechas reales de la base de datos
   useEffect(() => {
     let activo = true;
-    fetch("/api/v1/asistencia?meta=limites")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    asistenciaService
+      .obtenerLimitesFechas()
+      .then((data: { minFecha: string | null; maxFecha: string | null; hoy?: string } | null) => {
         if (!activo || !data) return;
         setLimites({
           minFecha: data.minFecha || format(new Date(), "yyyy-MM-dd"),

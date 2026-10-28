@@ -233,9 +233,13 @@ export async function PUT(request: Request, { params }: RouteParams) {
       return com;
     });
 
-    if (actualizado?.nave || actual?.nave) {
-      invalidarVerificacionNave((actualizado?.nave || actual?.nave) ?? undefined);
-    } else {
+    if (actual?.nave) {
+      invalidarVerificacionNave(actual.nave);
+    }
+    if (actualizado?.nave) {
+      invalidarVerificacionNave(actualizado.nave);
+    }
+    if (!actual?.nave && !actualizado?.nave) {
       invalidarVerificacionNave();
     }
 
