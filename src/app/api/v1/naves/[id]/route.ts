@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import { logError } from "@/infrastructure/logger/system-logger";
+import { invalidarNavesYaVerificadas } from "@/infrastructure/database/nave-puestos-sync.service";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -170,6 +171,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
       }
     });
 
+    invalidarNavesYaVerificadas(id);
+
     const naveActualizada = await prisma.nave.findUnique({
       where: { id },
       include: { puestos: true },
@@ -267,6 +270,8 @@ export async function DELETE(request: Request, { params }: RouteParams) {
         }
       }
     });
+
+    invalidarNavesYaVerificadas(id);
 
     return NextResponse.json({ exito: true, mensaje: "Nave eliminada correctamente." });
   } catch (error) {

@@ -17,6 +17,8 @@ declare global {
   var __epmma_sync_in_flight: Promise<{ totalInicializados: number; fecha: string }> | undefined;
 }
 
+let promesaEnVuelo: Promise<void> | null = null;
+
 /**
  * Obtiene la fecha actual en la zona horaria oficial de Ecuador (America/Guayaquil)
  * en formato estándar ISO "YYYY-MM-DD".
@@ -87,7 +89,22 @@ export async function asegurarAsistenciaInicialDelDia(
   })();
 
   globalThis.__epmma_sync_in_flight = syncPromise;
+  promesaEnVuelo = syncPromise.then(() => {}).catch(() => {});
   return syncPromise;
+}
+
+/**
+ * Deduplica en vuelo llamadas simultáneas de inicialización de asistencia diaria.
+ */
+export async function asegurarAsistenciasFaltaDelDia(
+  fechaHoyStr?: string,
+  forzar: boolean = false
+): Promise<void> {
+  if (!forzar && promesaEnVuelo) {
+    await promesaEnVuelo;
+    return;
+  }
+  await asegurarAsistenciaInicialDelDia(fechaHoyStr, forzar);
 }
 
 async function ejecutarAsegurarAsistencia(hoyStr: string): Promise<{

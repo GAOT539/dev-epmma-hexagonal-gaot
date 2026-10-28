@@ -4,7 +4,11 @@ import type {
   ImportacionRegistro,
   ReconciliacionResumen,
   CambioReconciliacion,
+  AccionReconciliacionItem,
+  ResultadoSimulacionCatastro,
 } from "@/domain/models/comerciante.model";
+
+export type { AccionReconciliacionItem, ResultadoSimulacionCatastro };
 
 export interface ComponentesCodigoPuesto {
   categoria: "BODEGA" | "CUBICULO" | "NUCLEO" | "";

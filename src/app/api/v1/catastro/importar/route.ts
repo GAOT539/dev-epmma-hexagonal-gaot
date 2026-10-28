@@ -9,6 +9,7 @@ import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily
 import {
   sincronizarPuestosDeNaveEnBD,
   asegurarColacionEspanolEnBD,
+  invalidarNavesYaVerificadas,
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import {
   reconciliarCatastroNaveExistente,
@@ -259,6 +260,7 @@ export async function POST(request: Request) {
         return { exitosos, errores, naveId: nuevaNave.id, nombreNave: nuevaNave.nombre };
       }, { maxWait: 15000, timeout: 60000 });
 
+      invalidarNavesYaVerificadas();
       await sincronizarPuestosDeNaveEnBD(resultadoCreacion.naveId);
       await asegurarAsistenciaInicialDelDia(undefined, true);
 
@@ -419,6 +421,7 @@ export async function POST(request: Request) {
       });
     }, { maxWait: 15000, timeout: 60000 });
 
+    invalidarNavesYaVerificadas(naveExistente!.id);
     await sincronizarPuestosDeNaveEnBD(naveExistente!.id);
     await asegurarAsistenciaInicialDelDia(undefined, true);
 

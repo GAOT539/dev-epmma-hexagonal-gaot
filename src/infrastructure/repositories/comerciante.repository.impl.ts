@@ -3,14 +3,24 @@
 import type { IComercianteRepository } from "@/domain/ports/comerciante.repository";
 import type { Comerciante, Puesto } from "@/domain/models/comerciante.model";
 
+let inFlightGetComerciantes: Promise<Comerciante[]> | null = null;
+
 export class ComercianteRepositoryImpl implements IComercianteRepository {
   async obtenerComerciantes(): Promise<Comerciante[]> {
-    const res = await fetch("/api/v1/comerciantes");
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || data.mensaje || "Error al obtener comerciantes");
-    }
-    return await res.json();
+    if (inFlightGetComerciantes) return inFlightGetComerciantes;
+
+    inFlightGetComerciantes = (async () => {
+      const res = await fetch("/api/v1/comerciantes");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || data.mensaje || "Error al obtener comerciantes");
+      }
+      return await res.json();
+    })().finally(() => {
+      inFlightGetComerciantes = null;
+    });
+
+    return inFlightGetComerciantes;
   }
 
   async obtenerComerciantePorId(id: string): Promise<Comerciante | null> {

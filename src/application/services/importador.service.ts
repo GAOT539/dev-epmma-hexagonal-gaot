@@ -3,6 +3,7 @@ import type {
   ImportacionRegistro,
   ImportacionResultado,
   OpcionesImportacion,
+  ResultadoSimulacionCatastro,
 } from "@/domain/models/comerciante.model";
 import { importadorRepository } from "@/infrastructure/repositories/importador.repository.impl";
 import {
@@ -17,9 +18,14 @@ export class ImportadorService {
 
   async simularImportacion(
     registros: ImportacionRegistro[],
-    opciones?: OpcionesImportacion
-  ): Promise<ImportacionResultado> {
-    return this.repository.simularImportacion(registros, opciones);
+    opcionesONaveDetectada?: OpcionesImportacion | string | null,
+    naveIdManual?: string
+  ): Promise<ResultadoSimulacionCatastro> {
+    return this.repository.simularImportacion(
+      registros,
+      opcionesONaveDetectada,
+      naveIdManual
+    );
   }
 
   async guardarImportacion(

@@ -9,12 +9,42 @@ interface PrismaConEventos {
   $on(event: "error" | "warn", callback: (event: Prisma.LogEvent) => void): void;
 }
 
+/**
+ * Optimiza los parámetros del Connection Pool para MySQL/MariaDB en alta concurrencia
+ * evitando saturación de sockets y bloqueos por tiempo de espera.
+ */
+function obtenerDatabaseUrlOptimizada(): string | undefined {
+  const url = process.env.DATABASE_URL;
+  if (!url) return undefined;
+  try {
+    const parsed = new URL(url);
+    if (!parsed.searchParams.has("connection_limit")) {
+      parsed.searchParams.set("connection_limit", "15");
+    }
+    if (!parsed.searchParams.has("pool_timeout")) {
+      parsed.searchParams.set("pool_timeout", "15");
+    }
+    if (!parsed.searchParams.has("connect_timeout")) {
+      parsed.searchParams.set("connect_timeout", "10");
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function crearPrismaClient(): PrismaClient {
+  const datasourceUrl = obtenerDatabaseUrlOptimizada();
   const client = new PrismaClient({
+    datasourceUrl,
     log: [
       { emit: "event", level: "error" },
       { emit: "event", level: "warn" },
     ],
+    transactionOptions: {
+      maxWait: 10000,
+      timeout: 30000,
+    },
   });
 
   const clientConEventos = client as unknown as PrismaConEventos;

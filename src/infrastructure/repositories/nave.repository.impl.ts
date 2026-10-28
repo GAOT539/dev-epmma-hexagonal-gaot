@@ -1,15 +1,30 @@
 import type { INaveRepository } from "@/domain/ports/nave.repository";
-import type { Nave, PlanoEspacialNave, Puesto } from "@/domain/models/nave.model";
+import type {
+  Nave,
+  PlanoEspacialNave,
+  Puesto,
+  ReporteVacantesResponse,
+} from "@/domain/models/nave.model";
+
+let inFlightGetNaves: Promise<Nave[]> | null = null;
 
 export class NaveRepositoryImpl implements INaveRepository {
   async obtenerNaves(): Promise<Nave[]> {
-    const res = await fetch("/api/v1/naves");
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.error || data.mensaje || "Error al obtener naves");
-    }
-    const data = await res.json();
-    return Array.isArray(data.naves) ? data.naves : [];
+    if (inFlightGetNaves) return inFlightGetNaves;
+
+    inFlightGetNaves = (async () => {
+      const res = await fetch("/api/v1/naves");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || data.mensaje || "Error al obtener naves");
+      }
+      const data = await res.json();
+      return Array.isArray(data.naves) ? data.naves : [];
+    })().finally(() => {
+      inFlightGetNaves = null;
+    });
+
+    return inFlightGetNaves;
   }
 
   async obtenerNavePorId(id: string): Promise<Nave | null> {
@@ -179,6 +194,15 @@ export class NaveRepositoryImpl implements INaveRepository {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data.puestos)) return data.puestos;
     return [];
+  }
+
+  async obtenerReporteVacantes(): Promise<ReporteVacantesResponse> {
+    const res = await fetch("/api/v1/naves/reporte-vacantes");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener reporte de vacantes");
+    }
+    return await res.json();
   }
 }
 

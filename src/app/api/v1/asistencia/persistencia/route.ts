@@ -122,9 +122,24 @@ export async function POST(request: Request) {
         .map((d) => d.comercianteId)
     );
 
-    // 4. Ejecutar la persistencia en transacción
+    // 4. Consultar en una sola consulta indexada todas las asistencias existentes de fechaHasta (Eliminar N+1)
+    const asistenciasPrevias = await prisma.registroAsistencia.findMany({
+      where: {
+        fecha: fechaHasta,
+        comercianteId: { in: comercianteIds },
+      },
+    });
+
+    const mapaAsistenciasPrevias = new Map<string, (typeof asistenciasPrevias)[0]>();
+    for (const a of asistenciasPrevias) {
+      mapaAsistenciasPrevias.set(a.comercianteId, a);
+    }
+
+    // 5. Ejecutar la persistencia en transacción de alto rendimiento
     const resultado = await prisma.$transaction(async (tx) => {
       const nuevosDetalles: DetalleComercianteControl[] = [];
+      const nuevosRegistros: Prisma.RegistroAsistenciaCreateManyInput[] = [];
+      const updatesAfectados: Array<{ id: string; data: Prisma.RegistroAsistenciaUpdateInput }> = [];
 
       for (const puesto of nave.puestos) {
         const com = puesto.comerciante;
@@ -168,21 +183,10 @@ export async function POST(request: Request) {
           estadoFinal = "Presente";
         }
 
-        // Upsert en la fecha destino: limpia observaciones y aplica persistencia
-        await tx.registroAsistencia.upsert({
-          where: {
-            comercianteId_fecha: { comercianteId: com.idInterno, fecha: fechaHasta },
-          },
-          update: {
-            estado: estadoFinal,
-            observacion: null,
-            observacionTexto: null,
-            observaciones: [],
-            permisos: permisosArray as unknown as Prisma.InputJsonValue,
-            permisoInicio: permisoActivo ? permisosArray[0]?.fechaInicio : null,
-            permisoFin: permisoActivo ? permisosArray[0]?.fechaFin : null,
-          },
-          create: {
+        // Clasificar entre inserción en lote o actualización selectiva
+        const regPrevio = mapaAsistenciasPrevias.get(com.idInterno);
+        if (!regPrevio) {
+          nuevosRegistros.push({
             comercianteId: com.idInterno,
             puestoId: puesto.id,
             fecha: fechaHasta,
@@ -191,8 +195,25 @@ export async function POST(request: Request) {
             permisos: permisosArray as unknown as Prisma.InputJsonValue,
             permisoInicio: permisoActivo ? permisosArray[0]?.fechaInicio : null,
             permisoFin: permisoActivo ? permisosArray[0]?.fechaFin : null,
-          },
-        });
+          });
+        } else {
+          const cambioEstado = regPrevio.estado !== estadoFinal;
+          const tieneObs = Boolean(regPrevio.observacion || regPrevio.observacionTexto);
+          if (cambioEstado || tieneObs || permisoActivo) {
+            updatesAfectados.push({
+              id: regPrevio.id,
+              data: {
+                estado: estadoFinal,
+                observacion: null,
+                observacionTexto: null,
+                observaciones: [],
+                permisos: permisosArray as unknown as Prisma.InputJsonValue,
+                permisoInicio: permisoActivo ? permisosArray[0]?.fechaInicio : null,
+                permisoFin: permisoActivo ? permisosArray[0]?.fechaFin : null,
+              },
+            });
+          }
+        }
 
         nuevosDetalles.push({
           comercianteId: com.idInterno,
@@ -203,6 +224,21 @@ export async function POST(request: Request) {
           estado: estadoFinal,
           metodo: "PERSISTENCIA",
           horaRegistro: new Date().toLocaleTimeString("es-EC", { hour: "2-digit", minute: "2-digit" }),
+        });
+      }
+
+      // Aplicar inserciones en lote y actualizaciones selectivas
+      if (nuevosRegistros.length > 0) {
+        await tx.registroAsistencia.createMany({
+          data: nuevosRegistros,
+          skipDuplicates: true,
+        });
+      }
+
+      for (const up of updatesAfectados) {
+        await tx.registroAsistencia.update({
+          where: { id: up.id },
+          data: up.data,
         });
       }
 

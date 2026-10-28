@@ -10,6 +10,8 @@ import type {
 import type { EstadoAsistencia } from "@/domain/models/asistencia.model";
 import { logError } from "@/infrastructure/logger/system-logger";
 
+const sesionesEnVuelo = new Map<string, Promise<void>>();
+
 export async function asegurarSesionControlActivaDia(params: {
   naveId: string;
   fechaJornada: string;
@@ -17,12 +19,21 @@ export async function asegurarSesionControlActivaDia(params: {
   accion?: string;
 }): Promise<void> {
   const { naveId, fechaJornada, usuarioActor, accion = "Ingreso y gestión operativa" } = params;
+  const supervisorIdClave = usuarioActor?.id || "anon";
+  const lockKey = `${supervisorIdClave}_${fechaJornada}_${naveId}`;
 
-  try {
-    const sesionExistente = await prisma.sesionControlSupervisor.findFirst({
-      where: { naveId, fechaJornada },
-    });
-    if (sesionExistente) return;
+  const enVuelo = sesionesEnVuelo.get(lockKey);
+  if (enVuelo) {
+    await enVuelo;
+    return;
+  }
+
+  const ejecucion = (async () => {
+    try {
+      const sesionExistente = await prisma.sesionControlSupervisor.findFirst({
+        where: { naveId, fechaJornada },
+      });
+      if (sesionExistente) return;
 
     const nave = await prisma.nave.findUnique({
       where: { id: naveId },
@@ -131,7 +142,17 @@ export async function asegurarSesionControlActivaDia(params: {
         detallesComerciantes: detallesComerciantes as unknown as Prisma.InputJsonValue,
       },
     });
-  } catch (err) {
-    logError("SESION-CONTROL", "Error al asegurar sesión de control activa", err);
+    } catch (err) {
+      logError("SESION-CONTROL", "Error al asegurar sesión de control activa", err);
+    }
+  })();
+
+  sesionesEnVuelo.set(lockKey, ejecucion);
+  try {
+    await ejecucion;
+  } finally {
+    sesionesEnVuelo.delete(lockKey);
   }
 }
+
+export const asegurarSesionControlActiva = asegurarSesionControlActivaDia;

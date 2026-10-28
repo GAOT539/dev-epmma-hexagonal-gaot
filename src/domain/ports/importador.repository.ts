@@ -3,13 +3,15 @@ import type {
   ImportacionRegistro,
   ImportacionResultado,
   OpcionesImportacion,
+  ResultadoSimulacionCatastro,
 } from "@/domain/models/comerciante.model";
 
 export interface IImportadorRepository {
   simularImportacion(
     registros: ImportacionRegistro[],
-    opciones?: OpcionesImportacion
-  ): Promise<ImportacionResultado>;
+    opcionesONaveDetectada?: OpcionesImportacion | string | null,
+    naveIdManual?: string
+  ): Promise<ResultadoSimulacionCatastro>;
   guardarImportacion(
     registros: ImportacionRegistro[],
     opciones?: OpcionesImportacion

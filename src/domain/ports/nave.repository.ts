@@ -1,4 +1,9 @@
-import type { Nave, PlanoEspacialNave, Puesto } from "@/domain/models/nave.model";
+import type {
+  Nave,
+  PlanoEspacialNave,
+  Puesto,
+  ReporteVacantesResponse,
+} from "@/domain/models/nave.model";
 
 export interface INaveRepository {
   obtenerNaves(): Promise<Nave[]>;
@@ -31,5 +36,6 @@ export interface INaveRepository {
     naveId: string,
     cambios: Array<{ puestoId: string; nuevoCodigo: string }>
   ): Promise<Puesto[]>;
+  obtenerReporteVacantes(): Promise<ReporteVacantesResponse>;
 }
 

@@ -1,5 +1,10 @@
 import type { INaveRepository } from "@/domain/ports/nave.repository";
-import type { Nave, PlanoEspacialNave, Puesto } from "@/domain/models/nave.model";
+import type {
+  Nave,
+  PlanoEspacialNave,
+  Puesto,
+  ReporteVacantesResponse,
+} from "@/domain/models/nave.model";
 import { naveRepository } from "@/infrastructure/repositories/nave.repository.impl";
 
 export class NaveService {
@@ -72,6 +77,10 @@ export class NaveService {
     cambios: Array<{ puestoId: string; nuevoCodigo: string }>
   ): Promise<Puesto[]> {
     return this.repository.actualizarCodigosPuestosNave(naveId, cambios);
+  }
+
+  async obtenerReporteVacantes(): Promise<ReporteVacantesResponse> {
+    return this.repository.obtenerReporteVacantes();
   }
 }
 

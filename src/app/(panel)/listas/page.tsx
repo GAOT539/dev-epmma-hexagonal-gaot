@@ -139,9 +139,9 @@ export default function ListasPage() {
   // Carga de límites desde la base de datos
   useEffect(() => {
     let activo = true;
-    fetch("/api/v1/asistencia?meta=limites")
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
+    asistenciaService
+      .obtenerLimitesFechas()
+      .then((data: { minFecha: string | null; maxFecha: string | null; hoy?: string } | null) => {
         if (!activo || !data) return;
         setLimites({
           minFecha: data.minFecha || formatDate(new Date()),

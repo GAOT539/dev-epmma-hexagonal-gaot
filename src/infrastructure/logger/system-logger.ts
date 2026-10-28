@@ -35,38 +35,65 @@ export function obtenerTimestampEcuador(): string {
   }
 }
 
+const colaLogs: string[] = [];
+let procesandoCola = false;
+
 /**
- * Asegura la existencia del directorio logs/ y realiza la rotación automática
- * renombrando a ep-ema-system.old.log si el archivo supera los 5 MB.
+ * Worker asíncrono no bloqueante que vuelca la cola de logs a disco de forma
+ * secuencial sin congelar el Event Loop de Node.js ni saturar el sistema de archivos.
  */
-function asegurarDirectorioYRotacion(): void {
+async function procesarColaLogs(): Promise<void> {
+  if (procesandoCola) return;
+  procesandoCola = true;
+
   try {
-    if (!fs.existsSync(LOGS_DIR)) {
-      fs.mkdirSync(LOGS_DIR, { recursive: true });
-    }
-    if (fs.existsSync(LOG_FILE_PATH)) {
-      const stats = fs.statSync(LOG_FILE_PATH);
-      if (stats.size >= MAX_LOG_SIZE) {
-        if (fs.existsSync(OLD_LOG_FILE_PATH)) {
-          fs.unlinkSync(OLD_LOG_FILE_PATH);
+    while (colaLogs.length > 0) {
+      const lote = colaLogs.splice(0, 50).join("");
+      if (!lote) continue;
+
+      try {
+        if (!fs.existsSync(LOGS_DIR)) {
+          await fs.promises.mkdir(LOGS_DIR, { recursive: true });
         }
-        fs.renameSync(LOG_FILE_PATH, OLD_LOG_FILE_PATH);
+
+        try {
+          const stats = await fs.promises.stat(LOG_FILE_PATH);
+          if (stats.size >= MAX_LOG_SIZE) {
+            try {
+              if (fs.existsSync(OLD_LOG_FILE_PATH)) {
+                await fs.promises.unlink(OLD_LOG_FILE_PATH);
+              }
+              await fs.promises.rename(LOG_FILE_PATH, OLD_LOG_FILE_PATH);
+            } catch {
+              // Tolerancia ante rotación concurrente
+            }
+          }
+        } catch {
+          // Archivo aún no existe
+        }
+
+        await fs.promises.appendFile(LOG_FILE_PATH, lote, { encoding: "utf8" });
+      } catch {
+        // Tolerancia si el disco está temporalmente protegido o saturado
       }
     }
-  } catch {
-    // Tolerancia ante restricciones de permisos del sistema de archivos
+  } finally {
+    procesandoCola = false;
+    if (colaLogs.length > 0) {
+      setImmediate(() => {
+        void procesarColaLogs();
+      });
+    }
   }
 }
 
 /**
- * Escribe de forma síncrona y segura la entrada formateada en el archivo de log.
+ * Encola de forma asíncrona y no bloqueante la entrada formateada para su escritura en disco.
  */
-function escribirEnDisco(contenido: string): void {
-  try {
-    asegurarDirectorioYRotacion();
-    fs.appendFileSync(LOG_FILE_PATH, contenido, { encoding: "utf8" });
-  } catch {
-    // Si el disco estuviera protegido contra escritura, evitar abortar el proceso Node
+function encolarEnDisco(contenido: string): void {
+  colaLogs.push(contenido);
+  if (!procesandoCola) {
+    void procesarColaLogs();
   }
 }
 
@@ -154,7 +181,7 @@ export function esErrorConexionBD(error: unknown): boolean {
  */
 export function logInfo(contexto: string, mensaje: string): void {
   const texto = formatearEntrada("INFO", contexto, mensaje);
-  escribirEnDisco(texto);
+  encolarEnDisco(texto);
   if (contexto === "STARTUP") {
     console.log(`[${contexto}] ${mensaje}`);
   }
@@ -167,7 +194,7 @@ export function logWarn(contexto: string, mensaje: string, detalle?: unknown): v
   const esBD = esErrorConexionBD(detalle);
   const nivel = esBD ? "DB" : "WARN";
   const texto = formatearEntrada(nivel, contexto, mensaje, detalle);
-  escribirEnDisco(texto);
+  encolarEnDisco(texto);
 }
 
 /**
@@ -177,5 +204,5 @@ export function logError(contexto: string, mensaje: string, error?: unknown): vo
   const esBD = esErrorConexionBD(error);
   const nivel = esBD ? "DB" : "ERROR";
   const texto = formatearEntrada(nivel, contexto, mensaje, error);
-  escribirEnDisco(texto);
+  encolarEnDisco(texto);
 }

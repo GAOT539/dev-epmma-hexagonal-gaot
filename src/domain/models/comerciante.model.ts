@@ -94,6 +94,9 @@ export interface ImportacionResultado {
   reconciliacion?: ReconciliacionResumen;
 }
 
+export type AccionReconciliacionItem = CambioReconciliacion;
+export type ResultadoSimulacionCatastro = ImportacionResultado;
+
 // ── Re-exportaciones para compatibilidad retrocompatible ─────────────────────
 export type { Rol, Usuario } from "./usuario.model";
 export type {

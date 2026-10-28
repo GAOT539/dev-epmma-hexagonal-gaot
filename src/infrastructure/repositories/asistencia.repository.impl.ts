@@ -227,6 +227,15 @@ export class AsistenciaRepositoryImpl implements IAsistenciaRepository {
     }
     return await res.json();
   }
+
+  async obtenerLimitesFechas(): Promise<{ minFecha: string | null; maxFecha: string | null }> {
+    const res = await fetch("/api/v1/asistencia?meta=limites");
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || data.mensaje || "Error al obtener límites de fechas");
+    }
+    return await res.json();
+  }
 }
 
 export const asistenciaRepository = new AsistenciaRepositoryImpl();

@@ -51,3 +51,24 @@ export interface Nave {
   puestos: Puesto[];
   plano?: PlanoEspacialNave;
 }
+
+export interface ItemReporteVacante {
+  id: string;
+  naveId: string;
+  ubicacionNave: string;
+  giroNegocio: string;
+  espacioComercializacion: string;
+  numeroEspacioComercial: string;
+  areaM2: string;
+  enProcesoJudicial: boolean;
+}
+
+export interface ReporteVacantesResponse {
+  items: ItemReporteVacante[];
+  firmantes?: {
+    elaboradoPorNombre: string;
+    elaboradoPorCargo: string;
+    revisadoPorNombre: string;
+    revisadoPorCargo: string;
+  };
+}

@@ -77,4 +77,5 @@ export interface IAsistenciaRepository {
     fechaFin: string,
     motivo: string
   ): Promise<{ diasJustificados: number }>;
+  obtenerLimitesFechas(): Promise<{ minFecha: string | null; maxFecha: string | null }>;
 }

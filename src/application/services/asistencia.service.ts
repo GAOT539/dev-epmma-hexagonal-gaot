@@ -164,6 +164,10 @@ export class AsistenciaService {
       motivo
     );
   }
+
+  async obtenerLimitesFechas(): Promise<{ minFecha: string | null; maxFecha: string | null }> {
+    return this.repository.obtenerLimitesFechas();
+  }
 }
 
 export const asistenciaService = new AsistenciaService(asistenciaRepository);

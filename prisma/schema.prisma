@@ -124,6 +124,7 @@ model Puesto {
   asistencias   RegistroAsistencia[]
 
   @@index([naveId, codigo])
+  @@index([comercianteId])
   @@index([naveId])
   @@index([naveId, estado])
   @@map("puestos")
@@ -138,6 +139,7 @@ model Comerciante {
   puestoId         String?           @db.VarChar(50)
   nave             String?           @db.VarChar(100)
   estadoRegistro   EstadoComerciante @default(Habilitado)
+  eliminadoEn      DateTime?
   creadoPor        String?           @db.VarChar(100)
   modificadoPor    String?           @db.VarChar(100)
   deshabilitadoPor String?           @db.VarChar(100)
@@ -152,6 +154,9 @@ model Comerciante {
   @@index([ciu])
   @@index([estadoRegistro])
   @@index([nave, estadoRegistro])
+  @@index([eliminadoEn, nave])
+  @@index([eliminadoEn, estadoRegistro])
+  @@index([nave, puestoId])
   @@map("comerciantes")
 }
 
@@ -176,6 +181,7 @@ model RegistroAsistencia {
 
   @@unique([comercianteId, fecha])
   @@index([fecha])
+  @@index([fecha, estado])
   @@index([puestoId])
   @@index([fecha, puestoId])
   @@map("registros_asistencia")
@@ -206,6 +212,7 @@ model SesionControlSupervisor {
   nave                        Nave     @relation(fields: [naveId], references: [id], onDelete: Cascade)
 
   @@index([supervisorId])
+  @@index([supervisorId, fechaJornada])
   @@index([naveId])
   @@index([fechaJornada])
   @@index([naveId, fechaJornada])
@@ -272,5 +279,17 @@ model ReglaDiaNoLaborable {
 
   @@index([fechaInicio, fechaFin])
   @@map("reglas_dias_no_laborables")
+}
+
+model AuditoriaRegistro {
+  id        String   @id @default(uuid())
+  modulo    String   @db.VarChar(100)
+  accion    String   @db.VarChar(150)
+  detalle   String?  @db.Text
+  creadoEn  DateTime @default(now())
+
+  @@index([creadoEn])
+  @@index([modulo, creadoEn])
+  @@map("auditoria_registros")
 }
 

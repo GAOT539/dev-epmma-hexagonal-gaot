@@ -3,6 +3,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import {
   sincronizarPuestosDeNaveEnBD,
   asegurarColacionEspanolEnBD,
+  invalidarNavesYaVerificadas,
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
@@ -204,6 +205,8 @@ export async function POST(request: Request) {
 
       return nave;
     });
+
+    invalidarNavesYaVerificadas(resultado.id);
 
     const puestosCreados = await prisma.puesto.findMany({ where: { naveId: resultado.id } });
 

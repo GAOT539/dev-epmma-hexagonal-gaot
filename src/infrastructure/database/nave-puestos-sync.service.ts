@@ -96,7 +96,57 @@ export async function asegurarColacionEspanolEnBD(forzar: boolean = false): Prom
  * 3. Completa los puestos vacantes faltantes hasta alcanzar `nave.cantidadPuestos`.
  * 4. Ajusta la capacidad de la nave si el número de ocupados la supera.
  */
+const syncEnVueloPorNave = new Map<string, Promise<unknown>>();
+const navesYaVerificadasEnSesion = new Set<string>();
+
+/**
+ * Invalida el caché de naves verificadas en memoria cuando se modifica o crea una nave,
+ * o cuando se importa un nuevo catastro.
+ */
+export function invalidarNavesYaVerificadas(naveId?: string): void {
+  if (naveId) {
+    navesYaVerificadasEnSesion.delete(naveId);
+    navesYaVerificadasEnSesion.delete(generarSlugNave(naveId));
+  } else {
+    navesYaVerificadasEnSesion.clear();
+  }
+}
+
+/**
+ * Entrada pública con deduplicación de promesas en vuelo y memoria de naves verificadas.
+ */
 export async function sincronizarPuestosDeNaveEnBD(naveIdONombre: string): Promise<void> {
+  if (!naveIdONombre) return;
+
+  const termino = naveIdONombre.normalize("NFC").trim();
+  const slug = generarSlugNave(termino);
+  const cacheKey = slug || termino.toLowerCase();
+
+  if (navesYaVerificadasEnSesion.has(cacheKey) || navesYaVerificadasEnSesion.has(termino)) {
+    return;
+  }
+
+  const enVuelo = syncEnVueloPorNave.get(cacheKey);
+  if (enVuelo) {
+    await enVuelo;
+    return;
+  }
+
+  const ejecucion = (async () => {
+    await ejecutarSincronizacionPuestosDeNaveEnBD(naveIdONombre);
+  })();
+
+  syncEnVueloPorNave.set(cacheKey, ejecucion);
+  try {
+    await ejecucion;
+    navesYaVerificadasEnSesion.add(cacheKey);
+    navesYaVerificadasEnSesion.add(termino);
+  } finally {
+    syncEnVueloPorNave.delete(cacheKey);
+  }
+}
+
+async function ejecutarSincronizacionPuestosDeNaveEnBD(naveIdONombre: string): Promise<void> {
   if (!naveIdONombre) return;
 
   const termino = naveIdONombre.normalize("NFC").trim();

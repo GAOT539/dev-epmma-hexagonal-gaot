@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/infrastructure/auth/auth-context";
+import { naveService } from "@/application/services/nave.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -72,11 +73,8 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
     if (!isOpen) return;
 
     let activo = true;
-    fetch("/api/v1/naves/reporte-vacantes")
-      .then((res) => {
-        if (!res.ok) throw new Error("No se pudo obtener el reporte de vacantes");
-        return res.json();
-      })
+    naveService
+      .obtenerReporteVacantes()
       .then((data) => {
         if (!activo) return;
         setItems(data.items || []);
@@ -118,10 +116,7 @@ export function ModalReporteVacantes({ isOpen, onClose }: ModalReporteVacantesPr
   const handleRecargarDatos = async () => {
     setCargando(true);
     try {
-      const res = await fetch("/api/v1/naves/reporte-vacantes");
-      if (!res.ok) throw new Error("No se pudo obtener el reporte de vacantes");
-      const data = await res.json();
-
+      const data = await naveService.obtenerReporteVacantes();
       setItems(data.items || []);
       setTituloPeriodo(calcularTituloDefecto());
 
