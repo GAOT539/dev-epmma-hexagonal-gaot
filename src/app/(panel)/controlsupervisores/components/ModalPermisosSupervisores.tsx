@@ -309,9 +309,9 @@ export function ModalPermisosSupervisores({
     >
       <DialogContent
         showCloseButton={false}
-        className="w-[96vw] max-w-[96vw] sm:max-w-4xl lg:max-w-6xl xl:max-w-7xl max-h-[92dvh] flex flex-col p-0 overflow-hidden border border-institucional-whiteSmokeBlack/30 bg-base-white shadow-2xl rounded-2xl gap-0"
+        className="w-[98vw] max-w-[98vw] sm:w-[96vw] sm:max-w-5xl lg:max-w-7xl xl:max-w-[1380px] max-h-[94dvh] sm:max-h-[92dvh] flex flex-col p-0 overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 gap-0"
       >
-        <DialogHeader className="px-6 py-4 border-b border-institucional-whiteSmokeBlack/20 bg-institucional-whiteSmoke/40 shrink-0">
+        <DialogHeader className="px-4 py-3 sm:px-6 sm:py-4 border-b border-institucional-whiteSmokeBlack/20 bg-institucional-whiteSmoke/40 shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-2 rounded-xl bg-institucional-green/10 text-institucional-green">
@@ -337,13 +337,13 @@ export function ModalPermisosSupervisores({
           </div>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-            {/* Columna Izquierda: Formulario de Creación (lg:col-span-5) */}
-            <div className="lg:col-span-5">
+            {/* Columna Izquierda: Formulario de Creación (lg:col-span-4) */}
+            <div className="lg:col-span-4 lg:sticky lg:top-0 h-fit space-y-4">
               <form
                 onSubmit={handleGuardarPermiso}
-                className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-5 shadow-xs space-y-4"
+                className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-4 sm:p-5 shadow-xs space-y-4"
               >
                 <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
                   <UserCheck size={18} className="text-institucional-green" />
@@ -565,8 +565,8 @@ export function ModalPermisosSupervisores({
               </form>
             </div>
 
-            {/* Columna Derecha: Tabla de Permisos Registrados (lg:col-span-7) */}
-            <div className="lg:col-span-7 space-y-3">
+            {/* Columna Derecha: Listado de Permisos Registrados (lg:col-span-8) */}
+            <div className="lg:col-span-8 flex flex-col min-w-0 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                   Permisos y Justificaciones Registradas ({permisos.length})
@@ -593,87 +593,166 @@ export function ModalPermisosSupervisores({
                   No se han registrado permisos o justificaciones aún.
                 </div>
               ) : (
-                <div className="rounded-xl border border-institucional-whiteSmokeBlack/20 overflow-hidden shadow-2xs">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs border-collapse">
-                      <thead className="bg-[#e6efe9] text-base-eerieBlack font-bold border-b border-institucional-whiteSmokeBlack/20">
-                        <tr>
-                          <th className="px-3 py-2.5">Supervisor Ausente</th>
-                          <th className="px-3 py-2.5">Fechas</th>
-                          <th className="px-3 py-2.5">Motivo</th>
-                          <th className="px-3 py-2.5">Detalle de Cobertura por Nave</th>
-                          <th className="px-3 py-2.5 text-center">Estado</th>
-                          <th className="px-3 py-2.5 text-right">Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-institucional-whiteSmokeBlack/15 bg-base-white">
-                        {permisos.map((p) => {
-                          const esActivo = p.estado === "ACTIVO";
-                          return (
-                            <tr key={p.id} className="hover:bg-institucional-whiteSmoke/30 transition-colors">
-                              <td className="px-3 py-2.5 font-semibold text-gray-900">
-                                {p.supervisorNombre}
-                              </td>
-                              <td className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-gray-700">
-                                {p.fechaInicio} al {p.fechaFin}
-                              </td>
-                              <td className="px-3 py-2.5 text-gray-700 max-w-[180px] truncate" title={p.motivo}>
-                                {p.motivo}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <div className="flex flex-col gap-1">
-                                  {p.coberturas.map((cob) => (
-                                    <div
-                                      key={cob.id}
-                                      className="inline-flex items-center gap-1.5 text-[11px] font-medium"
+                <>
+                  {/* Vista Tabla en Escritorio (hidden md:block) */}
+                  <div className="hidden md:block rounded-xl border border-institucional-whiteSmokeBlack/20 overflow-hidden shadow-2xs">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-[#e6efe9] text-base-eerieBlack font-bold border-b border-institucional-whiteSmokeBlack/20">
+                          <tr>
+                            <th className="px-3 py-2.5 w-[22%]">Supervisor</th>
+                            <th className="px-3 py-2.5 w-[18%]">Vigencia</th>
+                            <th className="px-3 py-2.5 w-[20%]">Motivo</th>
+                            <th className="px-3 py-2.5 w-[28%]">Naves y Coberturas Asignadas</th>
+                            <th className="px-3 py-2.5 w-[12%] text-right">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-institucional-whiteSmokeBlack/15 bg-base-white">
+                          {permisos.map((p) => {
+                            const esActivo = p.estado === "ACTIVO";
+                            return (
+                              <tr key={p.id} className="hover:bg-institucional-whiteSmoke/30 transition-colors">
+                                <td className="px-3 py-2.5 font-semibold text-gray-900 align-top">
+                                  <div>{p.supervisorNombre}</div>
+                                  <div className="mt-1">
+                                    <span
+                                      className={[
+                                        "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                                        esActivo
+                                          ? "bg-green-100 text-green-800 border border-green-300"
+                                          : "bg-gray-100 text-gray-600 border border-gray-300",
+                                      ].join(" ")}
                                     >
-                                      <span className="font-bold text-gray-900">{cob.naveNombre}:</span>
-                                      {cob.tipoCobertura === "PERSISTENCIA_AUTOMATICA" ? (
-                                        <span className="px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-bold border border-blue-200">
-                                          Persistencia Automática
-                                        </span>
-                                      ) : (
-                                        <span className="px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 text-[10px] font-bold border border-purple-200">
-                                          Reemplazo: {cob.supervisorReemplazoNombre || "Asignado"}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2.5 text-center">
-                                <span
-                                  className={[
-                                    "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
-                                    esActivo
-                                      ? "bg-green-100 text-green-800 border border-green-300"
-                                      : "bg-gray-100 text-gray-600 border border-gray-300",
-                                  ].join(" ")}
-                                >
-                                  {p.estado}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5 text-right">
-                                {esActivo && (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleRevocarPermiso(p.id)}
-                                    className="h-7 text-xs text-red-600 hover:bg-red-50 hover:text-red-700"
-                                  >
-                                    <Trash2 size={13} className="mr-1" />
-                                    Revocar
-                                  </Button>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                      {p.estado}
+                                    </span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 font-mono text-[11px] text-gray-700 align-top whitespace-nowrap">
+                                  {p.fechaInicio} al {p.fechaFin}
+                                </td>
+                                <td className="px-3 py-2.5 text-gray-700 align-top break-words">
+                                  {p.motivo}
+                                </td>
+                                <td className="px-3 py-2.5 align-top">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {p.coberturas.map((cob) => (
+                                      <span
+                                        key={cob.id}
+                                        className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 border border-slate-200 text-xs text-slate-700"
+                                      >
+                                        <span className="font-bold text-slate-900">{cob.naveNombre}:</span>
+                                        {cob.tipoCobertura === "PERSISTENCIA_AUTOMATICA" ? (
+                                          <span className="text-slate-600 font-medium text-[11px]">
+                                            Persistencia Auto.
+                                          </span>
+                                        ) : (
+                                          <span className="text-blue-700 font-medium text-[11px]">
+                                            Reemplazo: {cob.supervisorReemplazoNombre || "Asignado"}
+                                          </span>
+                                        )}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2.5 text-right align-top whitespace-nowrap">
+                                  {esActivo && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleRevocarPermiso(p.id)}
+                                      className="px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 h-8"
+                                    >
+                                      <Trash2 size={13} className="mr-1" />
+                                      Revocar
+                                    </Button>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
+
+                  {/* Vista Tarjetas en Móvil (md:hidden) */}
+                  <div className="md:hidden space-y-3">
+                    {permisos.map((p) => {
+                      const esActivo = p.estado === "ACTIVO";
+                      return (
+                        <div
+                          key={p.id}
+                          className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs space-y-2.5"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h5 className="text-sm font-bold text-slate-800">{p.supervisorNombre}</h5>
+                              <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                                {p.fechaInicio} al {p.fechaFin}
+                              </p>
+                            </div>
+                            <span
+                              className={[
+                                "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shrink-0",
+                                esActivo
+                                  ? "bg-green-100 text-green-800 border border-green-300"
+                                  : "bg-gray-100 text-gray-600 border border-gray-300",
+                              ].join(" ")}
+                            >
+                              {p.estado}
+                            </span>
+                          </div>
+
+                          <div>
+                            <span className="text-[11px] font-bold text-slate-500 uppercase">Motivo:</span>
+                            <p className="text-xs text-slate-700 mt-0.5 break-words">{p.motivo}</p>
+                          </div>
+
+                          <div className="space-y-1.5 pt-1 border-t border-slate-100">
+                            <span className="text-[11px] font-bold text-slate-500 uppercase">
+                              Coberturas ({p.coberturas.length}):
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {p.coberturas.map((cob) => (
+                                <span
+                                  key={cob.id}
+                                  className="inline-flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1 border border-slate-200 text-xs text-slate-700"
+                                >
+                                  <span className="font-bold text-slate-900">{cob.naveNombre}:</span>
+                                  {cob.tipoCobertura === "PERSISTENCIA_AUTOMATICA" ? (
+                                    <span className="text-slate-600 font-medium text-[11px]">
+                                      Persistencia Auto.
+                                    </span>
+                                  ) : (
+                                    <span className="text-blue-700 font-medium text-[11px]">
+                                      Reemplazo: {cob.supervisorReemplazoNombre || "Asignado"}
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+
+                          {esActivo && (
+                            <div className="pt-2 border-t border-slate-100 flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRevocarPermiso(p.id)}
+                                className="w-full justify-center px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 h-8"
+                              >
+                                <Trash2 size={13} className="mr-1" />
+                                Revocar Permiso
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           </div>

@@ -142,12 +142,12 @@ export function ModalDetalleControl({
       }}
     >
       <DialogContent
-        className="w-[95vw] max-w-4xl sm:max-w-4xl lg:max-w-5xl max-h-[90vh] overflow-y-auto p-6 bg-base-white rounded-2xl shadow-2xl"
+        className="w-[98vw] max-w-[98vw] sm:w-[95vw] sm:max-w-4xl lg:max-w-5xl max-h-[92dvh] flex flex-col p-3.5 sm:p-6 overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200"
       >
         {sesion && (
           <>
             {/* Header Modal */}
-            <DialogHeader className="p-0 pb-5 border-b border-gray-200 text-left">
+            <DialogHeader className="p-0 pb-4 sm:pb-5 border-b border-gray-200 text-left shrink-0">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pr-8">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2.5">
@@ -171,7 +171,7 @@ export function ModalDetalleControl({
                   type="button"
                   size="sm"
                   onClick={() => onExportarPDF(sesion)}
-                  className="flex shrink-0 items-center gap-2 bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold text-xs h-9 px-4 rounded-lg shadow-sm"
+                  className="w-full sm:w-auto justify-center flex shrink-0 items-center gap-2 bg-institucional-green text-base-white hover:bg-acento-verdeOliva1 font-semibold text-xs h-9 px-4 rounded-lg shadow-sm"
                 >
                   <Download size={14} />
                   <span>Imprimir / Descargar PDF</span>
@@ -254,7 +254,7 @@ export function ModalDetalleControl({
             </DialogHeader>
 
             {/* Cuerpo del Modal con Resumen y Radiografía de Comerciantes */}
-            <div className="pt-4 space-y-4">
+            <div className="flex-1 overflow-y-auto min-h-0 pt-4 space-y-4">
               {/* Tarjetas de Resumen */}
               <div
                 className={`grid grid-cols-2 ${
@@ -366,8 +366,8 @@ export function ModalDetalleControl({
               </div>
 
               {/* Tabla de Comerciantes de la Sesión */}
-              <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[400px] overflow-y-auto">
-                <table className="w-full text-xs">
+              <div className="rounded-xl border border-gray-200 overflow-hidden max-h-[400px] overflow-x-auto overflow-y-auto">
+                <table className="w-full min-w-[680px] text-xs">
                   <thead className="sticky top-0 z-20 bg-[#e6efe9] text-base-eerieBlack font-semibold">
                     <tr className="bg-[#e6efe9]">
                       <th className="sticky top-0 z-20 bg-[#e6efe9] px-3 py-2 text-left">Puesto</th>
@@ -523,7 +523,7 @@ export function ModalDetalleControl({
             </div>
 
             {/* Footer Modal */}
-            <DialogFooter className="pt-4 border-t border-gray-200 flex justify-end">
+            <DialogFooter className="pt-4 border-t border-gray-200 flex justify-end shrink-0">
               <Button
                 type="button"
                 variant="outline"

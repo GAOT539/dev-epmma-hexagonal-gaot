@@ -195,12 +195,12 @@ export default function ControlSupervisoresPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2 w-full sm:w-auto">
           <Button
             type="button"
             variant="outline"
             onClick={() => setModalReporteSupervisoresOpen(true)}
-            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
           >
             <FileSpreadsheet size={15} />
             <span>Reporte de Supervisores</span>
@@ -210,7 +210,7 @@ export default function ControlSupervisoresPage() {
             type="button"
             variant="outline"
             onClick={() => setModalPermisosOpen(true)}
-            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green/40 text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-institucional-green/40 text-institucional-green hover:bg-institucional-green/10 shadow-2xs cursor-pointer"
           >
             <UserCheck size={15} />
             <span>Permisos y Cobertura</span>
@@ -220,7 +220,7 @@ export default function ControlSupervisoresPage() {
             type="button"
             variant="outline"
             onClick={() => setModalDiasNoLabOpen(true)}
-            className="flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-amber-600/40 text-amber-700 hover:bg-amber-50 shadow-2xs cursor-pointer"
+            className="w-full sm:w-auto justify-center flex items-center gap-1.5 h-10 rounded-lg px-3.5 text-xs font-semibold border-amber-600/40 text-amber-700 hover:bg-amber-50 shadow-2xs cursor-pointer"
           >
             <CalendarOff size={15} />
             <span>Días No Laborables</span>
@@ -231,7 +231,7 @@ export default function ControlSupervisoresPage() {
             onClick={handleExportPDFGeneral}
             disabled={sesiones.length === 0}
             className={[
-              "flex items-center gap-2 h-10 rounded-lg px-4 text-xs font-semibold shadow-sm transition-colors",
+              "w-full sm:w-auto justify-center flex items-center gap-2 h-10 rounded-lg px-4 text-xs font-semibold shadow-sm transition-colors",
               sesiones.length > 0
                 ? "bg-institucional-green text-base-white hover:bg-acento-verdeOliva1"
                 : "bg-institucional-whiteSmokeBlack/30 text-gray-700 cursor-not-allowed",

@@ -544,19 +544,22 @@ export async function exportarReporteSupervisoresExcel(
     datosCuadroResumen.forEach((d, idx) => {
       const fNum = 4 + idx;
       const cL = wsResumen.getCell(`B${fNum}`);
-      const cV = wsResumen.getCell(`C${fNum}`);
-
       cL.value = d.label;
       cL.font = { name: "Arial", size: 9, bold: true };
       cL.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6EFE9" } };
       cL.alignment = { vertical: "middle", horizontal: "left" };
       cL.border = bordeFino;
 
+      wsResumen.mergeCells(`C${fNum}:E${fNum}`);
+      const cV = wsResumen.getCell(`C${fNum}`);
       cV.value = d.val;
       cV.font = { name: "Arial", size: 9, bold: idx === 0 };
       cV.alignment = { vertical: "middle", horizontal: "left" };
-      cV.border = bordeFino;
-      wsResumen.getRow(fNum).height = 17;
+
+      for (let col = 3; col <= 5; col++) {
+        wsResumen.getRow(fNum).getCell(col).border = bordeFino;
+      }
+      wsResumen.getRow(fNum).height = 18;
     });
 
     // Título Sección 1
@@ -583,7 +586,7 @@ export async function exportarReporteSupervisoresExcel(
       cell.value = h;
       cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF45743B" } };
-      cell.alignment = { vertical: "middle", horizontal: idx === 1 || idx === 2 ? "left" : "center" };
+      cell.alignment = { vertical: "middle", horizontal: idx === 1 || idx === 2 ? "left" : "center", wrapText: true };
       cell.border = bordeFino;
     });
     filaCabT1.height = 22;
@@ -605,10 +608,15 @@ export async function exportarReporteSupervisoresExcel(
       for (let c = 1; c <= 9; c++) {
         const cell = r.getCell(c);
         cell.font = { name: "Arial", size: 9, bold: c === 2 };
-        cell.alignment = { vertical: "middle", horizontal: c === 2 || c === 3 ? "left" : "center" };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: c === 2 || c === 3 ? "left" : "center",
+          wrapText: true,
+        };
         cell.border = bordeFino;
       }
-      r.height = 18;
+      const lineasNaves = Math.max(1, Math.ceil((s.navesACargo?.length || 0) / 35));
+      r.height = Math.max(20, lineasNaves * 15);
       curRowT1++;
     });
 
@@ -618,64 +626,99 @@ export async function exportarReporteSupervisoresExcel(
     wsResumen.getCell(`A${filaTitT2}`).font = { name: "Arial", size: 10, bold: true, color: { argb: "FF212529" } };
     wsResumen.getRow(filaTitT2).height = 18;
 
-    const headersT2 = [
-      "SUPERVISOR",
-      "VIGENCIA (DESDE - HASTA)",
-      "MOTIVO",
-      "NAVE",
-      "ACCIÓN / COBERTURA APLICADA",
-    ];
+    const filaCabT2Num = filaTitT2 + 1;
+    wsResumen.mergeCells(`D${filaCabT2Num}:E${filaCabT2Num}`);
+    wsResumen.mergeCells(`F${filaCabT2Num}:G${filaCabT2Num}`);
+    wsResumen.mergeCells(`H${filaCabT2Num}:I${filaCabT2Num}`);
 
-    const filaCabT2 = wsResumen.getRow(filaTitT2 + 1);
-    headersT2.forEach((h, idx) => {
-      const cell = filaCabT2.getCell(idx + 1);
-      cell.value = h;
+    const filaCabT2 = wsResumen.getRow(filaCabT2Num);
+    filaCabT2.getCell(1).value = "#";
+    filaCabT2.getCell(2).value = "SUPERVISOR";
+    filaCabT2.getCell(3).value = "VIGENCIA (DESDE - HASTA)";
+    filaCabT2.getCell(4).value = "MOTIVO";
+    filaCabT2.getCell(6).value = "NAVE";
+    filaCabT2.getCell(8).value = "ACCIÓN / COBERTURA APLICADA";
+
+    for (let c = 1; c <= 9; c++) {
+      const cell = filaCabT2.getCell(c);
       cell.font = { name: "Arial", size: 9, bold: true, color: { argb: "FFFFFFFF" } };
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF45743B" } };
-      cell.alignment = { vertical: "middle", horizontal: "left" };
+      cell.alignment = {
+        vertical: "middle",
+        horizontal: c === 1 || c === 3 ? "center" : "left",
+        wrapText: true,
+      };
       cell.border = bordeFino;
-    });
+    }
     filaCabT2.height = 22;
 
-    let curRowT2 = filaTitT2 + 2;
+    let curRowT2 = filaCabT2Num + 1;
     if (permisosSupervisoresPeriodo.length > 0) {
-      permisosSupervisoresPeriodo.forEach((p) => {
-        const r = wsResumen.getRow(curRowT2);
-        r.getCell(1).value = p.supervisorNombre;
-        r.getCell(2).value = p.vigenciaTexto;
-        r.getCell(3).value = p.motivo;
-        r.getCell(4).value = p.naveNombre;
-        r.getCell(5).value = p.accionCobertura;
+      permisosSupervisoresPeriodo.forEach((p, pIdx) => {
+        wsResumen.mergeCells(`D${curRowT2}:E${curRowT2}`);
+        wsResumen.mergeCells(`F${curRowT2}:G${curRowT2}`);
+        wsResumen.mergeCells(`H${curRowT2}:I${curRowT2}`);
 
-        for (let c = 1; c <= 5; c++) {
+        const r = wsResumen.getRow(curRowT2);
+        r.getCell(1).value = pIdx + 1;
+        r.getCell(2).value = p.supervisorNombre;
+        r.getCell(3).value = p.vigenciaTexto;
+        r.getCell(4).value = p.motivo;
+        r.getCell(6).value = p.naveNombre;
+        r.getCell(8).value = p.accionCobertura;
+
+        for (let c = 1; c <= 9; c++) {
           const cell = r.getCell(c);
-          cell.font = { name: "Arial", size: 9, bold: c === 1 };
-          cell.alignment = { vertical: "middle", horizontal: "left" };
+          cell.font = { name: "Arial", size: 9, bold: c === 2 };
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: c === 1 || c === 3 ? "center" : "left",
+            wrapText: true,
+          };
           cell.border = bordeFino;
         }
-        r.height = 18;
+
+        const lineasEstimadas = Math.max(
+          1,
+          Math.ceil((p.motivo?.length || 0) / 30),
+          Math.ceil((p.accionCobertura?.length || 0) / 30),
+          Math.ceil((p.naveNombre?.length || 0) / 25)
+        );
+        r.height = Math.max(20, lineasEstimadas * 15);
         curRowT2++;
       });
     } else {
       const r = wsResumen.getRow(curRowT2);
-      wsResumen.mergeCells(`A${curRowT2}:E${curRowT2}`);
+      wsResumen.mergeCells(`A${curRowT2}:I${curRowT2}`);
       r.getCell(1).value = "No se registraron permisos de supervisores en este período";
       r.getCell(1).font = { name: "Arial", size: 9, italic: true, color: { argb: "FF777777" } };
       r.getCell(1).alignment = { vertical: "middle", horizontal: "center" };
-      r.getCell(1).border = bordeFino;
-      r.height = 18;
+      for (let c = 1; c <= 9; c++) {
+        r.getCell(c).border = bordeFino;
+      }
+      r.height = 20;
     }
 
-    // Ajuste de columnas en Hoja 1
+    // Ajuste dinámico de columnas en Hoja 1
+    const maxLenSupervisor = Math.max(
+      ...resumenSupervisores.map((s) => s.supervisorNombre.length),
+      ...permisosSupervisoresPeriodo.map((p) => p.supervisorNombre.length),
+      10
+    );
+    const maxLenNavesACargo = Math.max(
+      ...resumenSupervisores.map((s) => s.navesACargo.length),
+      15
+    );
+
     wsResumen.getColumn(1).width = 6;
-    wsResumen.getColumn(2).width = 30;
-    wsResumen.getColumn(3).width = 35;
+    wsResumen.getColumn(2).width = Math.max(28, maxLenSupervisor + 5);
+    wsResumen.getColumn(3).width = Math.max(36, maxLenNavesACargo + 5);
     wsResumen.getColumn(4).width = 18;
     wsResumen.getColumn(5).width = 15;
     wsResumen.getColumn(6).width = 18;
     wsResumen.getColumn(7).width = 15;
     wsResumen.getColumn(8).width = 18;
-    wsResumen.getColumn(9).width = 18;
+    wsResumen.getColumn(9).width = 19;
 
     const buffer = await workbook.xlsx.writeBuffer();
     const blob = new Blob([buffer], {
@@ -758,18 +801,20 @@ export async function exportarReporteSupervisoresExcel(
       datosSup.forEach((d, idx) => {
         const fNum = 4 + idx;
         const cL = ws.getCell(`B${fNum}`);
-        const cV = ws.getCell(`C${fNum}`);
-
         cL.value = d.label;
         cL.font = { name: "Arial", size: 9, bold: true };
         cL.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6EFE9" } };
         cL.alignment = { vertical: "middle", horizontal: "left" };
         cL.border = bordeFino;
 
+        ws.mergeCells(`C${fNum}:D${fNum}`);
+        const cV = ws.getCell(`C${fNum}`);
         cV.value = d.val;
         cV.font = { name: "Arial", size: 9, bold: d.bold };
         cV.alignment = { vertical: "middle", horizontal: "left" };
-        cV.border = bordeFino;
+
+        ws.getCell(`C${fNum}`).border = bordeFino;
+        ws.getCell(`D${fNum}`).border = bordeFino;
         ws.getRow(fNum).height = 17;
       });
 
@@ -815,6 +860,7 @@ export async function exportarReporteSupervisoresExcel(
         cell.alignment = {
           vertical: "middle",
           horizontal: idx === 0 || idx === 2 || idx === 6 ? "center" : "left",
+          wrapText: true,
         };
         cell.border = bordeFino;
       });
@@ -839,10 +885,16 @@ export async function exportarReporteSupervisoresExcel(
             cell.alignment = {
               vertical: "middle",
               horizontal: c === 1 || c === 3 || c === 7 ? "center" : "left",
+              wrapText: true,
             };
             cell.border = bordeFino;
           }
-          r.height = 18;
+          const maxLineasFila = Math.max(
+            1,
+            Math.ceil((ev.motivo?.length || 0) / 40),
+            Math.ceil((ev.vigenciaTexto?.length || 0) / 30)
+          );
+          r.height = Math.max(20, maxLineasFila * 15);
           rowNum++;
         });
       } else {
@@ -855,15 +907,25 @@ export async function exportarReporteSupervisoresExcel(
         r.height = 18;
       }
 
-      // Anchos de columna en hoja detallada
-      ws.getColumn(1).width = 12;
-      ws.getColumn(2).width = 20;
-      ws.getColumn(3).width = 14;
-      ws.getColumn(4).width = 30;
-      ws.getColumn(5).width = 26;
-      ws.getColumn(6).width = 45;
-      ws.getColumn(7).width = 16;
-      ws.getColumn(8).width = 32;
+      // Anchos de columna dinámicos en hoja detallada
+      const maxLenNave = Math.max(
+        ...sup.eventos.map((e) => (e.naveNombre || "").length),
+        sup.navesAsignadas.length,
+        10
+      );
+      const maxLenContrib = Math.max(...sup.eventos.map((e) => (e.comercianteNombre || "").length), 15);
+      const maxLenTipo = Math.max(...sup.eventos.map((e) => (e.tipoEvento || "").length), 15);
+      const maxLenDoc = Math.max(...sup.eventos.map((e) => (e.documentoRef || "").length), 10);
+      const maxLenVig = Math.max(...sup.eventos.map((e) => (e.vigenciaTexto || "").length), 15);
+
+      ws.getColumn(1).width = 13;
+      ws.getColumn(2).width = Math.max(22, maxLenNave + 3);
+      ws.getColumn(3).width = 15;
+      ws.getColumn(4).width = Math.max(32, maxLenContrib + 3);
+      ws.getColumn(5).width = Math.max(28, maxLenTipo + 3);
+      ws.getColumn(6).width = 48;
+      ws.getColumn(7).width = Math.max(18, maxLenDoc + 3);
+      ws.getColumn(8).width = Math.max(36, maxLenVig + 3);
     });
   }
 

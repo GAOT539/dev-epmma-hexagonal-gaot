@@ -284,9 +284,9 @@ export function ModalDiasNoLaborables({
       >
         <DialogContent
           showCloseButton={false}
-          className="w-[96vw] max-w-[96vw] sm:max-w-4xl lg:max-w-6xl xl:max-w-7xl max-h-[92dvh] flex flex-col p-0 overflow-hidden border border-institucional-whiteSmokeBlack/30 bg-base-white shadow-2xl rounded-2xl gap-0"
+          className="w-[98vw] max-w-[98vw] sm:w-[96vw] sm:max-w-5xl lg:max-w-7xl xl:max-w-[1380px] max-h-[94dvh] sm:max-h-[92dvh] flex flex-col p-0 overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 gap-0"
         >
-          <DialogHeader className="px-6 py-4 border-b border-institucional-whiteSmokeBlack/20 bg-institucional-whiteSmoke/40 shrink-0">
+          <DialogHeader className="px-4 py-3 sm:px-6 sm:py-4 border-b border-institucional-whiteSmokeBlack/20 bg-institucional-whiteSmoke/40 shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-amber-500/10 text-amber-700">
@@ -312,13 +312,13 @@ export function ModalDiasNoLaborables({
             </div>
           </DialogHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-              {/* Columna Izquierda: Formulario (lg:col-span-5) */}
-              <div className="lg:col-span-5">
+              {/* Columna Izquierda: Formulario (lg:col-span-4) */}
+              <div className="lg:col-span-4 lg:sticky lg:top-0 h-fit space-y-4">
                 <form
                   onSubmit={(e) => handleGuardarReglaNoLaborable(e)}
-                  className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-5 shadow-xs space-y-4"
+                  className="rounded-2xl border border-institucional-whiteSmokeBlack/20 bg-slate-50/50 p-4 sm:p-5 shadow-xs space-y-4"
                 >
                   <div className="flex items-center gap-2 pb-2 border-b border-institucional-whiteSmokeBlack/15">
                     <CalendarOff size={18} className="text-amber-600" />
@@ -534,8 +534,8 @@ export function ModalDiasNoLaborables({
                 </form>
               </div>
 
-              {/* Columna Derecha: Listado de Reglas Activas (lg:col-span-7) */}
-              <div className="lg:col-span-7 space-y-3">
+              {/* Columna Derecha: Listado de Reglas Activas (lg:col-span-8) */}
+              <div className="lg:col-span-8 flex flex-col min-w-0 space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Reglas de Días No Laborables Activas ({reglasNoLab.length})
@@ -562,81 +562,156 @@ export function ModalDiasNoLaborables({
                     No se han configurado días no laborables aún.
                   </div>
                 ) : (
-                  <div className="rounded-xl border border-institucional-whiteSmokeBlack/20 overflow-hidden shadow-2xs">
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left text-xs border-collapse">
-                        <thead className="bg-[#fef3c7] text-amber-950 font-bold border-b border-amber-200">
-                          <tr>
-                            <th className="px-3 py-2.5">Motivo</th>
-                            <th className="px-3 py-2.5">Tipo</th>
-                            <th className="px-3 py-2.5">Rango / Días</th>
-                            <th className="px-3 py-2.5">Naves Afectadas</th>
-                            <th className="px-3 py-2.5 text-center">Fechas</th>
-                            <th className="px-3 py-2.5 text-right">Acción</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-institucional-whiteSmokeBlack/15 bg-base-white">
-                          {reglasNoLab.map((r) => {
-                            const fechasCount = Array.isArray(r.fechasExpandidas)
-                              ? r.fechasExpandidas.length
-                              : 0;
-                            return (
-                              <tr key={r.id} className="hover:bg-institucional-whiteSmoke/30 transition-colors">
-                                <td className="px-3 py-2.5 font-semibold text-gray-900">{r.motivo}</td>
-                                <td className="px-3 py-2.5">
-                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                                    {r.tipoRegla === "DIA_UNICO"
-                                      ? "Día Único"
-                                      : r.tipoRegla === "RANGO_CONTINUO"
-                                      ? "Rango Continuo"
-                                      : "Semanal Recurrente"}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-gray-700">
-                                  {r.fechaInicio} al {r.fechaFin}
-                                  {r.tipoRegla === "RECURRENTE_SEMANAL" && Array.isArray(r.diasSemana) && (
-                                    <div className="text-[10px] text-amber-700 font-sans mt-0.5">
-                                      Días:{" "}
-                                      {r.diasSemana
-                                        .map((d) => DIAS_SEMANA_OPCIONES.find((o) => o.val === d)?.label)
-                                        .filter(Boolean)
-                                        .join(", ")}
-                                    </div>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2.5 text-gray-700">
-                                  {r.aplicaTodasNaves ? (
-                                    <span className="font-bold text-institucional-green">
-                                      Todas las Naves
+                  <>
+                    {/* Vista Tabla en Escritorio (hidden md:block) */}
+                    <div className="hidden md:block rounded-xl border border-institucional-whiteSmokeBlack/20 overflow-hidden shadow-2xs">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left text-xs border-collapse">
+                          <thead className="bg-[#fef3c7] text-amber-950 font-bold border-b border-amber-200">
+                            <tr>
+                              <th className="px-3 py-2.5">Motivo</th>
+                              <th className="px-3 py-2.5">Tipo</th>
+                              <th className="px-3 py-2.5">Rango / Días</th>
+                              <th className="px-3 py-2.5">Naves Afectadas</th>
+                              <th className="px-3 py-2.5 text-center">Fechas</th>
+                              <th className="px-3 py-2.5 text-right">Acción</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-institucional-whiteSmokeBlack/15 bg-base-white">
+                            {reglasNoLab.map((r) => {
+                              const fechasCount = Array.isArray(r.fechasExpandidas)
+                                ? r.fechasExpandidas.length
+                                : 0;
+                              return (
+                                <tr key={r.id} className="hover:bg-institucional-whiteSmoke/30 transition-colors">
+                                  <td className="px-3 py-2.5 font-semibold text-gray-900">{r.motivo}</td>
+                                  <td className="px-3 py-2.5">
+                                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                                      {r.tipoRegla === "DIA_UNICO"
+                                        ? "Día Único"
+                                        : r.tipoRegla === "RANGO_CONTINUO"
+                                        ? "Rango Continuo"
+                                        : "Semanal Recurrente"}
                                     </span>
+                                  </td>
+                                  <td className="px-3 py-2.5 whitespace-nowrap font-mono text-[11px] text-gray-700">
+                                    {r.fechaInicio} al {r.fechaFin}
+                                    {r.tipoRegla === "RECURRENTE_SEMANAL" && Array.isArray(r.diasSemana) && (
+                                      <div className="text-[10px] text-amber-700 font-sans mt-0.5">
+                                        Días:{" "}
+                                        {r.diasSemana
+                                          .map((d) => DIAS_SEMANA_OPCIONES.find((o) => o.val === d)?.label)
+                                          .filter(Boolean)
+                                          .join(", ")}
+                                      </div>
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-gray-700">
+                                    {r.aplicaTodasNaves ? (
+                                      <span className="font-bold text-institucional-green">
+                                        Todas las Naves
+                                      </span>
+                                    ) : Array.isArray(r.navesNombres) && r.navesNombres.length > 0 ? (
+                                      r.navesNombres.join(", ")
+                                    ) : (
+                                      "Naves seleccionadas"
+                                    )}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-center font-bold text-gray-900 font-mono">
+                                    {fechasCount} {fechasCount === 1 ? "día" : "días"}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-right">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleEliminarRegla(r.id)}
+                                      className="h-7 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"
+                                    >
+                                      <Trash2 size={13} className="mr-1" />
+                                      Eliminar
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Vista Tarjetas en Móvil (md:hidden) */}
+                    <div className="md:hidden space-y-3">
+                      {reglasNoLab.map((r) => {
+                        const fechasCount = Array.isArray(r.fechasExpandidas)
+                          ? r.fechasExpandidas.length
+                          : 0;
+                        return (
+                          <div
+                            key={r.id}
+                            className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-xs space-y-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h5 className="text-sm font-bold text-slate-800">{r.motivo}</h5>
+                                <p className="text-[11px] font-mono text-slate-500 mt-0.5">
+                                  {r.fechaInicio} al {r.fechaFin}
+                                </p>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                                {r.tipoRegla === "DIA_UNICO"
+                                  ? "Día Único"
+                                  : r.tipoRegla === "RANGO_CONTINUO"
+                                  ? "Rango Continuo"
+                                  : "Semanal"}
+                              </span>
+                            </div>
+
+                            {r.tipoRegla === "RECURRENTE_SEMANAL" && Array.isArray(r.diasSemana) && (
+                              <div className="text-[11px] text-amber-800 bg-amber-50/70 p-2 rounded-lg border border-amber-200/60">
+                                <span className="font-bold">Días aplicados:</span>{" "}
+                                {r.diasSemana
+                                  .map((d) => DIAS_SEMANA_OPCIONES.find((o) => o.val === d)?.label)
+                                  .filter(Boolean)
+                                  .join(", ")}
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between text-xs text-slate-600 pt-1 border-t border-slate-100">
+                              <div>
+                                <span className="font-semibold text-slate-500 text-[11px] block">Ámbito:</span>
+                                <span className="font-medium text-slate-800">
+                                  {r.aplicaTodasNaves ? (
+                                    <span className="text-institucional-green font-bold">Todas las Naves</span>
                                   ) : Array.isArray(r.navesNombres) && r.navesNombres.length > 0 ? (
                                     r.navesNombres.join(", ")
                                   ) : (
                                     "Naves seleccionadas"
                                   )}
-                                </td>
-                                <td className="px-3 py-2.5 text-center font-bold text-gray-900 font-mono">
-                                  {fechasCount} {fechasCount === 1 ? "día" : "días"}
-                                </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleEliminarRegla(r.id)}
-                                    className="h-7 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 cursor-pointer"
-                                  >
-                                    <Trash2 size={13} className="mr-1" />
-                                    Eliminar
-                                  </Button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                                </span>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-mono text-[11px] font-bold">
+                                {fechasCount} {fechasCount === 1 ? "día" : "días"}
+                              </span>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-100 flex justify-end">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleEliminarRegla(r.id)}
+                                className="w-full justify-center px-2.5 py-1 text-xs font-semibold text-red-600 hover:bg-red-50 hover:text-red-700 h-8 cursor-pointer"
+                              >
+                                <Trash2 size={13} className="mr-1" />
+                                Eliminar Regla
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
+                  </>
                 )}
               </div>
             </div>
