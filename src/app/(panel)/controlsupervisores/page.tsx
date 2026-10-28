@@ -577,8 +577,7 @@ export default function ControlSupervisoresPage() {
         isOpen={modalReporteSupervisoresOpen}
         onClose={() => setModalReporteSupervisoresOpen(false)}
         supervisores={supervisores}
-        fechaInicioDefault={fechaDesdeStr}
-        fechaFinDefault={fechaHastaStr}
+        limites={limites}
         supervisorIdDefault={supervisorSeleccionado}
       />
     </div>
