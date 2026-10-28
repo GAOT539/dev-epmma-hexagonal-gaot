@@ -9,6 +9,7 @@ import { parseISO, subDays, format, isAfter, isBefore, isEqual } from "date-fns"
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 import { verificarDiaNoLaborableNave } from "@/infrastructure/database/calendario-operativo.service";
 import { getAuthenticatedUser, userCanAccessNave } from "@/infrastructure/auth/authorization";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 export async function POST(request: Request) {
   try {
@@ -265,7 +266,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(resultado);
   } catch (error) {
-    console.error("Error en POST /api/v1/asistencia/persistencia:", error);
+    logError("ASISTENCIA:PERSISTENCIA", "Error en POST /api/v1/asistencia/persistencia", error);
     return NextResponse.json({ error: "Error al ejecutar la persistencia de asistencia." }, { status: 500 });
   }
 }

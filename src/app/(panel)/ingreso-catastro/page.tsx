@@ -31,6 +31,7 @@ import type {
   OpcionesImportacion,
 } from "@/domain/models/comerciante.model";
 import { toast } from "sonner";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -63,7 +64,10 @@ export default function IngresoCatastroPage() {
   const [nombreNuevaNaveInput, setNombreNuevaNaveInput] = useState<string>("");
 
   useEffect(() => {
-    naveService.obtenerNaves().then(setNaves);
+    naveService
+      .obtenerNaves()
+      .then(setNaves)
+      .catch((err) => logClientError("INGRESO-CATASTRO", "Error al obtener naves", err));
   }, []);
 
   const navesAutorizadas = useMemo(
@@ -264,7 +268,7 @@ export default function IngresoCatastroPage() {
       setPaso("preview");
       toast.success(`${todosParsed.length} comerciantes detectados correctamente.`);
     } catch (error) {
-      console.error("Error al procesar archivos:", error);
+      logClientError("INGRESO-CATASTRO", "Error al procesar archivos", error);
       toast.error("Error al interpretar los archivos. Verifique el formato e intente nuevamente.");
     } finally {
       setParseando(false);
@@ -296,7 +300,7 @@ export default function IngresoCatastroPage() {
       setPaso("preview");
       toast.success(`Registros asignados a ${naveAmbulantesAutorizada.nombre}.`);
     } catch (err) {
-      console.error(err);
+      logClientError("INGRESO-CATASTRO", "Error al reconciliar con la nave de Ambulantes", err);
       toast.error("Error al reconciliar con la nave de Ambulantes.");
     } finally {
       setParseando(false);
@@ -321,7 +325,7 @@ export default function IngresoCatastroPage() {
       }
       setPaso("preview");
     } catch (err) {
-      console.error(err);
+      logClientError("INGRESO-CATASTRO", "Error al procesar la selección manual", err);
       toast.error("Error al procesar la selección manual.");
     } finally {
       setParseando(false);
@@ -351,7 +355,7 @@ export default function IngresoCatastroPage() {
         toast.warning(`${res.errores.length} registros no pudieron ser procesados.`);
       }
     } catch (error) {
-      console.error("Error al guardar importación:", error);
+      logClientError("INGRESO-CATASTRO", "Error al guardar importación", error);
       toast.error("Ocurrió un error al persistir los comerciantes en el sistema.");
     } finally {
       setProcesando(false);
@@ -563,7 +567,7 @@ export default function IngresoCatastroPage() {
                             setAnalisis(sim);
                             toast.success(`Nave seleccionada: ${sim.reconciliacion?.naveDetectada}`);
                           } catch (err) {
-                            console.error(err);
+                            logClientError("INGRESO-CATASTRO", "Error al reconciliar con la nave seleccionada", err);
                             toast.error("Error al reconciliar con la nave seleccionada.");
                           } finally {
                             setParseando(false);
@@ -611,7 +615,7 @@ export default function IngresoCatastroPage() {
                               setAnalisis(sim);
                               toast.success(`Vista previa para crear la nueva nave: ${nombreLimpio}`);
                             } catch (err) {
-                              console.error(err);
+                              logClientError("INGRESO-CATASTRO", "Error al preparar la creación de la nueva nave", err);
                               toast.error("Error al preparar la creación de la nueva nave.");
                             } finally {
                               setParseando(false);

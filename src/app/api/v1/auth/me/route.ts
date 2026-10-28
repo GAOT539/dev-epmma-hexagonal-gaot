@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/infrastructure/database/prisma";
 import { AUTH_COOKIE_NAME, verificarTokenJwt } from "@/infrastructure/auth/jwt.utils";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 export async function GET() {
   try {
@@ -45,7 +46,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/auth/me:", error);
+    logError("AUTH:ME", "Error en GET /api/v1/auth/me", error);
     return NextResponse.json({ user: null }, { status: 500 });
   }
 }

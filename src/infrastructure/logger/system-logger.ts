@@ -10,9 +10,6 @@ const LOG_FILE_PATH = path.join(LOGS_DIR, "ep-ema-system.log");
 const OLD_LOG_FILE_PATH = path.join(LOGS_DIR, "ep-ema-system.old.log");
 const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5 MB
 
-let ultimoAvisoConsolaBD = 0;
-const THROTTLE_BD_MS = 30_000; // 30 segundos de throttle en consola
-
 /**
  * Obtiene la marca de tiempo actual en formato exacto "YYYY-MM-DD HH:mm:ss"
  * en la zona horaria oficial de Ecuador (America/Guayaquil).
@@ -106,16 +103,10 @@ function formatearEntrada(
 
 /**
  * Emite una sola línea limpia en consola con throttle de 30 segundos
- * cuando la base de datos está inalcanzable.
+ * cuando la base de datos está inalcanzable (silenciado en consola para centralizar en logs).
  */
-function imprimirAvisoConsolaBD(): void {
-  const ahora = Date.now();
-  if (ahora - ultimoAvisoConsolaBD > THROTTLE_BD_MS) {
-    ultimoAvisoConsolaBD = ahora;
-    console.warn(
-      "[EP-EMA DB] Servidor MySQL no disponible temporalmente. El evento fue registrado en logs/ep-ema-system.log."
-    );
-  }
+export function imprimirAvisoConsolaBD(): void {
+  // Silenciado: errores y eventos de BD se almacenan exclusivamente en logs/ep-ema-system.log
 }
 
 /**
@@ -164,7 +155,9 @@ export function esErrorConexionBD(error: unknown): boolean {
 export function logInfo(contexto: string, mensaje: string): void {
   const texto = formatearEntrada("INFO", contexto, mensaje);
   escribirEnDisco(texto);
-  console.log(`[${contexto}] ${mensaje}`);
+  if (contexto === "STARTUP") {
+    console.log(`[${contexto}] ${mensaje}`);
+  }
 }
 
 /**
@@ -175,12 +168,6 @@ export function logWarn(contexto: string, mensaje: string, detalle?: unknown): v
   const nivel = esBD ? "DB" : "WARN";
   const texto = formatearEntrada(nivel, contexto, mensaje, detalle);
   escribirEnDisco(texto);
-
-  if (esBD) {
-    imprimirAvisoConsolaBD();
-  } else {
-    console.warn(`[${contexto}] ${mensaje}`, detalle !== undefined ? detalle : "");
-  }
 }
 
 /**
@@ -191,10 +178,4 @@ export function logError(contexto: string, mensaje: string, error?: unknown): vo
   const nivel = esBD ? "DB" : "ERROR";
   const texto = formatearEntrada(nivel, contexto, mensaje, error);
   escribirEnDisco(texto);
-
-  if (esBD) {
-    imprimirAvisoConsolaBD();
-  } else {
-    console.error(`[${contexto}] ${mensaje}`, error !== undefined ? error : "");
-  }
 }

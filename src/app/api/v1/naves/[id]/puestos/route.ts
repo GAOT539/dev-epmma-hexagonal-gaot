@@ -6,6 +6,7 @@ import {
   generarSlugNave,
 } from "@/infrastructure/database/nave-puestos-sync.service";
 import { ordenarPuestos } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -84,7 +85,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       puestos: listaFormateada,
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/naves/[id]/puestos:", error);
+    logError("NAVES:PUESTOS:GET", "Error en GET /api/v1/naves/[id]/puestos", error);
     return NextResponse.json(
       { error: "Error al obtener puestos de la nave." },
       { status: 500 }
@@ -219,7 +220,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       })),
     });
   } catch (error) {
-    console.error("Error en PUT /api/v1/naves/[id]/puestos:", error);
+    logError("NAVES:PUESTOS:PUT", "Error en PUT /api/v1/naves/[id]/puestos", error);
     return NextResponse.json(
       { error: "Error al actualizar puestos de la nave." },
       { status: 500 }

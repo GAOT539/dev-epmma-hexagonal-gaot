@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, ArrowLeft, RefreshCw, ServerCrash, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { esErrorConexion } from "@/lib/error-utils";
+import { logClientError } from "@/lib/client-logger";
 
 interface ErrorPageProps {
   error: Error & { digest?: string };
@@ -20,8 +21,8 @@ export default function ErrorPage({ error, reset }: ErrorPageProps) {
   );
 
   useEffect(() => {
-    // Registro del error en consola para depuración técnica
-    console.error("Error capturado por el Error Boundary de EP-EMA:", error);
+    // Registro del error centralizado en servidor
+    logClientError("ERROR-BOUNDARY", "Error capturado por el Error Boundary de EP-EMA", error);
   }, [error]);
 
   const esFalloConexion = esErrorConexion(error);

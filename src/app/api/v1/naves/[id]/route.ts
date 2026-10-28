@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -37,7 +38,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       })),
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/naves/[id]:", error);
+    logError("NAVES:GET", "Error en GET /api/v1/naves/[id]", error);
     return NextResponse.json({ error: "Error al obtener la nave." }, { status: 500 });
   }
 }
@@ -204,7 +205,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
         );
       }
     }
-    console.error("Error en PUT /api/v1/naves/[id]:", error);
+    logError("NAVES:PUT", "Error en PUT /api/v1/naves/[id]", error);
     return NextResponse.json({ error: "Error al actualizar la nave." }, { status: 500 });
   }
 }
@@ -269,7 +270,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ exito: true, mensaje: "Nave eliminada correctamente." });
   } catch (error) {
-    console.error("Error en DELETE /api/v1/naves/[id]:", error);
+    logError("NAVES:DELETE", "Error en DELETE /api/v1/naves/[id]", error);
     return NextResponse.json({ exito: false, mensaje: "Error al eliminar la nave." }, { status: 500 });
   }
 }

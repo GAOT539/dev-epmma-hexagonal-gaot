@@ -8,6 +8,7 @@ import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendan
 import { verificarDiaNoLaborableNave } from "@/infrastructure/database/calendario-operativo.service";
 import { userCanAccessComerciante, getAuthenticatedUser } from "@/infrastructure/auth/authorization";
 import { asegurarSesionControlActivaDia } from "@/infrastructure/database/sesion-control-helper";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 export async function POST(request: Request) {
   try {
@@ -146,7 +147,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(nuevaObservacion, { status: 201 });
   } catch (error) {
-    console.error("Error en POST /api/v1/asistencia/observaciones:", error);
+    logError("ASISTENCIA:OBSERVACIONES", "Error en POST /api/v1/asistencia/observaciones", error);
     return NextResponse.json({ error: "Error al registrar la observación." }, { status: 500 });
   }
 }
@@ -197,7 +198,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true, message: "Observación eliminada." });
   } catch (error) {
-    console.error("Error en DELETE /api/v1/asistencia/observaciones:", error);
+    logError("ASISTENCIA:OBSERVACIONES", "Error en DELETE /api/v1/asistencia/observaciones", error);
     return NextResponse.json({ error: "Error al eliminar la observación." }, { status: 500 });
   }
 }

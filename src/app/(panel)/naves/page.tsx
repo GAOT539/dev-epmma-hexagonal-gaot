@@ -22,6 +22,7 @@ import { ModalesCrudNave } from "./components/ModalesCrudNave";
 import { PlanificadorEspacial } from "./components/PlanificadorEspacial";
 import { ModalPuestosNave } from "./components/ModalPuestosNave";
 import { ModalReporteVacantes } from "./components/ModalReporteVacantes";
+import { logClientError } from "@/lib/client-logger";
 
 export default function NavesPage() {
   const [naves, setNaves] = useState<Nave[]>([]);
@@ -60,17 +61,22 @@ export default function NavesPage() {
   };
 
   const handlePuestosActualizados = async () => {
-    const [navesActualizadas, commsActualizados] = await Promise.all([
-      naveService.obtenerNaves(),
-      comercianteService.obtenerComerciantes(),
-    ]);
-    setNaves(navesActualizadas);
-    setComerciantes(commsActualizados);
-    if (navePuestosModal) {
-      const encontrada = navesActualizadas.find((n) => n.id === navePuestosModal.id);
-      if (encontrada) {
-        setNavePuestosModal(encontrada);
+    try {
+      const [navesActualizadas, commsActualizados] = await Promise.all([
+        naveService.obtenerNaves(),
+        comercianteService.obtenerComerciantes(),
+      ]);
+      setNaves(navesActualizadas);
+      setComerciantes(commsActualizados);
+      if (navePuestosModal) {
+        const encontrada = navesActualizadas.find((n) => n.id === navePuestosModal.id);
+        if (encontrada) {
+          setNavePuestosModal(encontrada);
+        }
       }
+    } catch (err) {
+      logClientError("NAVES", "Error al actualizar puestos de la nave", err);
+      toast.error("Error al actualizar la información de puestos.");
     }
   };
 
@@ -80,17 +86,23 @@ export default function NavesPage() {
       naveService.obtenerNaves(),
       naveService.obtenerSupervisoresDisponibles(),
       comercianteService.obtenerComerciantes(),
-    ]).then(([navesData, supData, commsData]) => {
-      if (activo) {
-        setNaves(navesData);
-        setSupervisoresDisponibles(supData);
-        setComerciantes(commsData);
-        if (navesData.length > 0) {
-          setNavePlanoId((prev) => prev || navesData[0].id);
+    ])
+      .then(([navesData, supData, commsData]) => {
+        if (activo) {
+          setNaves(navesData);
+          setSupervisoresDisponibles(supData);
+          setComerciantes(commsData);
+          if (navesData.length > 0) {
+            setNavePlanoId((prev) => prev || navesData[0].id);
+          }
         }
-        setCargando(false);
-      }
-    });
+      })
+      .catch((err) => {
+        if (activo) logClientError("NAVES", "Error al cargar datos de naves", err);
+      })
+      .finally(() => {
+        if (activo) setCargando(false);
+      });
     return () => {
       activo = false;
     };
@@ -186,28 +198,33 @@ export default function NavesPage() {
   // ── Manejadores de Edición ────────────────────────────────────────────────
 
   async function handleOpenEditar(nave: Nave) {
-    setEditingNave(nave);
-    setEditNombre(nave.nombre);
-    setEditCantidad(String(nave.cantidadPuestos));
-    setEditSupervisores(nave.supervisores ? [...nave.supervisores] : []);
-    setEditarError("");
+    try {
+      setEditingNave(nave);
+      setEditNombre(nave.nombre);
+      setEditCantidad(String(nave.cantidadPuestos));
+      setEditSupervisores(nave.supervisores ? [...nave.supervisores] : []);
+      setEditarError("");
 
-    // Cálculo de puestos actualmente ocupados por comerciantes en esta nave
-    const comerciantesLista = await comercianteService.obtenerComerciantes();
-    const puestosOcupadosEnNave = new Set(
-      (nave.puestos ?? [])
-        .filter((p) => p.estado === "Ocupado" && p.comercianteId)
-        .map((p) => p.comercianteId)
-    );
-    const comerciantesEnNave = comerciantesLista.filter(
-      (c) =>
-        c.estadoRegistro !== "Deshabilitado" &&
-        ((c.nave && c.nave.trim().toUpperCase() === nave.nombre.trim().toUpperCase()) ||
-          puestosOcupadosEnNave.has(c.idInterno))
-    );
-    const puestosOcupadosNave = (nave.puestos ?? []).filter((p) => p.estado === "Ocupado").length;
-    const ocupados = Math.max(comerciantesEnNave.length, puestosOcupadosNave);
-    setPuestosOcupados(ocupados);
+      // Cálculo de puestos actualmente ocupados por comerciantes en esta nave
+      const comerciantesLista = await comercianteService.obtenerComerciantes();
+      const puestosOcupadosEnNave = new Set(
+        (nave.puestos ?? [])
+          .filter((p) => p.estado === "Ocupado" && p.comercianteId)
+          .map((p) => p.comercianteId)
+      );
+      const comerciantesEnNave = comerciantesLista.filter(
+        (c) =>
+          c.estadoRegistro !== "Deshabilitado" &&
+          ((c.nave && c.nave.trim().toUpperCase() === nave.nombre.trim().toUpperCase()) ||
+            puestosOcupadosEnNave.has(c.idInterno))
+      );
+      const puestosOcupadosNave = (nave.puestos ?? []).filter((p) => p.estado === "Ocupado").length;
+      const ocupados = Math.max(comerciantesEnNave.length, puestosOcupadosNave);
+      setPuestosOcupados(ocupados);
+    } catch (err) {
+      logClientError("NAVES", "Error al preparar edición de nave", err);
+      toast.error("Error al cargar los datos para editar la nave.");
+    }
   }
 
   function handleToggleSupervisorEdit(sup: string) {
@@ -271,19 +288,24 @@ export default function NavesPage() {
   // ── Manejador de Eliminación (Validación de Regla de Negocio) ──────────────
 
   async function handleEliminar(nave: Nave) {
-    const resultado = await naveService.eliminarNave(nave.id);
+    try {
+      const resultado = await naveService.eliminarNave(nave.id);
 
-    if (!resultado.exito) {
-      toast.error(
-        resultado.mensaje ||
-          "No se puede eliminar la nave porque tiene comerciantes asignados."
-      );
-      return;
+      if (!resultado.exito) {
+        toast.error(
+          resultado.mensaje ||
+            "No se puede eliminar la nave porque tiene comerciantes asignados."
+        );
+        return;
+      }
+
+      const navesActualizadas = await naveService.obtenerNaves();
+      setNaves(navesActualizadas);
+      toast.success(resultado.mensaje);
+    } catch (err) {
+      logClientError("NAVES", "Error al eliminar nave", err);
+      toast.error("Ocurrió un error al intentar eliminar la nave.");
     }
-
-    const navesActualizadas = await naveService.obtenerNaves();
-    setNaves(navesActualizadas);
-    toast.success(resultado.mensaje);
   }
 
   function handleSeleccionarNaveParaPlano(naveId: string) {

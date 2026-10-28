@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import type { PlanoEspacialNave, CeldaPlanoNave } from "@/domain/models/nave.model";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -52,7 +53,7 @@ export async function GET(request: Request, { params }: RouteParams) {
       actualizadoEn: new Date().toISOString(),
     });
   } catch (error) {
-    console.error("Error en GET /api/v1/naves/[id]/plano:", error);
+    logError("NAVES:PLANO:GET", "Error en GET /api/v1/naves/[id]/plano", error);
     return NextResponse.json({ error: "Error al obtener el plano de la nave." }, { status: 500 });
   }
 }
@@ -113,7 +114,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
       actualizadoEn: planoGuardado.actualizadoEn.toISOString(),
     });
   } catch (error) {
-    console.error("Error en PUT /api/v1/naves/[id]/plano:", error);
+    logError("NAVES:PLANO:PUT", "Error en PUT /api/v1/naves/[id]/plano", error);
     return NextResponse.json({ error: "Error al guardar el plano de la nave." }, { status: 500 });
   }
 }

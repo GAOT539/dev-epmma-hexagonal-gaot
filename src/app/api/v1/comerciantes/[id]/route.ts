@@ -5,6 +5,7 @@ import { prisma } from "@/infrastructure/database/prisma";
 import type { EstadoComerciante, Prisma } from "@prisma/client";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import { generarSlugNave } from "@/infrastructure/database/catastro-reconciliacion.service";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -23,7 +24,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     return NextResponse.json(comerciante);
   } catch (error) {
-    console.error("Error en GET /api/v1/comerciantes/[id]:", error);
+    logError("COMERCIANTES:GET", "Error en GET /api/v1/comerciantes/[id]", error);
     return NextResponse.json({ error: "Error al obtener comerciante." }, { status: 500 });
   }
 }
@@ -237,7 +238,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     return NextResponse.json(actualizado);
   } catch (error) {
-    console.error("Error en PUT /api/v1/comerciantes/[id]:", error);
+    logError("COMERCIANTES:PUT", "Error en PUT /api/v1/comerciantes/[id]", error);
     return NextResponse.json({ error: "Error al actualizar comerciante." }, { status: 500 });
   }
 }
@@ -276,7 +277,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, message: "Comerciante deshabilitado exitosamente." });
   } catch (error) {
-    console.error("Error en DELETE /api/v1/comerciantes/[id]:", error);
+    logError("COMERCIANTES:DELETE", "Error en DELETE /api/v1/comerciantes/[id]", error);
     return NextResponse.json({ error: "Error al deshabilitar comerciante." }, { status: 500 });
   }
 }

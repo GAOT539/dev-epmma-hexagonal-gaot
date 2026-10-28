@@ -8,6 +8,7 @@ import type {
   ResumenSesionControl,
 } from "@/domain/models/auditoria.model";
 import type { EstadoAsistencia } from "@/domain/models/asistencia.model";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 export async function asegurarSesionControlActivaDia(params: {
   naveId: string;
@@ -131,6 +132,6 @@ export async function asegurarSesionControlActivaDia(params: {
       },
     });
   } catch (err) {
-    console.error("Error al asegurar sesión de control activa:", err);
+    logError("SESION-CONTROL", "Error al asegurar sesión de control activa", err);
   }
 }

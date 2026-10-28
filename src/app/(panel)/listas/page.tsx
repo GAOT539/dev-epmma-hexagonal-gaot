@@ -47,6 +47,7 @@ import {
   ObservacionDialog,
   ComercianteModal,
 } from "./components/ModalNovedad";
+import { logClientError, logClientWarn } from "@/lib/client-logger";
 import {
   PuestosList,
   TreemapView,
@@ -160,15 +161,21 @@ export default function ListasPage() {
     Promise.all([
       naveService.obtenerNaves(),
       comercianteService.obtenerComerciantes(),
-    ]).then(([navesData, comData]) => {
-      if (activo) {
-        setNaves(navesData);
-        const map = new Map<string, Comerciante>();
-        comData.forEach((c) => map.set(c.idInterno, c));
-        setComerciantesMap(map);
-        setCargando(false);
-      }
-    });
+    ])
+      .then(([navesData, comData]) => {
+        if (activo) {
+          setNaves(navesData);
+          const map = new Map<string, Comerciante>();
+          comData.forEach((c) => map.set(c.idInterno, c));
+          setComerciantesMap(map);
+        }
+      })
+      .catch((err) => {
+        if (activo) logClientError("LISTAS", "Error al cargar naves y comerciantes", err);
+      })
+      .finally(() => {
+        if (activo) setCargando(false);
+      });
     return () => {
       activo = false;
     };
@@ -216,7 +223,7 @@ export default function ListasPage() {
       })
       .catch((err) => {
         if (activo) {
-          console.error("Error al obtener plano de nave en listas:", err);
+          logClientError("LISTAS", "Error al obtener plano de nave en listas", err);
         }
       });
     return () => {
@@ -270,7 +277,7 @@ export default function ListasPage() {
       try {
         localStorage.setItem(userKey, siguiente);
       } catch (err) {
-        console.warn("Error al guardar preferencia de vista:", err);
+        logClientWarn("LISTAS", "Error al guardar preferencia de vista", err);
       }
     }
   }
@@ -278,11 +285,16 @@ export default function ListasPage() {
   // Carga asíncrona de asistencias por fecha
   useEffect(() => {
     let activo = true;
-    asistenciaService.obtenerAsistenciaPorFecha(fechaStr).then((datos) => {
-      if (activo) {
-        setAsistenciaDelDia(datos);
-      }
-    });
+    asistenciaService
+      .obtenerAsistenciaPorFecha(fechaStr)
+      .then((datos) => {
+        if (activo) {
+          setAsistenciaDelDia(datos);
+        }
+      })
+      .catch((err) => {
+        if (activo) logClientError("LISTAS", "Error al obtener asistencia por fecha", err);
+      });
     return () => {
       activo = false;
     };
@@ -428,7 +440,12 @@ export default function ListasPage() {
   async function aplicarCambioEstado(comercianteId: string, estado: EstadoAsistencia) {
     const key = `${comercianteId}:${fechaStr}`;
     setOverrides((prev) => ({ ...prev, [key]: estado }));
-    await asistenciaService.registrarAsistencia(comercianteId, fechaStr, estado);
+    try {
+      await asistenciaService.registrarAsistencia(comercianteId, fechaStr, estado);
+    } catch (err) {
+      logClientError("LISTAS", "Error al registrar asistencia", err);
+      toast.error("Error al registrar la asistencia.");
+    }
   }
 
   async function handleEstadoChange(comercianteId: string, estado: EstadoAsistencia) {

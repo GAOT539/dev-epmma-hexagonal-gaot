@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import { hashPassword } from "@/infrastructure/auth/password.utils";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -37,7 +38,7 @@ export async function POST(request: Request, { params }: RouteParams) {
       mensaje: `Contraseña restablecida exitosamente para el usuario ${usuario.nombres} ${usuario.apellidos}. La clave temporal es su cédula seguida de un asterisco.`,
     });
   } catch (error) {
-    console.error("Error en POST /api/v1/usuarios/[id]/reset-password:", error);
+    logError("USUARIOS:RESET-PASSWORD", "Error en POST /api/v1/usuarios/[id]/reset-password", error);
     return NextResponse.json(
       { error: "Error interno al restablecer la contraseña." },
       { status: 500 }

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import type { Usuario } from "@/domain/models/comerciante.model";
+import { logClientError } from "@/lib/client-logger";
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        console.error("Fallo en llamada XHR a /api/v1/auth/login:", err);
+        logClientError("AUTH-CONTEXT", "Fallo en llamada XHR a /api/v1/auth/login", err);
       }
 
       return {
@@ -156,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch (err) {
-        console.error("Fallo en llamada XHR a /api/v1/auth/change-password:", err);
+        logClientError("AUTH-CONTEXT", "Fallo en llamada XHR a /api/v1/auth/change-password", err);
       }
 
       return {

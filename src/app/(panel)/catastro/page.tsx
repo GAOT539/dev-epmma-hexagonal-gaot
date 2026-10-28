@@ -17,6 +17,7 @@ import { useAuth } from "@/application/services/auth.service";
 import type { Comerciante } from "@/domain/models/comerciante.model";
 import type { Nave } from "@/domain/models/nave.model";
 import { toast } from "sonner";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -348,7 +349,7 @@ export default function TicPage() {
           setNaves(datosNaves);
         }
       } catch (e) {
-        console.error("Error al cargar datos en catastro", e);
+        logClientError("CATASTRO", "Error al cargar datos en catastro", e);
       } finally {
         if (!cancel) setCargando(false);
       }
@@ -416,13 +417,18 @@ export default function TicPage() {
   async function confirmDelete() {
     if (!deleteTarget) return;
 
-    await comercianteService.eliminarComerciante(deleteTarget.idInterno);
+    try {
+      await comercianteService.eliminarComerciante(deleteTarget.idInterno);
 
-    toast.success("Comerciante deshabilitado", {
-      description: `${deleteTarget.contribuyente} ha sido deshabilitado y su puesto liberado.`,
-    });
-    setDeleteTarget(null);
-    setRefreshKey((k) => k + 1);
+      toast.success("Comerciante deshabilitado", {
+        description: `${deleteTarget.contribuyente} ha sido deshabilitado y su puesto liberado.`,
+      });
+      setDeleteTarget(null);
+      setRefreshKey((k) => k + 1);
+    } catch (err) {
+      logClientError("CATASTRO", "Error al deshabilitar comerciante", err);
+      toast.error("Error al deshabilitar comerciante.");
+    }
   }
 
   return (
@@ -583,9 +589,14 @@ export default function TicPage() {
                               type="button"
                               onClick={async () => {
                                 if (isDisabled) {
-                                  await comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined });
-                                  toast.success("Habilitado");
-                                  setRefreshKey(k => k + 1);
+                                  try {
+                                    await comercianteService.actualizarComerciante(com.idInterno, { deshabilitadoPor: undefined });
+                                    toast.success("Habilitado");
+                                    setRefreshKey((k) => k + 1);
+                                  } catch (err) {
+                                    logClientError("CATASTRO", "Error al habilitar comerciante", err);
+                                    toast.error("Error al habilitar comerciante.");
+                                  }
                                 } else {
                                   handleEliminar(com);
                                 }

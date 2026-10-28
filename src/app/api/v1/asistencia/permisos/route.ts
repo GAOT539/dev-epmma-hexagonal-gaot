@@ -8,6 +8,7 @@ import { parseISO, format, addDays, isBefore, isEqual } from "date-fns";
 import { userCanAccessComerciante, getAuthenticatedUser } from "@/infrastructure/auth/authorization";
 import { obtenerFechaHoyEcuador } from "@/infrastructure/database/daily-attendance.service";
 import { asegurarSesionControlActivaDia } from "@/infrastructure/database/sesion-control-helper";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 function generarRangoFechas(fechaInicio: string, fechaFin: string): string[] {
   const fechas: string[] = [];
@@ -167,7 +168,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(nuevoPermiso, { status: 201 });
   } catch (error) {
-    console.error("Error en POST /api/v1/asistencia/permisos:", error);
+    logError("ASISTENCIA:PERMISOS", "Error en POST /api/v1/asistencia/permisos", error);
     return NextResponse.json({ error: "Error al registrar el permiso." }, { status: 500 });
   }
 }
@@ -248,7 +249,7 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({ success: true, message: "Permiso eliminado y jornadas revertidas a Presente." });
   } catch (error) {
-    console.error("Error en DELETE /api/v1/asistencia/permisos:", error);
+    logError("ASISTENCIA:PERMISOS", "Error en DELETE /api/v1/asistencia/permisos", error);
     return NextResponse.json({ error: "Error al eliminar el permiso." }, { status: 500 });
   }
 

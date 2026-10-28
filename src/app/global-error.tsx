@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { AlertOctagon, RefreshCw } from "lucide-react";
+import { logClientError } from "@/lib/client-logger";
 
 interface GlobalErrorProps {
   error: Error & { digest?: string };
@@ -10,7 +11,7 @@ interface GlobalErrorProps {
 
 export default function GlobalError({ error, reset }: GlobalErrorProps) {
   useEffect(() => {
-    console.error("Error crítico a nivel raíz capturado por global-error:", error);
+    logClientError("GLOBAL-ERROR", "Error crítico a nivel raíz capturado por global-error", error);
   }, [error]);
 
   return (

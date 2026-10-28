@@ -9,6 +9,7 @@ import {
   verifyPasswordHash,
   validatePasswordComplexity,
 } from "@/infrastructure/auth/password.utils";
+import { logError } from "@/infrastructure/logger/system-logger";
 
 export async function POST(request: Request) {
   try {
@@ -111,7 +112,7 @@ export async function POST(request: Request) {
       message: "Contraseña actualizada exitosamente.",
     });
   } catch (error) {
-    console.error("Error en POST /api/v1/auth/change-password:", error);
+    logError("AUTH:CHANGE-PASSWORD", "Error en POST /api/v1/auth/change-password", error);
     return NextResponse.json(
       { success: false, error: "Error interno al cambiar la contraseña." },
       { status: 500 }

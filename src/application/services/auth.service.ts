@@ -7,6 +7,7 @@ export {
 } from "@/infrastructure/auth/password-policy.utils";
 
 export { useAuth, AuthProvider } from "@/infrastructure/auth/auth-context";
+import { logClientError } from "@/lib/client-logger";
 
 /**
  * Solicita el restablecimiento de contraseña llamando a la API del backend
@@ -27,7 +28,7 @@ export async function solicitarRestablecimientoPassword(identificador: string) {
     const data = await res.json();
     return { success: false, error: data.error || "Error al solicitar restablecimiento." };
   } catch (err) {
-    console.error("Error al conectar con /api/v1/auth/forgot-password:", err);
+    logClientError("AUTH-SERVICE", "Error al conectar con /api/v1/auth/forgot-password", err);
     return {
       success: false,
       error: "Error de conexión con el servidor al solicitar restablecimiento.",

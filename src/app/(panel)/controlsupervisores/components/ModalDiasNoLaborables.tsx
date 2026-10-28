@@ -19,6 +19,7 @@ import {
 import type { Nave } from "@/domain/models/nave.model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -103,7 +104,7 @@ export function ModalDiasNoLaborables({
           setTodasLasNaves(data.naves);
         }
       })
-      .catch((err) => console.error("Error al cargar naves:", err));
+      .catch((err) => logClientError("DIAS-NO-LABORABLES", "Error al cargar naves", err));
     return () => {
       activo = false;
     };
@@ -119,7 +120,7 @@ export function ModalDiasNoLaborables({
         setReglasNoLab(data.reglas || []);
       }
     } catch (err) {
-      console.error("Error al cargar reglas de días no laborables:", err);
+      logClientError("DIAS-NO-LABORABLES", "Error al cargar reglas de días no laborables", err);
     } finally {
       setCargandoReglas(false);
     }
@@ -135,7 +136,7 @@ export function ModalDiasNoLaborables({
           setReglasNoLab(data.reglas);
         }
       })
-      .catch((err) => console.error(err))
+      .catch((err) => logClientError("DIAS-NO-LABORABLES", "Error al cargar reglas de días no laborables", err))
       .finally(() => {
         if (activo) setCargandoReglas(false);
       });
@@ -244,7 +245,7 @@ export function ModalDiasNoLaborables({
       await cargarReglas();
       onCambioRealizado?.();
     } catch (err) {
-      console.error(err);
+      logClientError("DIAS-NO-LABORABLES", "Error al procesar la regla de día no laborable", err);
       toast.error("Error al procesar la regla de día no laborable.");
     } finally {
       setGuardandoRegla(false);
@@ -268,7 +269,7 @@ export function ModalDiasNoLaborables({
       await cargarReglas();
       onCambioRealizado?.();
     } catch (err) {
-      console.error(err);
+      logClientError("DIAS-NO-LABORABLES", "Error al eliminar la regla de día no laborable", err);
       toast.error("Error al eliminar la regla.");
     }
   };

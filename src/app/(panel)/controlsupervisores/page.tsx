@@ -34,6 +34,7 @@ import {
 import { ModalPermisosSupervisores } from "./components/ModalPermisosSupervisores";
 import { ModalDiasNoLaborables } from "./components/ModalDiasNoLaborables";
 import { ModalReporteSupervisores } from "./components/ModalReporteSupervisores";
+import { logClientError } from "@/lib/client-logger";
 
 const ITEMS_POR_PAGINA = 10;
 
@@ -97,9 +98,12 @@ export default function ControlSupervisoresPage() {
 
   // Cargar usuarios con rol SUPERVISOR
   useEffect(() => {
-    usuarioService.obtenerUsuarios().then((users) => {
-      setSupervisores(users.filter((u) => u.rol === "SUPERVISOR"));
-    });
+    usuarioService
+      .obtenerUsuarios()
+      .then((users) => {
+        setSupervisores(users.filter((u) => u.rol === "SUPERVISOR"));
+      })
+      .catch((err) => logClientError("CONTROL-SUPERVISORES", "Error al cargar supervisores", err));
   }, []);
 
   // Cargar sesiones de control según filtros
@@ -118,7 +122,7 @@ export default function ControlSupervisoresPage() {
           setSesiones(datos);
         }
       } catch (err) {
-        console.error("Error al cargar sesiones de control de supervisores", err);
+        logClientError("CONTROL-SUPERVISORES", "Error al cargar sesiones de control de supervisores", err);
       } finally {
         if (!cancel) setCargando(false);
       }

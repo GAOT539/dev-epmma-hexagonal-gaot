@@ -24,6 +24,7 @@ import {
 import { exportarReporteAsistenciaExcel } from "./components/reportes-excel.utils";
 import { ReportesTabla } from "./components/ReportesTabla";
 import { ReportesFiltros } from "./components/ReportesFiltros";
+import { logClientError } from "@/lib/client-logger";
 
 // ── Página de Reportes ───────────────────────────────────────────────────────
 
@@ -111,13 +112,19 @@ export default function ReportesPage() {
     Promise.all([
       naveService.obtenerNaves(),
       comercianteService.obtenerComerciantes(),
-    ]).then(([navesData, comData]) => {
-      if (activo) {
-        setAllNaves(navesData);
-        setTodosLosComerciantes(comData);
-        setCargandoInicial(false);
-      }
-    });
+    ])
+      .then(([navesData, comData]) => {
+        if (activo) {
+          setAllNaves(navesData);
+          setTodosLosComerciantes(comData);
+        }
+      })
+      .catch((err) => {
+        if (activo) logClientError("REPORTES", "Error en carga inicial de reportes", err);
+      })
+      .finally(() => {
+        if (activo) setCargandoInicial(false);
+      });
     return () => {
       activo = false;
     };
@@ -228,11 +235,17 @@ export default function ReportesPage() {
         ? asistenciaService.obtenerAsistenciaNaveRango(selectedNaveId, fechaInicio, fechaFin)
         : asistenciaService.obtenerAsistenciaRango(fechaInicio, fechaFin);
 
-    fetchPromise.then((asistencia) => {
-      if (!activo) return;
-      setAsistenciaData(asistencia);
-      setCargandoReporte(false);
-    });
+    fetchPromise
+      .then((asistencia) => {
+        if (!activo) return;
+        setAsistenciaData(asistencia);
+      })
+      .catch((err) => {
+        if (activo) logClientError("REPORTES", "Error al obtener asistencia en rango", err);
+      })
+      .finally(() => {
+        if (activo) setCargandoReporte(false);
+      });
 
     return () => {
       activo = false;

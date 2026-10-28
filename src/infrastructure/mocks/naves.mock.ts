@@ -5,6 +5,7 @@ import type {
   CeldaPlanoNave,
 } from "@/domain/models/nave.model";
 import { sincronizarNavesSupervisorDesdeNaves, getSupervisores } from "./auth.mock";
+import { logClientWarn } from "@/lib/client-logger";
 
 // ── Lista de Supervisores Disponibles en el Sistema ──────────────────────────
 
@@ -154,7 +155,8 @@ export function actualizarNave(
   // En un entorno real, el backend validaría que no se reduzcan puestos si hay
   // comerciantes asignados a los puestos eliminados.
   if (nuevaCantidad < anterior.cantidadPuestos) {
-    console.warn(
+    logClientWarn(
+      "MOCK:NAVES",
       `[SIMULACIÓN BACKEND] Reducción de puestos en ${anterior.nombre} de ${anterior.cantidadPuestos} a ${nuevaCantidad}. En un entorno real, el backend validaría que no se reduzcan puestos si hay comerciantes asignados a los puestos eliminados.`
     );
   }
@@ -297,7 +299,7 @@ function cargarPlanosDesdeStorage(): Record<string, PlanoEspacialNave> {
     if (!raw) return {};
     return JSON.parse(raw) as Record<string, PlanoEspacialNave>;
   } catch (error) {
-    console.warn("[PlanoNaves] Error al leer planos de localStorage:", error);
+    logClientWarn("MOCK:PLANOS", "Error al leer planos de localStorage", error);
     return {};
   }
 }
@@ -307,7 +309,7 @@ function persistirPlanosEnStorage(planos: Record<string, PlanoEspacialNave>): vo
   try {
     localStorage.setItem(STORAGE_KEY_PLANOS, JSON.stringify(planos));
   } catch (error) {
-    console.warn("[PlanoNaves] Error al guardar planos en localStorage:", error);
+    logClientWarn("MOCK:PLANOS", "Error al guardar planos en localStorage", error);
   }
 }
 

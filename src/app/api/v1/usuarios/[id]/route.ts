@@ -213,7 +213,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
 
     return NextResponse.json({ success: true, message: "Usuario deshabilitado exitosamente." });
   } catch (error) {
-    console.error("Error en DELETE /api/v1/usuarios/[id]:", error);
+    logError("USUARIOS:DELETE", "Error en DELETE /api/v1/usuarios/[id]", error);
     return NextResponse.json({ error: "Error al deshabilitar usuario." }, { status: 500 });
   }
 }

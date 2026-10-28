@@ -15,6 +15,7 @@ import type { Usuario } from "@/domain/models/usuario.model";
 import type { Nave } from "@/domain/models/nave.model";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -91,7 +92,7 @@ export function ModalPermisosSupervisores({
           setTodasLasNaves(data.naves);
         }
       })
-      .catch((err) => console.error("Error al cargar naves:", err))
+      .catch((err) => logClientError("PERMISOS-SUPERVISORES", "Error al cargar naves", err))
       .finally(() => {
         if (activo) setCargandoNaves(false);
       });
@@ -110,7 +111,7 @@ export function ModalPermisosSupervisores({
         setPermisos(data.permisos || []);
       }
     } catch (err) {
-      console.error("Error al cargar permisos:", err);
+      logClientError("PERMISOS-SUPERVISORES", "Error al cargar permisos", err);
     } finally {
       setCargandoPermisos(false);
     }
@@ -126,7 +127,7 @@ export function ModalPermisosSupervisores({
           setPermisos(data.permisos);
         }
       })
-      .catch((err) => console.error("Error al cargar permisos:", err))
+      .catch((err) => logClientError("PERMISOS-SUPERVISORES", "Error al cargar permisos", err))
       .finally(() => {
         if (activo) setCargandoPermisos(false);
       });
@@ -270,7 +271,7 @@ export function ModalPermisosSupervisores({
       await cargarPermisos();
       onCambioRealizado?.();
     } catch (err) {
-      console.error(err);
+      logClientError("PERMISOS-SUPERVISORES", "Error de comunicación al guardar el permiso", err);
       toast.error("Error de comunicación al guardar el permiso.");
     } finally {
       setGuardandoPermiso(false);
@@ -294,7 +295,7 @@ export function ModalPermisosSupervisores({
       await cargarPermisos();
       onCambioRealizado?.();
     } catch (err) {
-      console.error(err);
+      logClientError("PERMISOS-SUPERVISORES", "Error al revocar el permiso", err);
       toast.error("Error al revocar el permiso.");
     }
   };

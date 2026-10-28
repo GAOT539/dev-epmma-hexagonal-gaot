@@ -21,6 +21,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { logClientError } from "@/lib/client-logger";
 import { naveService } from "@/application/services/nave.service";
 import { comercianteService } from "@/application/services/comerciante.service";
 import type {
@@ -122,7 +123,7 @@ export function PlanificadorEspacial({
       })
       .catch((err) => {
         if (activo) {
-          console.error("Error al cargar plano de nave:", err);
+          logClientError("PLANIFICADOR", "Error al cargar plano de nave", err);
           setCargandoPlano(false);
         }
       });
@@ -391,7 +392,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
   }
 
@@ -493,7 +494,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
     toast.success(
       `Puesto trasladado a [${colIndexToLetter(targetColumna)}${targetFila + 1}]`
@@ -752,7 +753,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
   }
 
@@ -780,7 +781,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
   }
 
@@ -802,7 +803,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
   }
 
@@ -832,7 +833,7 @@ export function PlanificadorEspacial({
     };
     setPlanoActual(nuevoPlano);
     if (naveActivaId) {
-      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch(console.error);
+      naveService.guardarPlanoNave(naveActivaId, nuevoPlano).catch((err) => logClientError("PLANIFICADOR", "Error al guardar plano de nave", err));
     }
   }
 

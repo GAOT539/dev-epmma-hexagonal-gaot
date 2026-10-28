@@ -17,6 +17,7 @@ import { naveService } from "@/application/services/nave.service";
 import type { Rol, Usuario } from "@/domain/models/usuario.model";
 import type { Nave } from "@/domain/models/nave.model";
 import { toast } from "sonner";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -338,7 +339,7 @@ export default function ConfiguracionUsuariosPage() {
       setAllUsuarios(users);
       setNaves(listaNaves);
     } catch (e) {
-      console.error(e);
+      logClientError("USUARIOS", "Error al cargar los usuarios", e);
       toast.error("Error al cargar los usuarios");
     } finally {
       setCargando(false);
@@ -358,7 +359,7 @@ export default function ConfiguracionUsuariosPage() {
           setNaves(listaNaves);
         }
       } catch (e) {
-        console.error(e);
+        logClientError("USUARIOS", "Error en carga inicial de usuarios", e);
       } finally {
         if (!cancel) setCargando(false);
       }
@@ -371,29 +372,39 @@ export default function ConfiguracionUsuariosPage() {
 
   async function handleDeleteUser() {
     if (!deleteUserId) return;
-    const u = allUsuarios.find((u) => u.id === deleteUserId);
-    await usuarioService.eliminarUsuario(deleteUserId);
-    toast.success("Usuario deshabilitado", {
-      description: `${u?.nombres ?? ""} ${u?.apellidos ?? ""} ha sido deshabilitado correctamente.`,
-    });
-    setDeleteUserId(null);
-    cargarDatos();
+    try {
+      const u = allUsuarios.find((u) => u.id === deleteUserId);
+      await usuarioService.eliminarUsuario(deleteUserId);
+      toast.success("Usuario deshabilitado", {
+        description: `${u?.nombres ?? ""} ${u?.apellidos ?? ""} ha sido deshabilitado correctamente.`,
+      });
+      setDeleteUserId(null);
+      cargarDatos();
+    } catch (err) {
+      logClientError("USUARIOS", "Error al deshabilitar usuario", err);
+      toast.error("Error al deshabilitar el usuario.");
+    }
   }
 
   async function handleResetPassword() {
     if (!resetPasswordUser) return;
-    const ok = await usuarioService.restablecerPasswordUsuario(resetPasswordUser.id);
-    if (ok) {
-      toast.success("Contraseña restablecida", {
-        description: `La contraseña de ${resetPasswordUser.nombres} ${resetPasswordUser.apellidos} ha sido restablecida exitosamente.`,
-      });
-    } else {
-      toast.error("Error al restablecer contraseña", {
-        description: "No se pudo restablecer la contraseña del usuario.",
-      });
+    try {
+      const ok = await usuarioService.restablecerPasswordUsuario(resetPasswordUser.id);
+      if (ok) {
+        toast.success("Contraseña restablecida", {
+          description: `La contraseña de ${resetPasswordUser.nombres} ${resetPasswordUser.apellidos} ha sido restablecida exitosamente.`,
+        });
+      } else {
+        toast.error("Error al restablecer contraseña", {
+          description: "No se pudo restablecer la contraseña del usuario.",
+        });
+      }
+      setResetPasswordUser(null);
+      cargarDatos();
+    } catch (err) {
+      logClientError("USUARIOS", "Error al restablecer contraseña", err);
+      toast.error("Error al restablecer la contraseña del usuario.");
     }
-    setResetPasswordUser(null);
-    cargarDatos();
   }
 
   const usuariosGestionables = allUsuarios

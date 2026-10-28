@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import type { Usuario } from "@/domain/models/usuario.model";
 import { Button } from "@/components/ui/button";
+import { logClientError } from "@/lib/client-logger";
 import {
   Dialog,
   DialogContent,
@@ -132,7 +133,7 @@ function ModalReporteSupervisoresContenido({
         setDatosReporte(data);
       } catch (err) {
         if (!activo) return;
-        console.error("Error al cargar reporte de supervisores:", err);
+        logClientError("REPORTE-SUPERVISORES", "Error al cargar reporte de supervisores", err);
         toast.error("Error al cargar la información del reporte consolidado.");
       } finally {
         if (activo) {
@@ -185,7 +186,7 @@ function ModalReporteSupervisoresContenido({
         toast.success("Reporte Detalle PDF generado exitosamente.");
       }
     } catch (err) {
-      console.error("Error al exportar PDF:", err);
+      logClientError("REPORTE-SUPERVISORES", "Error al exportar PDF", err);
       toast.error("Ocurrió un error al generar el PDF del reporte.");
     } finally {
       setExportandoPDF(false);
@@ -211,7 +212,7 @@ function ModalReporteSupervisoresContenido({
         toast.success("Reporte Detalle Excel (.xlsx) generado exitosamente.");
       }
     } catch (err) {
-      console.error("Error al exportar Excel:", err);
+      logClientError("REPORTE-SUPERVISORES", "Error al exportar Excel", err);
       toast.error("Ocurrió un error al generar el Excel del reporte.");
     } finally {
       setExportandoExcel(false);
