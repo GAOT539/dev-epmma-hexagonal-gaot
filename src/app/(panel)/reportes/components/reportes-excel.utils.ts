@@ -153,10 +153,54 @@ export async function exportarReporteAsistenciaExcel({
     );
     const anchoPuesto = Math.max(16, maxLenPuesto + 4);
 
-    const totalCols = soloObservaciones
-      ? 6
-      : 5 + fechas.length + (incluirObservaciones ? 1 : 0);
-    const maxColHeader = Math.max(totalCols, 9);
+    // Determinar columnas y anchos para el Cuadro Descripción y la sección de Observaciones
+    let b1Col: number;
+    let d1StartCol: number;
+    let d1EndCol: number;
+    let b2Col: number;
+    let d2StartCol: number;
+    let d2EndCol: number;
+    let obsColStart = 6;
+    let obsColEnd = 9;
+
+    if (soloObservaciones || incluirObservaciones) {
+      obsColStart = soloObservaciones ? 6 : 6 + fechas.length;
+      obsColEnd = obsColStart + 3;
+
+      ws.getColumn(obsColStart).width = 5.5;
+      ws.getColumn(obsColStart + 1).width = soloObservaciones ? 26.5 : 18.5;
+      ws.getColumn(obsColStart + 2).width = 5.5;
+      ws.getColumn(obsColStart + 3).width = soloObservaciones ? 26.5 : 18.5;
+
+      b1Col = obsColStart;
+      d1StartCol = obsColStart + 1;
+      d1EndCol = obsColStart + 1;
+      b2Col = obsColStart + 2;
+      d2StartCol = obsColStart + 3;
+      d2EndCol = obsColStart + 3;
+    } else if (fechas.length >= 8) {
+      const baseDateEnd = 5 + fechas.length;
+      b1Col = baseDateEnd - 7;
+      d1StartCol = baseDateEnd - 6;
+      d1EndCol = baseDateEnd - 4;
+      b2Col = baseDateEnd - 3;
+      d2StartCol = baseDateEnd - 2;
+      d2EndCol = baseDateEnd;
+    } else {
+      const cStart = 6;
+      b1Col = cStart;
+      d1StartCol = cStart + 1;
+      d1EndCol = cStart + 1;
+      b2Col = cStart + 2;
+      d2StartCol = cStart + 3;
+      d2EndCol = cStart + 3;
+      ws.getColumn(b1Col).width = 4.8;
+      ws.getColumn(d1StartCol).width = 14;
+      ws.getColumn(b2Col).width = 4.8;
+      ws.getColumn(d2StartCol).width = 14;
+    }
+
+    const maxColHeader = d2EndCol;
 
     // 2. Encabezado Institucional
     // Fila 1: B1 combinada hasta la última columna de la tabla
@@ -180,7 +224,7 @@ export async function exportarReporteAsistenciaExcel({
     // Fila 3: Fila separadora limpia
     ws.getRow(3).height = 8;
 
-    // 3. Cuadro Izquierdo Unificado (Columnas B y C, Filas 4 a 6)
+    // 3. Cuadro Izquierdo Unificado (Columnas A y B combinadas para label, Columna C para valor, Filas 4 a 6)
     const datosIzq = [
       { label: "Nave:", val: grupo.nombre, boldVal: true },
       { label: "Período:", val: periodoUnificado, boldVal: false },
@@ -189,15 +233,16 @@ export async function exportarReporteAsistenciaExcel({
 
     datosIzq.forEach((d, idx) => {
       const filaNum = 4 + idx;
-      const cLabel = ws.getCell(`B${filaNum}`);
-      const cVal = ws.getCell(`C${filaNum}`);
-
+      ws.mergeCells(filaNum, 1, filaNum, 2);
+      const cLabel = ws.getRow(filaNum).getCell(1);
       cLabel.value = d.label;
       cLabel.font = { name: "Arial", size: 9, bold: true };
       cLabel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFE6EFE9" } };
       cLabel.alignment = { vertical: "middle", horizontal: "left" };
       cLabel.border = bordeFino;
+      ws.getRow(filaNum).getCell(2).border = bordeFino;
 
+      const cVal = ws.getRow(filaNum).getCell(3);
       cVal.value = d.val;
       cVal.font = { name: "Arial", size: 9, bold: d.boldVal };
       cVal.alignment = { vertical: "middle", horizontal: "left" };
@@ -207,36 +252,7 @@ export async function exportarReporteAsistenciaExcel({
     });
     ws.getRow(7).height = 16;
 
-    // 4. Cuadro Derecho de Descripción (2 columnas dobles en Filas 4 a 7)
-    let b1Col: number;
-    let d1StartCol: number;
-    let d1EndCol: number;
-    let b2Col: number;
-    let d2StartCol: number;
-    let d2EndCol: number;
-
-    if (!soloObservaciones && fechas.length >= 6) {
-      const baseDateEnd = 5 + fechas.length;
-      const cStart = baseDateEnd - 5;
-      b1Col = cStart;
-      d1StartCol = cStart + 1;
-      d1EndCol = cStart + 2;
-      b2Col = cStart + 3;
-      d2StartCol = cStart + 4;
-      d2EndCol = cStart + 5;
-    } else {
-      const cStart = soloObservaciones ? 6 : Math.max(6, totalCols - 3);
-      b1Col = cStart;
-      d1StartCol = cStart + 1;
-      d1EndCol = cStart + 1;
-      b2Col = cStart + 2;
-      d2StartCol = cStart + 3;
-      d2EndCol = cStart + 3;
-      ws.getColumn(b1Col).width = 4.8;
-      ws.getColumn(d1StartCol).width = 11;
-      ws.getColumn(b2Col).width = 4.8;
-      ws.getColumn(d2StartCol).width = 11;
-    }
+    // 4. Cuadro Derecho de Descripción (Filas 4 a 7)
 
     // Cabecera combinada "Descripción" en Fila 4
     ws.mergeCells(4, b1Col, 4, d2EndCol);
@@ -326,19 +342,22 @@ export async function exportarReporteAsistenciaExcel({
     });
 
     let colActual = 6;
-    let colObs = 6;
 
     if (soloObservaciones) {
-      ws.mergeCells("F9:F10");
-      const cObs = ws.getCell("F9");
+      ws.mergeCells(9, obsColStart, 10, obsColEnd);
+      const cObs = ws.getRow(9).getCell(obsColStart);
       cObs.value = "OBSERVACIONES / CITACIONES / NOTIFICACIONES / PERMISOS";
       cObs.font = estiloFuenteHeader;
       cObs.fill = estiloFondoHeader;
       cObs.alignment = { vertical: "middle", horizontal: "left" };
-      cObs.border = bordeFino;
-      ws.getCell("F10").border = bordeFino;
-      ws.getColumn(6).width = 65;
-      colObs = 6;
+      for (let c = obsColStart; c <= obsColEnd; c++) {
+        const c9 = ws.getRow(9).getCell(c);
+        c9.fill = estiloFondoHeader;
+        c9.border = bordeFino;
+        const c10 = ws.getRow(10).getCell(c);
+        c10.fill = estiloFondoHeader;
+        c10.border = bordeFino;
+      }
     } else {
       fechas.forEach((f) => {
         const celdaDiaLetra = ws.getRow(9).getCell(colActual);
@@ -359,18 +378,26 @@ export async function exportarReporteAsistenciaExcel({
         colActual++;
       });
 
-      // SIN columnas resumen Tot
+      if (!soloObservaciones && !incluirObservaciones && fechas.length < 8) {
+        ws.getColumn(d1StartCol).width = Math.max(ws.getColumn(d1StartCol).width || 0, 14);
+        ws.getColumn(d2StartCol).width = Math.max(ws.getColumn(d2StartCol).width || 0, 14);
+      }
+
       if (incluirObservaciones) {
-        colObs = colActual;
-        ws.mergeCells(9, colObs, 10, colObs);
-        const cObs = ws.getRow(9).getCell(colObs);
+        ws.mergeCells(9, obsColStart, 10, obsColEnd);
+        const cObs = ws.getRow(9).getCell(obsColStart);
         cObs.value = "OBSERVACIONES";
         cObs.font = estiloFuenteHeader;
         cObs.fill = estiloFondoHeader;
         cObs.alignment = { vertical: "middle", horizontal: "left" };
-        cObs.border = bordeFino;
-        ws.getRow(10).getCell(colObs).border = bordeFino;
-        ws.getColumn(colObs).width = 48;
+        for (let c = obsColStart; c <= obsColEnd; c++) {
+          const c9 = ws.getRow(9).getCell(c);
+          c9.fill = estiloFondoHeader;
+          c9.border = bordeFino;
+          const c10 = ws.getRow(10).getCell(c);
+          c10.fill = estiloFondoHeader;
+          c10.border = bordeFino;
+        }
       }
     }
 
@@ -462,27 +489,34 @@ export async function exportarReporteAsistenciaExcel({
         });
       }
 
-      // 3. Columna de Observaciones (1 celda individual por cada observación)
+      // 3. Sección de Observaciones (4 columnas combinadas horizontalmente por cada línea de observación)
       if (soloObservaciones || incluirObservaciones) {
         if (cantFilas > 1) {
           for (let k = 0; k < cantFilas; k++) {
             const fActual = filaInicio + k;
+            ws.mergeCells(fActual, obsColStart, fActual, obsColEnd);
             const rActual = ws.getRow(fActual);
-            const celdaObs = rActual.getCell(colObs);
+            const celdaObs = rActual.getCell(obsColStart);
             celdaObs.value = lineasObs[k];
             celdaObs.font = { name: "Arial", size: 8 };
             celdaObs.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-            celdaObs.border = bordeFino;
+            for (let c = obsColStart; c <= obsColEnd; c++) {
+              rActual.getCell(c).border = bordeFino;
+            }
             rActual.height = Math.max(19, Math.ceil(lineasObs[k].length / 55) * 14);
           }
         } else {
-          const rActual = ws.getRow(filaInicio);
-          const celdaObs = rActual.getCell(colObs);
+          const fActual = filaInicio;
+          ws.mergeCells(fActual, obsColStart, fActual, obsColEnd);
+          const rActual = ws.getRow(fActual);
+          const celdaObs = rActual.getCell(obsColStart);
           const texto = row.esVacante ? "—" : lineasObs[0] || "—";
           celdaObs.value = texto;
           celdaObs.font = { name: "Arial", size: 8 };
           celdaObs.alignment = { vertical: "middle", horizontal: "left", wrapText: true };
-          celdaObs.border = bordeFino;
+          for (let c = obsColStart; c <= obsColEnd; c++) {
+            rActual.getCell(c).border = bordeFino;
+          }
           rActual.height =
             texto && texto !== "—" ? Math.max(19, Math.ceil(texto.length / 55) * 14) : 19;
         }

@@ -206,6 +206,7 @@ export async function exportarReporteAsistenciaPDF({
 
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const pageWidth = doc.internal.pageSize.width;
+  const tableMarginX = 10;
 
   // Cargar logo institucional una sola vez
   let logoBase64: string | null = null;
@@ -260,7 +261,7 @@ export async function exportarReporteAsistenciaPDF({
     // 1. Logo institucional (x = 10, y = 6, width = 19, height = 19, termina en y = 25)
     if (logoBase64) {
       try {
-        doc.addImage(logoBase64, "PNG", 10, 6, 19, 19);
+        doc.addImage(logoBase64, "PNG", tableMarginX, 6, 19, 19);
       } catch {
         // Ignorar si hay problema con la imagen
       }
@@ -288,7 +289,7 @@ export async function exportarReporteAsistenciaPDF({
     );
 
     // 3. Cuadro Izquierdo (3 filas: Nave, Período, Supervisor - x = 10, y = 28, ancho = 95mm)
-    const leftX = 10;
+    const leftX = tableMarginX;
     const leftY = 28;
     const leftW = 95;
     const rowH = 5.2;
@@ -320,9 +321,9 @@ export async function exportarReporteAsistenciaPDF({
       doc.text(f.val, leftX + labelW + 2, curY + rowH / 2, { baseline: "middle" });
     });
 
-    // 4. Cuadro Derecho (Descripción: x = pageWidth - 95, y = 28, ancho = 85mm)
+    // 4. Cuadro Derecho (Descripción: ancho = 85mm, termina en pageWidth - tableMarginX)
     const rightW = 85;
-    const rightX = pageWidth - 95;
+    const rightX = pageWidth - tableMarginX - rightW;
     const rightY = 28;
 
     doc.setFillColor(230, 239, 233);
@@ -471,6 +472,8 @@ export async function exportarReporteAsistenciaPDF({
       head: headers as unknown as string[][],
       body: bodyData,
       startY: 47,
+      margin: { left: tableMarginX, right: tableMarginX },
+      tableWidth: pageWidth - tableMarginX * 2,
       theme: "grid",
       styles: { fontSize: 6, cellPadding: 1.2, valign: "middle" },
       headStyles: {
