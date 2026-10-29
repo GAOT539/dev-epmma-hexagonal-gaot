@@ -8,6 +8,7 @@ import { invalidarVerificacionNave } from "@/infrastructure/database/nave-puesto
 import {
   generarSlugNave,
   compararCodigosPuesto,
+  esNaveAmbulantes,
 } from "@/infrastructure/database/catastro-reconciliacion.service";
 import { getAccessibleNaveIds } from "@/infrastructure/auth/authorization";
 import { logError, esErrorConexionBD } from "@/infrastructure/logger/system-logger";
@@ -191,30 +192,54 @@ export async function POST(request: Request) {
 
     const nombreNaveFinal = naveObj ? naveObj.nombre : (nave ? String(nave).trim() : null);
 
-    // 2. Si viene puestoId, verificar que no esté ya ocupado en esta nave por otro comerciante activo
-    if (puestoId) {
-      const codigoBuscado = String(puestoId).trim();
+    // Normalización de puestos para AMBULANTES: si se ingresa "0", "null", "NULL" o "S/N", normalizar a "0"
+    const esAmbulantesNave = Boolean(naveObj && esNaveAmbulantes(naveObj.nombre));
+    let puestoIdFinal: string | null =
+      puestoId !== undefined && puestoId !== null ? String(puestoId).trim() : null;
 
-      const puestoExistente = await prisma.puesto.findFirst({
-        where: {
-          ...(naveObj ? { naveId: naveObj.id } : {}),
-          OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
-        },
-        include: { comerciante: true },
-      });
-
+    if (esAmbulantesNave) {
+      const pUpper = (puestoIdFinal || "").toUpperCase();
       if (
-        puestoExistente &&
-        puestoExistente.estado === "Ocupado" &&
-        puestoExistente.comerciante &&
-        puestoExistente.comerciante.estadoRegistro === "Habilitado"
+        pUpper === "0" ||
+        pUpper === "NULL" ||
+        pUpper === "S/N" ||
+        pUpper === "SN" ||
+        pUpper === "-" ||
+        puestoIdFinal === "" ||
+        (puestoId === null && "puestoId" in body)
       ) {
-        return NextResponse.json(
-          {
-            error: `El puesto ${puestoExistente.codigo} ya se encuentra ocupado en esta nave por ${puestoExistente.comerciante.contribuyente}.`,
+        puestoIdFinal = "0";
+      }
+    }
+
+    // 2. Si viene puestoId, verificar que no esté ya ocupado en esta nave por otro comerciante activo
+    // En AMBULANTES con puesto "0", se omite esta restricción de unicidad para permitir múltiples puestos "0"
+    if (puestoIdFinal) {
+      const codigoBuscado = puestoIdFinal;
+      const esPuestoCeroAmbulantes = esAmbulantesNave && codigoBuscado === "0";
+
+      if (!esPuestoCeroAmbulantes) {
+        const puestoExistente = await prisma.puesto.findFirst({
+          where: {
+            ...(naveObj ? { naveId: naveObj.id } : {}),
+            OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
           },
-          { status: 400 }
-        );
+          include: { comerciante: true },
+        });
+
+        if (
+          puestoExistente &&
+          puestoExistente.estado === "Ocupado" &&
+          puestoExistente.comerciante &&
+          puestoExistente.comerciante.estadoRegistro === "Habilitado"
+        ) {
+          return NextResponse.json(
+            {
+              error: `El puesto ${puestoExistente.codigo} ya se encuentra ocupado en esta nave por ${puestoExistente.comerciante.contribuyente}.`,
+            },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -226,7 +251,7 @@ export async function POST(request: Request) {
           cedula: cleanCedula,
           contribuyente: String(contribuyente).trim(),
           actividad: actividad ? String(actividad).trim() : "General",
-          puestoId: puestoId ? String(puestoId).trim() : null,
+          puestoId: puestoIdFinal,
           nave: nombreNaveFinal,
           estadoRegistro: (estadoRegistro as EstadoComerciante) || "Habilitado",
           creadoPor: creadoPor ? String(creadoPor).trim() : null,
@@ -234,49 +259,97 @@ export async function POST(request: Request) {
       });
 
       // 2. Si trae puesto asignado, vincular y ocupar puesto en la nave correspondiente
-      if (puestoId) {
-        const codigoBuscado = String(puestoId).trim();
+      if (puestoIdFinal) {
+        const codigoBuscado = puestoIdFinal;
+        const esPuestoCeroAmbulantes = esAmbulantesNave && codigoBuscado === "0";
 
-        const puestoObj = await tx.puesto.findFirst({
-          where: {
-            ...(naveObj ? { naveId: naveObj.id } : {}),
-            OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
-          },
-        });
-
-        if (puestoObj) {
-          // Ocupar puesto existente
-          await tx.puesto.update({
-            where: { id: puestoObj.id },
-            data: {
-              estado: "Ocupado",
-              comercianteId: nuevo.idInterno,
-            },
-          });
-        } else if (naveObj) {
-          // Si el puesto no existe en la nave, crearlo directamente asociado a naveId
-          await tx.puesto.create({
-            data: {
-              codigo: codigoBuscado,
+        if (esPuestoCeroAmbulantes && naveObj) {
+          // Para AMBULANTES con puesto "0", busca únicamente un puesto "0" que esté "Vacante"
+          const puestoVacanteCero = await tx.puesto.findFirst({
+            where: {
               naveId: naveObj.id,
-              estado: "Ocupado",
-              comercianteId: nuevo.idInterno,
+              codigo: "0",
+              estado: "Vacante",
+              comercianteId: null,
             },
           });
 
-          // Sincronizar cantidadPuestos y limitePuestos de la nave si el nuevo puesto excede el límite
-          const totalPuestosNave = await tx.puesto.count({
-            where: { naveId: naveObj.id },
-          });
-
-          if (totalPuestosNave > naveObj.cantidadPuestos) {
-            await tx.nave.update({
-              where: { id: naveObj.id },
+          if (puestoVacanteCero) {
+            await tx.puesto.update({
+              where: { id: puestoVacanteCero.id },
               data: {
-                cantidadPuestos: totalPuestosNave,
-                limitePuestos: Math.max(naveObj.limitePuestos, totalPuestosNave),
+                estado: "Ocupado",
+                comercianteId: nuevo.idInterno,
               },
             });
+          } else {
+            // Si no hay uno vacante libre, crea un nuevo registro con codigo "0" y estado "Ocupado"
+            await tx.puesto.create({
+              data: {
+                codigo: "0",
+                naveId: naveObj.id,
+                estado: "Ocupado",
+                comercianteId: nuevo.idInterno,
+              },
+            });
+
+            // Sincronizar cantidadPuestos y limitePuestos de la nave si el nuevo puesto excede el límite
+            const totalPuestosNave = await tx.puesto.count({
+              where: { naveId: naveObj.id },
+            });
+
+            if (totalPuestosNave > naveObj.cantidadPuestos) {
+              await tx.nave.update({
+                where: { id: naveObj.id },
+                data: {
+                  cantidadPuestos: totalPuestosNave,
+                  limitePuestos: Math.max(naveObj.limitePuestos, totalPuestosNave),
+                },
+              });
+            }
+          }
+        } else {
+          const puestoObj = await tx.puesto.findFirst({
+            where: {
+              ...(naveObj ? { naveId: naveObj.id } : {}),
+              OR: [{ id: codigoBuscado }, { codigo: codigoBuscado }],
+            },
+          });
+
+          if (puestoObj) {
+            // Ocupar puesto existente
+            await tx.puesto.update({
+              where: { id: puestoObj.id },
+              data: {
+                estado: "Ocupado",
+                comercianteId: nuevo.idInterno,
+              },
+            });
+          } else if (naveObj) {
+            // Si el puesto no existe en la nave, crearlo directamente asociado a naveId
+            await tx.puesto.create({
+              data: {
+                codigo: codigoBuscado,
+                naveId: naveObj.id,
+                estado: "Ocupado",
+                comercianteId: nuevo.idInterno,
+              },
+            });
+
+            // Sincronizar cantidadPuestos y limitePuestos de la nave si el nuevo puesto excede el límite
+            const totalPuestosNave = await tx.puesto.count({
+              where: { naveId: naveObj.id },
+            });
+
+            if (totalPuestosNave > naveObj.cantidadPuestos) {
+              await tx.nave.update({
+                where: { id: naveObj.id },
+                data: {
+                  cantidadPuestos: totalPuestosNave,
+                  limitePuestos: Math.max(naveObj.limitePuestos, totalPuestosNave),
+                },
+              });
+            }
           }
         }
       }
@@ -290,7 +363,7 @@ export async function POST(request: Request) {
       invalidarVerificacionNave();
     }
 
-    if (puestoId) {
+    if (puestoIdFinal) {
       await asegurarAsistenciaInicialDelDia(undefined, true);
     }
 

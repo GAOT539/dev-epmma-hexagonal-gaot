@@ -243,10 +243,11 @@ export function esNaveAmbulantes(nave?: string | null): boolean {
 }
 
 /**
- * REGLA 2: Asignación secuencial General01, General02, ..., GeneralN EXCLUSIVA para AMBULANTES.
+ * REGLA 2: Asignación de puesto "0" EXCLUSIVA para AMBULANTES cuando el puesto es nulo, vacío o SN.
  * Solo afecta a la nave AMBULANTES.
- * A puestos nulos, vacíos ("NULL", "S/N", "", "-") o duplicados en el lote de Ambulantes,
- * les asigna secuencialmente un identificador GeneralXX (sin colisionar con puestos existentes).
+ * A puestos nulos, vacíos ("NULL", "S/N", "", "-", "SN") o provenientes del formato anterior (GeneralXX),
+ * les asigna directamente puesto: "0" y numBodega: "0".
+ * Los puestos válidos preexistentes en el archivo (ej. "089", "004", "4") se conservan intactos.
  */
 export function aplicarReglaPuestosAmbulantes(
   registros: ImportacionRegistro[],
@@ -269,7 +270,7 @@ export function aplicarReglaPuestosAmbulantes(
     return registros;
   }
 
-  const esPuestoNuloOVacio = (p?: string | null): boolean => {
+  const esPuestoNuloOVacioAmbulantes = (p?: string | null): boolean => {
     if (!p) return true;
     const u = p.normalize("NFC").trim().toUpperCase();
     return (
@@ -277,37 +278,23 @@ export function aplicarReglaPuestosAmbulantes(
       u === "-" ||
       u === "NULL" ||
       u === "S/N" ||
-      u === "SN"
+      u === "SN" ||
+      /^GENERAL\s*\d+$/i.test(u)
     );
   };
 
-  const puestosVistos = new Set<string>();
-  let contadorSecuencial = 1;
-
   return registros.map((reg) => {
     const puestoRaw = (reg.puesto || "").normalize("NFC").trim();
-    const puestoUpper = puestoRaw.toUpperCase();
 
-    if (!esPuestoNuloOVacio(puestoRaw) && !puestosVistos.has(puestoUpper)) {
-      puestosVistos.add(puestoUpper);
-      return reg;
+    if (esPuestoNuloOVacioAmbulantes(puestoRaw)) {
+      return {
+        ...reg,
+        puesto: "0",
+        numBodega: "0",
+      };
     }
 
-    // Puesto nulo/vacío o duplicado: generar GeneralXX disponible
-    let nuevoCodigo = `General${String(contadorSecuencial).padStart(2, "0")}`;
-    while (puestosVistos.has(nuevoCodigo.toUpperCase())) {
-      contadorSecuencial++;
-      nuevoCodigo = `General${String(contadorSecuencial).padStart(2, "0")}`;
-    }
-
-    puestosVistos.add(nuevoCodigo.toUpperCase());
-    contadorSecuencial++;
-
-    return {
-      ...reg,
-      puesto: nuevoCodigo,
-      numBodega: nuevoCodigo,
-    };
+    return reg;
   });
 }
 
@@ -395,7 +382,19 @@ export function descomponerCodigoPuesto(codigo: string): ComponentesCodigoPuesto
 
   const upper = codigo.normalize("NFC").trim().toUpperCase().replace(/#/g, "").trim();
 
-  // Protección contra colisiones para puestos de Ambulantes "GeneralXX" (REGLA 2)
+  // Código especial "0" (Puestos de Ambulantes sin número)
+  if (upper === "0") {
+    return {
+      categoria: "",
+      tokenFinal: "0",
+      numeroBase: "0",
+      sufijoAlfanumerico: "",
+      esRangoCompuesto: false,
+      rangoNormalizado: "",
+    };
+  }
+
+  // Soporte legado para puestos de Ambulantes "GeneralXX"
   const matchGeneral = upper.match(/^GENERAL[-_\s]*(\d+)$/i);
   if (matchGeneral) {
     const rawNum = matchGeneral[1];
@@ -809,34 +808,36 @@ export function reconciliarCatastroNaveExistente(
     if (comMismoPuesto && puestoActualMatch) {
       const codigoExcel = (reg.puesto || "").trim().toUpperCase();
 
-      // Buscar si existe en la nave un puesto que coincida exactamente o por equivalencia con el código del Excel
-      let puestoDestino = puestosNaveParticipantes.find(
-        (p) => !puestosAsignadosIds.has(p.id) && sonCodigosPuestosEquivalentes(p.codigo, codigoExcel)
-      );
+      const esPlaceholderSobrante =
+        maxNumeroPuroExcel > 0 &&
+        /^\d+$/.test(puestoActualMatch.codigo.trim()) &&
+        parseInt(puestoActualMatch.codigo.trim(), 10) > maxNumeroPuroExcel;
 
-      // Si no existe pero el puesto que ocupaba antes era un placeholder sobrante (> maxNumeroPuroExcel),
-      // o coincide con su puesto actual, o es el único registro para la persona (REGLA 1: actualización de código en sitio):
-      if (!puestoDestino) {
-        const esPlaceholderSobrante =
-          maxNumeroPuroExcel > 0 &&
-          /^\d+$/.test(puestoActualMatch.codigo.trim()) &&
-          parseInt(puestoActualMatch.codigo.trim(), 10) > maxNumeroPuroExcel;
+      const esUnicoRegistroParaPersona =
+        candidatos.length === 1 &&
+        !registros.some(
+          (r, rIdx) =>
+            rIdx !== idx &&
+            sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, comMismoPuesto!)
+        );
 
-        const esUnicoRegistroParaPersona =
-          candidatos.length === 1 &&
-          !registros.some(
-            (r, rIdx) =>
-              rIdx !== idx &&
-              sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, comMismoPuesto!)
-          );
+      let puestoDestino: PuestoNaveBD | null = null;
 
-        if (
+      // Priorizar que el comerciante conserve su propio registro de puesto (puestoActualMatch)
+      // si aún no está asignado y cumple equivalencia, placeholder sobrante o único registro
+      if (
+        !puestosAsignadosIds.has(puestoActualMatch.id) &&
+        (sonCodigosPuestosEquivalentes(puestoActualMatch.codigo, codigoExcel) ||
           esPlaceholderSobrante ||
-          sonCodigosPuestosEquivalentes(puestoActualMatch.codigo, codigoExcel) ||
-          esUnicoRegistroParaPersona
-        ) {
-          puestoDestino = puestoActualMatch;
-        }
+          esUnicoRegistroParaPersona)
+      ) {
+        puestoDestino = puestoActualMatch;
+      } else {
+        // Solo si puestoActualMatch ya fue asignado o no aplica, busca otro puesto libre equivalente
+        puestoDestino =
+          puestosNaveParticipantes.find(
+            (p) => !puestosAsignadosIds.has(p.id) && sonCodigosPuestosEquivalentes(p.codigo, codigoExcel)
+          ) || null;
       }
 
       if (puestoDestino) {
@@ -1130,7 +1131,7 @@ export function reconciliarCatastroNaveExistente(
     // formatear con el padding del Excel ("064")
     if (maxNumeroPuroExcel > 0 && /^\d+$/.test(puestoRestante.codigo.trim())) {
       const numP = parseInt(puestoRestante.codigo.trim(), 10);
-      if (numP <= maxNumeroPuroExcel && padLengthExcel > 1) {
+      if (numP > 0 && numP <= maxNumeroPuroExcel && padLengthExcel > 1) {
         codigoVacante = String(numP).padStart(padLengthExcel, "0");
       }
     }

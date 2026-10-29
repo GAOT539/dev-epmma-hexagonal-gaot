@@ -561,9 +561,26 @@ export default function IngresoCatastroPage() {
                           if (!naveManualSeleccionada) return;
                           setParseando(true);
                           try {
+                            const listaNaves =
+                              analisis?.reconciliacion?.navesDisponibles &&
+                              analisis.reconciliacion.navesDisponibles.length > 0
+                                ? analisis.reconciliacion.navesDisponibles
+                                : naves;
+                            const naveObj = listaNaves.find((n) => n.id === naveManualSeleccionada);
+                            const naveNombre = naveObj ? naveObj.nombre : naveManualSeleccionada;
+                            const esAmbulantes =
+                              naveNombre.toUpperCase().includes("AMBULANTE") ||
+                              naveManualSeleccionada.toLowerCase().includes("ambulante");
+
+                            let registrosParaSimular = registros;
+                            if (esAmbulantes) {
+                              registrosParaSimular = aplicarReglaPuestosAmbulantes(registros, "AMBULANTES");
+                              setRegistros(registrosParaSimular);
+                            }
+
                             const opc = { naveIdManual: naveManualSeleccionada };
                             setOpcionesImportacion(opc);
-                            const sim = await importadorService.simularImportacion(registros, opc);
+                            const sim = await importadorService.simularImportacion(registrosParaSimular, opc);
                             setAnalisis(sim);
                             toast.success(`Nave seleccionada: ${sim.reconciliacion?.naveDetectada}`);
                           } catch (err) {
@@ -609,9 +626,17 @@ export default function IngresoCatastroPage() {
                             }
                             setParseando(true);
                             try {
+                              const esAmbulantes = nombreLimpio.toUpperCase().includes("AMBULANTE");
+
+                              let registrosParaSimular = registros;
+                              if (esAmbulantes) {
+                                registrosParaSimular = aplicarReglaPuestosAmbulantes(registros, "AMBULANTES");
+                                setRegistros(registrosParaSimular);
+                              }
+
                               const opc = { crearNuevaNave: true, nuevoNombreNave: nombreLimpio };
                               setOpcionesImportacion(opc);
-                              const sim = await importadorService.simularImportacion(registros, opc);
+                              const sim = await importadorService.simularImportacion(registrosParaSimular, opc);
                               setAnalisis(sim);
                               toast.success(`Vista previa para crear la nueva nave: ${nombreLimpio}`);
                             } catch (err) {
