@@ -111,7 +111,6 @@ dev-epmma-hexagonal-gaot/
 │   │   │   │   │   └── reportes-excel.utils.ts
 │   │   │   │   └── page.tsx
 │   │   │   ├── catastro/                  # Directorio Nominal de Comerciantes y Puestos
-│   │   │   │   ├── components/            # Modales de vista y filtros de catálogo
 │   │   │   │   └── page.tsx
 │   │   │   ├── naves/                     # Planificador Espacial, Gestión de Puestos y Vacantes
 │   │   │   │   ├── components/
@@ -135,7 +134,6 @@ dev-epmma-hexagonal-gaot/
 │   │   │   ├── auditoria/                 # Redirección canónica hacia /controlsupervisores
 │   │   │   │   └── page.tsx
 │   │   │   ├── ingreso-catastro/          # Importador Heurístico y Reconciliación en 4 Pasos
-│   │   │   │   ├── components/            # Previsualización tabular y modal de confirmación Ambulantes
 │   │   │   │   └── page.tsx
 │   │   │   └── configuracion/             # Ajustes Generales y Gestión Institucional de Usuarios
 │   │   │       ├── usuarios/              # CRUD de Cuentas Institucionales y Asignación de Naves
@@ -280,10 +278,10 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
 
 1. **`Usuario` (`usuarios`):**
    - Gestión de cuentas institucionales, credenciales y roles (`SUPERADMIN`, `TIC`, `DIRECTOR`, `JEFE_OPERATIVO`, `SUPERVISOR`).
-   - Campos: `id`, `cedula` (único), `correo`, `nombres`, `apellidos`, `passwordHash`, `rol`, `mustChangePassword`, `navesAsignadas` (JSON), `creadoEn`, `actualizadoEn`.
+   - Campos: `id`, `cedula` (único), `nombres`, `apellidos`, `correo` (único), `rol`, `mustChangePassword`, `passwordHash`, `navesAsignadas` (JSON), `estado` (`Habilitado`, `Deshabilitado`), `creadoEn`, `actualizadoEn`.
 2. **`Nave` (`naves`):**
    - Catálogo maestro de pabellones del mercado.
-   - Campos: `id` (slug canónico), `nombre` (único, colación `utf8mb4_spanish_ci`), `cantidadPuestos`, `limitePuestos`, `supervisores` (JSON), `estado`, `creadoEn`, `actualizadoEn`.
+   - Campos: `id`, `nombre` (único, colación `utf8mb4_spanish_ci`), `cantidadPuestos`, `limitePuestos`, `supervisores` (JSON), `estadoRegistro` (`Habilitado`, `Deshabilitado`), `creadoEn`, `actualizadoEn`.
 3. **`PlanoNave` (`planos_naves`):**
    - Diagramación vectorial de la nave (relación 1:1 con `Nave`).
    - Campos: `id`, `naveId` (único), `filas`, `columnas`, `planoJson` (matriz de celdas), `actualizadoEn`.
@@ -297,7 +295,7 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
      - `@@index([naveId, estado])`: cálculo inmediato de cupos ocupados y vacantes.
 5. **`Comerciante` (`comerciantes`):**
    - Catastro nominal de contribuyentes comerciales con soporte de borrado lógico (`eliminadoEn`).
-   - Campos: `idInterno`, `ciu`, `cedula`, `contribuyente`, `actividad`, `puestoId`, `nave`, `estadoRegistro` (`Habilitado`, `Deshabilitado`), `creadoPor`, `eliminadoEn`, `creadoEn`, `actualizadoEn`.
+   - Campos: `idInterno`, `ciu`, `cedula`, `contribuyente`, `actividad`, `puestoId`, `nave`, `estadoRegistro` (`Habilitado`, `Deshabilitado`), `eliminadoEn`, `creadoPor`, `modificadoPor`, `deshabilitadoPor`, `creadoEn`, `actualizadoEn`.
    - **Índices de Rendimiento:**
      - `@@index([cedula])` y `@@index([ciu])`: localización directa de contribuyentes.
      - `@@index([estadoRegistro])`: filtrado por comerciantes activos.
@@ -306,14 +304,14 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
      - `@@index([nave, puestoId])`: resolución de duplicados en la misma nave.
 6. **`RegistroAsistencia` (`registros_asistencia`):**
    - Bitácora diaria de asistencias por comerciante.
-   - Campos: `id`, `comercianteId`, `fecha` (`YYYY-MM-DD`), `puestoId`, `estado` (`Presente`, `Ausente`, `Permiso`, `Vacante`), `esPermiso`, `permisoInicio`, `permisoFin`, `permisoMotivo`, `observaciones` (JSON), `permisos` (JSON), `creadoEn`, `actualizadoEn`.
+   - Campos: `id`, `comercianteId`, `puestoId`, `fecha` (`YYYY-MM-DD`), `estado` (`Presente`, `Ausente`, `Permiso`, `Vacante`), `observacion`, `observacionTexto`, `permisoInicio`, `permisoFin`, `observaciones` (JSON), `permisos` (JSON), `creadoEn`, `actualizadoEn`.
    - **Restricción de Unicidad e Índices:**
      - `@@unique([comercianteId, fecha])`: garantiza que un comerciante tenga exactamente un registro por día (idempotencia absoluta).
      - `@@index([fecha])` y `@@index([fecha, estado])`: generación de reportes y auditorías por jornada.
      - `@@index([puestoId])` y `@@index([fecha, puestoId])`: búsqueda por puesto físico.
 7. **`SesionControlSupervisor` (`sesiones_control_supervisor`):**
    - Registro inmutable de cada jornada de supervisión efectuada en campo.
-   - Campos: `id`, `supervisorId`, `supervisorNombre`, `naveId`, `naveNombre`, `fechaJornada`, `horaInicio`, `horaFin`, `horaModificacion`, `fueConPersistencia`, `esPersistenciaAutomatica`, `fueModificadoTrasPersistencia`, `esRetraso`, `badges` (JSON), `totalComerciantes`, `totalPresentes`, `totalAusentes`, `totalPermisos`, `totalVacantes`, `detalleNominalJson` (JSON), `creadoEn`.
+   - Campos: `id`, `supervisorId`, `supervisorNombre`, `naveId`, `naveNombre`, `fechaJornada`, `timestampInicio`, `timestampUltimaModificacion`, `accion`, `esPersistencia`, `fechaOrigenPersistencia`, `comentarioPersistencia`, `modificadoTrasPersistencia`, `tieneRetraso`, `detalleRetraso`, `etiquetas` (JSON), `resumen` (JSON), `detallesComerciantes` (JSON).
    - **Índices de Rendimiento:**
      - `@@index([supervisorId])`: consulta de jornales por supervisor.
      - `@@index([supervisorId, fechaJornada])`: verificación de duplicidad de sesión de control.
@@ -321,24 +319,24 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
      - `@@index([fechaJornada])` y `@@index([naveId, fechaJornada])`: consulta instantánea $O(1)$ de la sesión activa del día.
 8. **`PermisoSupervisor` (`permisos_supervisores`):**
    - Administración de ausencias, licencias médicas y vacaciones de supervisores.
-   - Campos: `id`, `supervisorId`, `supervisorNombre`, `fechaInicio`, `fechaFin`, `motivo`, `estado` (`PENDIENTE`, `APROBADO`, `RECHAZADO`, `CANCELADO`), `creadoPor`, `creadoEn`, `actualizadoEn`.
+   - Campos: `id`, `supervisorId`, `supervisorNombre`, `fechaInicio`, `fechaFin`, `motivo`, `estado` (`ACTIVO`, `FINALIZADO`, `REVOCADO`), `creadoPorId`, `creadoPorNombre`, `creadoEn`, `actualizadoEn`.
    - **Índices de Rendimiento:**
      - `@@index([supervisorId, estado])`: permisos vigentes por supervisor.
      - `@@index([fechaInicio, fechaFin])`: cruces de calendario y solapamientos de ausencia.
 9. **`CoberturaNaveSupervisor` (`coberturas_naves_supervisores`):**
    - Mecanismo de contingencia para la atención de naves ante ausencia del supervisor titular.
-   - Campos: `id`, `permisoId`, `naveId`, `naveNombre`, `supervisorTitularId`, `supervisorReemplazoId`, `supervisorReemplazoNombre`, `fechaInicio`, `fechaFin`, `tipoCobertura` (`REEMPLAZO_TEMPORAL`, `PERSISTENCIA_AUTOMATICA`), `estado` (`ACTIVA`, `FINALIZADA`, `CANCELADA`), `creadoEn`.
+   - Campos: `id`, `permisoSupervisorId`, `naveId`, `naveNombre`, `tipoCobertura` (`REEMPLAZO_TEMPORAL`, `PERSISTENCIA_AUTOMATICA`), `supervisorReemplazoId`, `supervisorReemplazoNombre`, `fechaInicio`, `fechaFin`, `motivo`, `estado` (`ACTIVO`, `REVOCADO`).
    - **Índices de Rendimiento:**
      - `@@index([naveId, fechaInicio, fechaFin, estado])`: determinación de la cobertura activa de una nave.
      - `@@index([supervisorReemplazoId, fechaInicio, fechaFin, estado])`: naves delegadas temporalmente a un supervisor reemplazante.
 10. **`ReglaDiaNoLaborable` (`reglas_dias_no_laborables`):**
     - Configuración de feriados nacionales, festividades cantonales y suspensiones de jornada de mercado.
-    - Campos: `id`, `nombre`, `tipo` (`DIA_UNICO`, `RANGO_CONTINUO`, `RECURRENTE_SEMANAL`), `fechaInicio`, `fechaFin`, `diaSemana`, `aplicaATodasLasNaves`, `navesAfectadas` (JSON), `motivo`, `bloquearAsistencia`, `creadoPor`, `creadoEn`, `actualizadoEn`.
+    - Campos: `id`, `motivo`, `tipoRegla` (`DIA_UNICO`, `RANGO_CONTINUO`, `RECURRENTE_SEMANAL`), `fechaInicio`, `fechaFin`, `diasSemana` (JSON), `aplicaTodasNaves`, `navesIds` (JSON), `navesNombres` (JSON), `fechasExpandidas` (JSON), `creadoPorId`, `creadoPorNombre`, `creadoEn`.
     - **Índices de Rendimiento:**
       - `@@index([fechaInicio, fechaFin])`: evaluación instantánea de si una fecha corresponde a jornada laborable o suspendida.
 11. **`AuditoriaRegistro` (`auditoria_registros`):**
     - Bitácora general de operaciones críticas del sistema.
-    - Campos: `id`, `modulo`, `accion`, `entidad`, `entidadId`, `usuarioId`, `usuarioCedula`, `usuarioNombre`, `datosAnteriores` (JSON), `datosNuevos` (JSON), `ip`, `creadoEn`.
+    - Campos: `id`, `modulo`, `accion`, `detalle`, `creadoEn`.
     - **Índices de Rendimiento:**
       - `@@index([creadoEn])`: trazabilidad cronológica.
       - `@@index([modulo, creadoEn])`: auditoría forense por módulo específico.
