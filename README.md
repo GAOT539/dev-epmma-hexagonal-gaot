@@ -27,9 +27,9 @@ El **Sistema de Gestión EP-EMA** es una solución digital integral de grado emp
 | :--- | :---: | :---: | :--- |
 | **Arquitectura Hexagonal Pura** | **Completado y Auditado** | **100%** | Desacoplamiento estricto de 4 capas: Dominio 100% puro (0 dependencias), Aplicación orquestadora basada en puertos, e Infraestructura con 6 adaptadores relacionales hacia MySQL 8.0 vía Prisma ORM. |
 | **Seguridad Perimetral y RBAC Multi-Tenant** | **Completado y Verificado** | **100%** | Proxy server-side (`src/proxy.ts`), autenticación JWT (`jose`) mediante cookies `HttpOnly`, aislamiento multi-tenant por naves para supervisores, protección anti-IDOR y mitigación CSPRNG. |
-| **Motor de Conciliación Catastral** | **Completado y Optimizado** | **100%** | Algoritmo determinista en 4 pasos para plantillas `REN04_950` (Bodegas), `ren04278` (Puestos) y `GENERICO`, sanitización multilínea, filtro de duplicados 100%, y reglas exclusivas para `NAVE P` y `AMBULANTES`. |
-| **Alta Concurrencia y Resiliencia** | **Completado y Certificado** | **100%** | Connection pool optimizado (`connection_limit=15`), deduplicación de promesas en vuelo (*Singleflight*), caché de sesión reactiva, logging centralizado en disco (`logs/ep-ema-system.log`) y fallback visual de conexión. |
-| **Exportación Documental Bimodal** | **Completado y Validado** | **100%** | Generación simétrica de actas e informes: reportes PDF vectoriales de alta precisión (`jsPDF` + `autotable`) y libros de cálculo nativos multi-hoja (`ExcelJS`) con autoajuste multi-fila. |
+| **Motor de Conciliación Catastral** | **Completado y Optimizado** | **100%** | Algoritmo determinista en 4 pasos con modo `UNIFICAR` automático para plantillas `REN04_950` (Bodegas), `ren04278` (Puestos) y `GENERICO`, sanitización multilínea, filtro de duplicados 100%, y reglas exclusivas para `NAVE P` y `AMBULANTES`. |
+| **Alta Concurrencia y Resiliencia** | **Completado y Certificado** | **100%** | Connection pool optimizado (`connection_limit=15`, `pool_timeout=15`, `connect_timeout=10`), deduplicación de promesas en vuelo (*Singleflight*), caché de sesión reactiva, logging centralizado en disco (`logs/ep-ema-system.log`) y fallback visual de conexión. |
+| **Exportación Documental Bimodal** | **Completado y Validado** | **100%** | Generación simétrica de actas e informes: reportes PDF vectoriales de alta precisión (`jsPDF` + `autotable`) y libros de cálculo nativos multi-hoja (`ExcelJS 4.4.0`) con autoajuste multi-fila y preservación de simbología. |
 
 ---
 
@@ -80,7 +80,7 @@ El sistema aplica de forma rigurosa los principios de la **Arquitectura Hexagona
 
 ---
 
-### Árbol de Directorios del Repositorio
+### Árbol de Directorios Real del Repositorio
 
 ```text
 dev-epmma-hexagonal-gaot/
@@ -104,17 +104,33 @@ dev-epmma-hexagonal-gaot/
 │   │   │   │   ├── components/            # Subcomponentes (CroquisAsistenciaView, ModalNovedad, TablaAsistencia)
 │   │   │   │   └── page.tsx
 │   │   │   ├── reportes/                  # Reportes Operativos Tabulares y Descarga Bimodal
-│   │   │   │   ├── components/            # Filtros, Tabla, reportes-excel.utils.ts, reportes-pdf.utils.ts
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── ReportesFiltros.tsx
+│   │   │   │   │   ├── ReportesTabla.tsx
+│   │   │   │   │   ├── reportes-pdf.utils.ts
+│   │   │   │   │   └── reportes-excel.utils.ts
 │   │   │   │   └── page.tsx
 │   │   │   ├── catastro/                  # Directorio Nominal de Comerciantes y Puestos
 │   │   │   │   ├── components/            # Modales de vista y filtros de catálogo
 │   │   │   │   └── page.tsx
 │   │   │   ├── naves/                     # Planificador Espacial, Gestión de Puestos y Vacantes
-│   │   │   │   ├── components/            # PlanificadorEspacial, ModalReporteVacantes, reporte-vacantes-pdf.utils.ts
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── ModalConfigurarCelda.tsx
+│   │   │   │   │   ├── ModalPuestosNave.tsx
+│   │   │   │   │   ├── ModalReporteVacantes.tsx
+│   │   │   │   │   ├── ModalesCrudNave.tsx
+│   │   │   │   │   ├── PlanificadorEspacial.tsx
+│   │   │   │   │   ├── plano-nave.utils.ts
+│   │   │   │   │   └── reporte-vacantes-pdf.utils.ts
 │   │   │   │   └── page.tsx
 │   │   │   ├── controlsupervisores/       # Gestión de Jornadas, Días No Laborables y Permisos
-│   │   │   │   ├── components/            # ModalDetalleControl, ModalDiasNoLaborables, ModalPermisosSupervisores,
-│   │   │   │   │                          # ModalReporteSupervisores, control-pdf.utils.ts, reporte-supervisores-export.utils.ts
+│   │   │   │   ├── components/
+│   │   │   │   │   ├── ModalDetalleControl.tsx
+│   │   │   │   │   ├── ModalDiasNoLaborables.tsx
+│   │   │   │   │   ├── ModalPermisosSupervisores.tsx
+│   │   │   │   │   ├── ModalReporteSupervisores.tsx
+│   │   │   │   │   ├── control-pdf.utils.ts
+│   │   │   │   │   └── reporte-supervisores-export.utils.ts
 │   │   │   │   └── page.tsx
 │   │   │   ├── auditoria/                 # Redirección canónica hacia /controlsupervisores
 │   │   │   │   └── page.tsx
@@ -197,9 +213,12 @@ dev-epmma-hexagonal-gaot/
 │   │   ├── error-conexion.tsx             # Banner de contingencia por desconexión de MySQL
 │   │   ├── error-estado.tsx               # Componente de estado de error visual
 │   │   └── ...                            # Primitivas accesibles (button, input, dialog, sonner, etc.)
-│   └── lib/                               # Utilidades transversales (client-logger.ts, error-utils.ts, utils.ts)
+│   └── lib/                               # Utilidades transversales
+│       ├── client-logger.ts               # Captura silenciosa de errores cliente vía POST /api/v1/system-logs
+│       ├── error-utils.ts                 # Funciones auxiliares para detección de errores de red y BD
+│       └── utils.ts                       # Helpers de clases Tailwind CSS y formateo
 ├── AGENTS.md                              # Reglas maestras del asistente IA para EP-EMA
-├── package.json                           # Manifiesto de dependencias y scripts oficiales
+├── package.json                           # Manifiesto de dependencias y scripts oficiales (puerto 5050)
 ├── pnpm-lock.yaml                         # Bloqueo estricto y determinista de versiones
 ├── tsconfig.json                          # Configuración rigurosa de TypeScript 5
 └── README.md                              # Documentación técnica maestra institucional
@@ -219,7 +238,7 @@ El sistema está construido íntegramente sobre tecnologías abiertas modernas, 
 | **Motor de Estilos** | **Tailwind CSS** | `^4` | Sistema de diseño institucional basado en CSS moderno y variables nativas. |
 | **Persistencia Relacional** | **MySQL Server** | `8.0` | Base de datos relacional transaccional con soporte nativo para colación `utf8mb4_spanish_ci`. |
 | **ORM y Migraciones** | **Prisma ORM** | `6.19.3` | Mapeo objeto-relacional tipado, conexión transaccional y gestión de esquemas. |
-| **Generación de Libros Excel** | **ExcelJS** | `4.4.0` | Creación programática de libros `.xlsx` estilizados, bordes finos, paletas y autoajuste multi-fila. |
+| **Generación de Libros Excel** | **ExcelJS** | `4.4.0` | Creación programática de libros `.xlsx` estilizados, bordes finos, paletas y autoajuste multi-fila en `/reportes` y `/controlsupervisores`. |
 | **Generación de Documentos PDF**| **jsPDF** + **jspdf-autotable** | `4.2.1` / `5.0.8`| Creación vectorial de croquis espaciales A4, actas de auditoría y reportes tabulares de asistencia. |
 | **Parseo de Archivos Tabulares**| **SheetJS (xlsx)** | `0.18.5` | Decodificación rápida de libros de cálculo `.xlsx`, `.xls` y plantillas de catastro. |
 | **Seguridad y Tokens JWT** | **jose** | `6.2.12` | Firma criptográfica y verificación perimetral de JSON Web Tokens en cookies `HttpOnly`. |
@@ -232,9 +251,9 @@ El sistema está construido íntegramente sobre tecnologías abiertas modernas, 
 
 ---
 
-## 4. Modelo de Datos Relacional y Esquema Prisma (11 Modelos)
+## 4. Esquema Relacional de 11 Modelos en Prisma ORM
 
-La persistencia relacional está estructurada en **11 modelos normalizados** dentro de `prisma/schema.prisma`, equipados con índices compuestos estratégicos para soportar consultas concurrentes en submilisegundos:
+La base de datos relacional evolucionó desde el esquema inicial de 7 modelos hacia una arquitectura integral de **11 modelos normalizados** dentro de `prisma/schema.prisma`, equipados con índices compuestos estratégicos para soportar consultas concurrentes en submilisegundos:
 
 ```text
                ┌──────────────┐             ┌─────────────────────────┐
@@ -257,7 +276,7 @@ La persistencia relacional está estructurada en **11 modelos normalizados** den
                                             └─────────────────────────┘
 ```
 
-### Detalle Técnico de los 11 Modelos
+### Detalle Técnico de los 11 Modelos e Índices Compuestos
 
 1. **`Usuario` (`usuarios`):**
    - Gestión de cuentas institucionales, credenciales y roles (`SUPERADMIN`, `TIC`, `DIRECTOR`, `JEFE_OPERATIVO`, `SUPERVISOR`).
@@ -326,7 +345,7 @@ La persistencia relacional está estructurada en **11 modelos normalizados** den
 
 ---
 
-## 5. Motor Heurístico de Reconciliación e Importación Catastral (`/ingreso-catastro`)
+## 5. Reglas del Motor de Importación y Reconciliación (`/ingreso-catastro`)
 
 El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconciliacion.service.ts`) implementa una suite analítica avanzada diseñada para procesar sin pérdidas los archivos emitidos por los sistemas de rentas y catastro:
 
@@ -364,40 +383,40 @@ El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconci
 
 ### Características Centrales del Motor
 
-1. **Detección Automática de Plantillas Institucionales:**
+1. **Modo `UNIFICAR` Automático entre Bodegas y Puestos:**
    - Detecta de forma inteligente si el archivo corresponde a `BODEGA` (`REN04_950`), a `PUESTOS` (`ren04278`) o a formatos genéricos `CSV`/`XML`.
-   - Opera siempre en **Modo `UNIFICAR`** por defecto, asegurando que las bodegas y los puestos numéricos convivan en la misma nave sin que una carga mensual pase a vacante la sección complementaria.
+   - Opera siempre en **Modo `UNIFICAR`** de forma automática, garantizando que las bodegas y los puestos numéricos convivan en la misma nave sin que una carga mensual pase a vacante la sección complementaria ni sobreescriba registros existentes.
 2. **Sanitización de Celdas Multilínea (`limpiarTextoCelda`):**
    - Limpia inconsistencias en celdas de Excel donde el texto se repite con saltos de línea (ej. `"TOMATE RIÑON\nTOMATE RIÑON"` se limpia a `"TOMATE RIÑON"`).
    - Preserva `"NULL"` como texto legítimo si forma parte de descripciones o actividades comerciales del contribuyente.
 3. **Filtro Automático de Duplicados 100% Exactos (`filtrarDuplicadosExactos100`):**
    - Identifica registros duplicados idénticos en `nombre + actividad + puesto` dentro del mismo lote.
-   - Omite su duplicación en la base de datos y los presenta ordenadamente en un desplegable de auditoría en la interfaz de vista previa.
+   - Omite automáticamente su duplicación en la base de datos y los presenta ordenadamente en un desplegable de auditoría en la interfaz de vista previa.
 4. **Motor Heurístico de 5 Casos para Puestos Múltiples (`expandPuestosHeuristic`):**
    - **Caso 1 (Prefijo estructural con numeración múltiple):** Desglosa códigos como `CUBICULO N-Z-52-53` en dos registros independientes: `CUBICULO N-Z-52` y `CUBICULO N-Z-53`.
    - **Caso 2 (Preservación de códigos estructurales únicos):** Mantiene íntegros sin fragmentar códigos como `BODEGA`, `CUBICULO`, `NUCLEO`, `N-`, `ZCF-` y `S/N`.
    - **Caso 3 (Preservación de subdivisiones):** Conserva subdivisiones alfanuméricas (`003-A`) y sufijos vehiculares (`001-VEHICULO`).
    - **Caso 4 (Desglose de listas numéricas continuas con guion):** Divide rangos numéricos como `001-126` o `049-073` en sus puestos individuales correspondientes.
    - **Caso 5 (Desglose de códigos numéricos de 6 dígitos concatenados):** Separa celdas unidas por error como `068069` en los puestos físicos `068` y `069`.
-5. **Distinción Automática del Sufijo `-VEHICULO`:**
+5. **Distinción Automática del Sufijo `-VEHICULO` por Actividad:**
    - Si la actividad del comerciante incluye la palabra `VEHICULO` o `VEHÍCULO`, el parser añade automáticamente el sufijo `-VEHICULO` al puesto, evitando colisiones con puestos peatonales.
 6. **Regla Especial 1: Prioridad de `DESCRIPCION` Exclusiva para `NAVE P`:**
    - En la plantilla de Bodega de `NAVE P`, los puestos suelen venir etiquetados con textos informales (ej. `"NUCLEO N-P-01 PAN"`), mientras que la columna `DESCRIPCION` contiene el código real estandarizado (`N-P-01`).
    - El parser prioriza el código de `DESCRIPCION` y habilita la actualización del puesto en sitio cuando el comerciante es el único registro en el lote.
-7. **Regla Especial 2: Asignación de Puesto `"0"` Exclusiva para `AMBULANTES`:**
-   - Exclusivamente para la nave `AMBULANTES`, cualquier puesto nulo, vacío (`""`, `"-"`, `"NULL"`, `"S/N"`, `"SN"`) o remanente del formato previo (`GeneralXX`) se asigna directamente al código canónico `"0"` (sin secuencias artificiales).
-   - El sistema admite la **coexistencia de múltiples puestos `"0"`** en la base de datos, cada uno asignado a un comerciante ambulante diferente.
+7. **Regla Especial 2: Asignación de Puesto `"0"` Exclusiva para `AMBULANTES` (`aplicarReglaPuestosAmbulantes`):**
+   - Exclusivamente para la nave `AMBULANTES`, cualquier puesto nulo, vacío (`""`, `"-"`, `"NULL"`, `"null"`, `"S/N"`, `"SN"`) o remanente del formato previo (`GeneralXX`) se asigna directamente al código canónico `"0"` (sin secuencias artificiales).
+   - El sistema admite la **coexistencia de múltiples comerciantes con puesto `"0"`**, preservando cada uno su propio registro `Puesto` en la base de datos sin colisiones de unicidad.
    - Cuando un supervisor asignado a `AMBULANTES` sube un archivo sin nombre de nave explícito, el sistema despliega un modal interactivo de confirmación automática para aplicar la regla de ambulantes de inmediato.
 
 ---
 
-## 6. Módulos Operativos y Funcionalidades del Sistema
+## 6. Funcionalidades Nuevas en Módulos Operativos
 
 ### 6.1. Toma de Listas y Asistencia en Campo (`/listas`)
 
 - **Marcación Rápida con 1 Toque:** Al pulsar sobre el estado de un comerciante, el sistema alterna cíclicamente entre `"Presente"` (`P`), `"Ausente"` (`A`) y `"Permiso"` (`Pm`).
-- **Justificación de Faltas de Días Anteriores:**
-  - Los supervisores o jefes operativos pueden justificar inasistencias pasadas. La acción actualiza la base de datos y la auditoría, catalogando el registro bajo el estado **`Justificado` (`J`)** con color azul distintivo y número de documento de respaldo.
+- **Justificación Retroactiva de Faltas de Días Anteriores:**
+  - Los supervisores o jefes operativos pueden justificar inasistencias pasadas. La acción actualiza la base de datos y la auditoría, catalogando el registro bajo el estado **`Justificado` (`J`)** con color azul distintivo y número de documento de respaldo en todos los reportes operativos.
 - **Bloqueo Automático en Días No Laborables:**
   - Si la fecha seleccionada coincide con una regla activa de día no laborable o feriado para la nave, el sistema bloquea automáticamente los controles de edición y muestra un banner explicativo del motivo de suspensión.
 - **Selector Dinámico con Límites Reales (`meta=limites`):**
@@ -418,7 +437,7 @@ El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconci
   - Genera el informe oficial de puestos desocupados del mercado.
   - **Inferencia Automática de Giro Comercial:** Si un puesto vacante no tiene giro definido, el sistema analiza los puestos numéricamente adyacentes y sugiere el giro comercial predominante de la zona.
   - **Separación Interactiva:** Permite clasificar puestos entre *Vacantes Normales* y *En Proceso Judicial*.
-  - **Exportación en PDF Institucional:** Genera un documento formal A4 con encabezado institucional, desglose de vacantes por nave, conteos cuantitativos y casillas de firma configurables (*Elaborado por* y *Revisado por*).
+  - **Exportación en PDF Institucional con Firmas Configurables:** Genera un documento formal A4 con encabezado institucional, desglose de vacantes por nave, conteos cuantitativos y casillas de firma configurables (*Elaborado por* y *Revisado por*).
 
 ### 6.3. Control de Supervisores y Contingencias (`/controlsupervisores`)
 
@@ -428,9 +447,9 @@ El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconci
 - **Gestión de Permisos de Supervisores (`ModalPermisosSupervisores.tsx`):**
   - Administra ausencias justificadas y licencias del personal de supervisión, con dos modalidades operativas de contingencia:
     1. **Reemplazo Temporal:** Asigna temporalmente la nave a otro supervisor habilitado en el sistema durante el período de ausencia.
-    2. **Persistencia Automática:** Configura la persistencia automática de la nave para que el sistema cierre la jornada operativamente con base en el último jornal registrado.
-- **Reporte de Supervisores (`ModalReporteSupervisores.tsx`):**
-  - Exportación consolidada en dos modalidades: **Resumen** (totales por supervisor) y **Detalle** (radiografía nominal de jornales), exportable tanto a PDF vectorial (`control-pdf.utils.ts`) como a Excel `.xlsx` (`reporte-supervisores-export.utils.ts`).
+    2. **Persistencia Automática:** Configura la persistencia automática de la nave para que el sistema cierre la jornada operativamente con base en el último jornal registrado al cierre del día.
+- **Reporte Consolidado y Detallado de Supervisores (`ModalReporteSupervisores.tsx`):**
+  - Exportación en dos modalidades operativas: **Resumen** (totales consolidados por supervisor) y **Detalle** (radiografía nominal de jornales), exportable tanto a PDF vectorial (`control-pdf.utils.ts`) como a Excel nativo `.xlsx` (`reporte-supervisores-export.utils.ts`).
 
 ### 6.4. Reportes Operativos Bimodales (`/reportes`)
 
@@ -443,7 +462,7 @@ El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconci
   - `—`: Día No Laborable / Feriado (Gris con fondo crema)
 - **Doble Exportación Simétrica:**
   - **PDF Vectorial (`reportes-pdf.utils.ts`):** Encabezado institucional milimétricamente alineado a los bordes de la tabla (`tableMarginX = 10mm`), cuadro izquierdo de metadatos, cuadro derecho de simbología y paginación formal.
-  - **Excel Nativo Multi-Hoja (`reportes-excel.utils.ts`):** Generado mediante `ExcelJS` con una hoja independiente por cada nave comercial, cuadro de descripción estructurado en 4 sub-columnas que evita truncamiento de palabras, fusión horizontal de celdas de observaciones con crecimiento multi-fila (`wrapText`), paleta de colores institucional y configuración de página A4 horizontal.
+  - **Excel Nativo Multi-Hoja (`reportes-excel.utils.ts`):** Generado mediante `ExcelJS 4.4.0` con una hoja independiente por cada nave comercial, cuadro de descripción estructurado en 4 sub-columnas que evita truncamiento de palabras, fusión horizontal de celdas de observaciones con crecimiento multi-fila (`wrapText`), paleta de colores institucional y configuración de página A4 horizontal.
 
 ---
 
@@ -543,9 +562,9 @@ El proxy server-side (`src/proxy.ts`) intercepta perimetralmente cada solicitud 
 
 ## 10. Despliegue, Sembrado y Comandos Operativos
 
-### Flujo de Puesta en Marcha Local (Entorno de Desarrollo)
+### Flujo de Puesta en Marcha Local (Entorno de Desarrollo en Puerto 5050)
 
-Para levantar el entorno local completo con sus contenedores y servidor de desarrollo:
+Para levantar el entorno local completo con sus contenedores y servidor de desarrollo en el puerto **5050**:
 
 ```bash
 # 1. Clonar el repositorio y acceder a la raíz del proyecto
@@ -564,12 +583,12 @@ npx prisma db push
 # 5. Ejecutar el sembrado maestro de producción
 npx prisma db seed
 
-# 6. Iniciar el servidor de desarrollo con recarga en caliente
+# 6. Iniciar el servidor de desarrollo con recarga en caliente (puerto 5050)
 pnpm dev
 ```
 
 Puertos y accesos en desarrollo:
-- **Aplicación Web EP-EMA:** `http://localhost:3000`
+- **Aplicación Web EP-EMA:** `http://localhost:5050`
 - **Gestor Visual phpMyAdmin:** `http://localhost:8080`
 - **Base de Datos MySQL 8.0:** `localhost:3307` (`usuario: ep_ema_user` / `clave: ep_ema_pass` / `bd: ep_ema_db`)
 
@@ -606,14 +625,14 @@ El script oficial de sembrado establece la cuenta maestra institucional y la inf
 
 ---
 
-### Despliegue en Servidor MySQL Dedicado de Producción
+### Despliegue en Servidor MySQL Dedicado de Producción (Puerto 5050)
 
 En un servidor institucional de producción (Ubuntu Server / Debian / RHEL) con una base de datos MySQL 8.0 dedicada:
 
 1. **Variables de Entorno de Producción (`.env`):**
    ```env
    NODE_ENV=production
-   PORT=3000
+   PORT=5050
 
    # Conexión optimizada al motor MySQL institucional
    DATABASE_URL="mysql://ep_ema_prod:clave_alta_seguridad_2026@127.0.0.1:3306/ep_ema_db?connection_limit=15&pool_timeout=15&connect_timeout=10"
@@ -644,7 +663,7 @@ En un servidor institucional de producción (Ubuntu Server / Debian / RHEL) con 
    # Construcción de artefactos optimizados de Next.js
    pnpm build
 
-   # Inicio del servicio de producción
+   # Inicio del servicio de producción en puerto 5050
    pnpm start
    ```
 
