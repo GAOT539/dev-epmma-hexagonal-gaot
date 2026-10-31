@@ -9,7 +9,7 @@ import { sincronizarSupervisorEnNaves } from "./naves.mock";
  * Contraseña maestra unificada para perfiles de prueba y desarrollo.
  * Todos los usuarios de prueba quemados comparten esta clave por defecto.
  */
-const SUPERADMIN_PASS = "1500888985*admin";
+const SUPERADMIN_PASS = "Ravine.Snooze.Cover9.Defendant";
 
 interface MockUsuario extends Usuario {
   passwordActual: string;

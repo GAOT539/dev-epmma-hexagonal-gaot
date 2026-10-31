@@ -73,7 +73,7 @@ El sistema aplica de forma rigurosa los principios de la **Arquitectura Hexagona
    - **Adaptadores de Repositorio (`src/infrastructure/repositories/*.repository.impl.ts`):** Implementaciones concretas de los puertos que interactúan con Prisma ORM, MySQL 8.0 y los Route Handlers internos.
    - **Servicios de Base de Datos (`src/infrastructure/database/`):** Módulos transaccionales de bajo nivel (`prisma.ts`, `catastro-reconciliacion.service.ts`, `daily-attendance.service.ts`, `nave-puestos-sync.service.ts`, `calendario-operativo.service.ts`, `sesion-control-helper.ts`).
    - **Seguridad Perimetral (`src/proxy.ts` y `src/infrastructure/auth/`):** Proxy perimetral de Next.js 16 para el control perimetral de `/api/v1/:path*`, gestión de JWT, hashing de credenciales y autorización multi-tenant.
-   - **Parsers y Extractores (`src/infrastructure/parsers/`):** Motor de interpretación documental (`catastro-file.parser.ts`) para libros `.xlsx`, `.xls`, `.csv` y `.xml`.
+   - **Parsers y Extractores (`src/infrastructure/parsers/`):** Motores especializados de interpretación documental para libros Excel (`catastro-file.parser.ts`) y archivos estructurados multi-nave `.csv` y `.xml` (`catastro-csv-xml.parser.ts`).
    - **Logging Centralizado (`src/infrastructure/logger/`):** Cola asíncrona no bloqueante que vuelca eventos a `logs/ep-ema-system.log`.
 4. **Capa de Presentación (`src/app/` y `src/components/`):**
    - Vistas estructuradas bajo Next.js App Router con enfoque integral *Mobile-First*. Prohibida la invocación directa a repositorios o bases de datos; toda interacción transita obligatoriamente por la Capa de Aplicación.
@@ -83,7 +83,7 @@ El sistema aplica de forma rigurosa los principios de la **Arquitectura Hexagona
 ### Árbol de Directorios Real del Repositorio
 
 ```text
-dev-epmma-hexagonal-gaot/
+ep-ema-control-catastro/
 ├── docker-compose.yml                     # Contenedores MySQL 8.0 (3307:3306) y phpMyAdmin (8080)
 ├── logs/                                  # Almacenamiento local de logs del sistema
 │   └── ep-ema-system.log                  # Archivo de registro continuo con rotación a 5 MB
@@ -204,8 +204,9 @@ dev-epmma-hexagonal-gaot/
 │   │   │   └── system-logger.ts           # Cola asíncrona no bloqueante y rotación a 5 MB
 │   │   ├── mail/                          # Correo transaccional institucional
 │   │   │   └── smtp.service.ts            # Cliente Nodemailer vía Gmail SMTP
-│   │   ├── parsers/                       # Interpretación heurística de archivos
-│   │   │   └── catastro-file.parser.ts    # Extractor de datos multiformato (.xlsx, .xls, .csv, .xml)
+│   │   ├── parsers/                       # Interpretación heurística y estructurada de archivos
+│   │   │   ├── catastro-file.parser.ts    # Extractor heurístico de plantillas Excel (.xlsx, .xls)
+│   │   │   └── catastro-csv-xml.parser.ts # Motor dinámico multi-nave para archivos .csv y .xml
 │   │   └── repositories/                  # 6 Implementaciones concretas de repositorios
 │   ├── components/ui/                     # Componentes visuales y primitivas de resiliencia
 │   │   ├── error-conexion.tsx             # Banner de contingencia por desconexión de MySQL
@@ -215,7 +216,6 @@ dev-epmma-hexagonal-gaot/
 │       ├── client-logger.ts               # Captura silenciosa de errores cliente vía POST /api/v1/system-logs
 │       ├── error-utils.ts                 # Funciones auxiliares para detección de errores de red y BD
 │       └── utils.ts                       # Helpers de clases Tailwind CSS y formateo
-├── AGENTS.md                              # Reglas maestras del asistente IA para EP-EMA
 ├── package.json                           # Manifiesto de dependencias y scripts oficiales (puerto 5050)
 ├── pnpm-lock.yaml                         # Bloqueo estricto y determinista de versiones
 ├── tsconfig.json                          # Configuración rigurosa de TypeScript 5
@@ -287,7 +287,7 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
    - Campos: `id`, `naveId` (único), `filas`, `columnas`, `planoJson` (matriz de celdas), `actualizadoEn`.
 4. **`Puesto` (`puestos`):**
    - Infraestructura física de puestos y locales.
-   - Campos: `id`, `codigo`, `naveId`, `estado` (`Ocupado`, `Vacante`), `comercianteId` (relación 1:1 con Comerciante).
+   - Campos: `id`, `codigo`, `naveId`, `estado` (`Ocupado`, `Vacante`), `comercianteId` (relación 1:1 con Comerciante), `creadoEn`, `actualizadoEn`.
    - **Índices de Rendimiento:**
      - `@@index([naveId, codigo])`: búsqueda inmediata de puestos por nave y código normalizado.
      - `@@index([comercianteId])`: resolución directa del titular del puesto.
@@ -345,7 +345,7 @@ La base de datos relacional evolucionó desde el esquema inicial de 7 modelos ha
 
 ## 5. Reglas del Motor de Importación y Reconciliación (`/ingreso-catastro`)
 
-El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconciliacion.service.ts`) implementa una suite analítica avanzada diseñada para procesar sin pérdidas los archivos emitidos por los sistemas de rentas y catastro:
+El motor de conciliación mensual (`catastro-file.parser.ts`, `catastro-csv-xml.parser.ts` y `catastro-reconciliacion.service.ts`) implementa una suite analítica avanzada diseñada para procesar sin pérdidas los archivos emitidos por los sistemas de rentas y catastro:
 
 ```text
 ====================================================================================================
@@ -405,6 +405,16 @@ El motor de conciliación mensual (`catastro-file.parser.ts` y `catastro-reconci
    - Exclusivamente para la nave `AMBULANTES`, cualquier puesto nulo, vacío (`""`, `"-"`, `"NULL"`, `"null"`, `"S/N"`, `"SN"`) o remanente del formato previo (`GeneralXX`) se asigna directamente al código canónico `"0"` (sin secuencias artificiales).
    - El sistema admite la **coexistencia de múltiples comerciantes con puesto `"0"`**, preservando cada uno su propio registro `Puesto` en la base de datos sin colisiones de unicidad.
    - Cuando un supervisor asignado a `AMBULANTES` sube un archivo sin nombre de nave explícito, el sistema despliega un modal interactivo de confirmación automática para aplicar la regla de ambulantes de inmediato.
+8. **Motor Especializado e Independiente para CSV y XML (`catastro-csv-xml.parser.ts`):**
+   - **Reconocimiento Dinámico de Cabeceras y Etiquetas:** Admite en cualquier orden las columnas en `.csv` y las etiquetas/atributos en `.xml` correspondientes a los campos esenciales: `ciu`, `cedula`, `contribuyente` (o `nombre`/`ocupante`), `articulo` (o `actividad`/`giro`), `puesto`, `nave` y `descripcion`.
+   - **Autodetección de Delimitadores y Formatos sin Cabecera:** Detecta automáticamente separadores de columnas (`,`, `;`, `\t`, `|`), maneja campos entrecomillados con caracteres de puntuación internos o comillas escapadas, y realiza inferencia celular inteligente para interpretar archivos que carecen de fila de cabecera basándose en la estructura de los datos.
+   - **Descarte Silencioso de Columnas No Pertinentes:** Omite automáticamente columnas secundarias o irrelevantes para la operativa del mercado (tales como `mts`, `mtr`, `m2`, `valor`, `tarifa`, `canon`, `#`, `telefono`, etc.) sin interrumpir ni corromper el procesamiento del lote.
+9. **Actualización Inteligente y Preservación de `CIU`:**
+   - **Detección de Nuevos CIU:** Al reconciliar cada nave, el motor compara prioritariamente la nave, luego el puesto y la cédula/contribuyente. Si el comerciante registrado previamente en base de datos (por ejemplo, desde una plantilla Excel sin CIU) tenía el campo en `"S/N"` (o un valor distinto) y el archivo entrante provee un CIU válido, el sistema detecta la diferencia, emite una novedad de auditoría de tipo `ACTUALIZACION` (`CIU actualizado: S/N -> <nuevo_ciu>`) y actualiza el registro.
+   - **Protección contra Sobreescritura:** Futuras importaciones de archivos Excel que no incluyan la columna CIU o presenten campos vacíos conservan intacto el CIU real previamente consolidado en la base de datos.
+10. **Reconciliación e Importación Masiva Multi-Nave en un Solo Archivo:**
+    - **Soporte de Archivos Multi-Nave Globales:** Capacidad de procesar en un único archivo `.csv` o `.xml` tanto una nave individual como múltiples naves simultáneas (dos naves o la totalidad de las naves del mercado).
+    - **Procesamiento Transaccional Agrupado:** El backend (`/api/v1/catastro/simular` e `/api/v1/catastro/importar`) agrupa automáticamente los registros por nave y ejecuta la reconciliación transaccional en 4 pasos de forma independiente sobre cada nave participante (actualizando datos nominales, ocupando vacantes, registrando mudanzas o reemplazos, pasando puestos libres a vacante y creando nuevas naves si no existían), sin perturbar el estado de las naves no incluidas en el archivo.
 
 ---
 
@@ -567,7 +577,7 @@ Para levantar el entorno local completo con sus contenedores y servidor de desar
 ```bash
 # 1. Clonar el repositorio y acceder a la raíz del proyecto
 git clone <url-del-repositorio>
-cd dev-epmma-hexagonal-gaot
+cd ep-ema-control-catastro
 
 # 2. Instalar dependencias deterministas con pnpm
 pnpm install
@@ -614,7 +624,7 @@ El script oficial de sembrado establece la cuenta maestra institucional y la inf
 - **Usuario Administrador Principal (`SUPERADMIN`):**
   - **Identificador de Acceso / Cédula:** `admin`
   - **Correo Electrónico Oficial:** `sistema.epema@gmail.com`
-  - **Contraseña Inicial de Producción:** `1500888985*admin`
+  - **Contraseña Inicial de Producción:** `Ravine.Snooze.Cover9.Defendant`
   - **Bandera `mustChangePassword`:** `false`
 - **Infraestructura de `NAVE A`:**
   - 33 puestos físicos reales categorizados (13 Bodegas, 14 Cubículos de alimentos preparados y 6 Núcleos comerciales).

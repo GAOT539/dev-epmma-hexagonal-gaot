@@ -71,7 +71,7 @@ async function main() {
   console.log("Tablas limpiadas satisfactoriamente.");
 
   // 2. Crear ÚNICAMENTE el SUPERADMIN
-  const passwordHash = await bcrypt.hash("1500888985*admin", 10);
+  const passwordHash = await bcrypt.hash("Ravine.Snooze.Cover9.Defendant", 10);
   const superadmin = await prisma.usuario.create({
     data: {
       id: "u-super",
