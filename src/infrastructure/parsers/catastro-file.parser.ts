@@ -59,36 +59,20 @@ export function limpiarTextoCelda(raw: unknown): string {
   return unicas.join(" ");
 }
 
-// ── Datos de ejemplo para simular un archivo XML/CSV ─────────────────────────
+// ── Datos de ejemplo para simular un archivo XML/CSV y parsers re-exportados ─
+import {
+  XML_EJEMPLO,
+  CSV_EJEMPLO,
+  parsearXML,
+  parsearCSV,
+} from "./catastro-csv-xml.parser";
 
-export const XML_EJEMPLO = `<?xml version="1.0" encoding="UTF-8"?>
-<Importacion>
-  <Registro>
-    <Nave>Nave A</Nave>
-    <Contribuyente>Juan Pérez Morales</Contribuyente>
-    <NumBodega>B-001</NumBodega>
-    <Gen01Codi>GC-00001</Gen01Codi>
-  </Registro>
-  <Registro>
-    <Nave>Nave A</Nave>
-    <Contribuyente>María Torres Guzmán</Contribuyente>
-    <NumBodega>B-002</NumBodega>
-    <Gen01Codi>GC-00002</Gen01Codi>
-  </Registro>
-  <Registro>
-    <Nave>Nave B</Nave>
-    <Contribuyente>Carlos Medina Ruiz</Contribuyente>
-    <NumBodega>B-003</NumBodega>
-    <Gen01Codi>GC-00003</Gen01Codi>
-  </Registro>
-</Importacion>`;
-
-export const CSV_EJEMPLO = `Nave,Contribuyente,NumBodega,Gen01Codi
-Nave A,Juan Pérez Morales,B-001,GC-00001
-Nave A,María Torres Guzmán,B-002,GC-00002
-Nave B,Carlos Medina Ruiz,B-003,GC-00003
-Nave C,Pedro Vargas López,B-004,GC-00004
-Nave D,Ana Salcedo Vera,B-005,GC-00005`;
+export {
+  XML_EJEMPLO,
+  CSV_EJEMPLO,
+  parsearXML,
+  parsearCSV,
+};
 
 // ── Generación de registros de ejemplo ───────────────────────────────────────
 
@@ -884,212 +868,6 @@ export function parsearExcel(
   return registrosFinales;
 }
 
-// ── Parseo de XML y CSV ─────────────────────────────────────────────────────
-
-export function parsearXML(contenido: string): ImportacionRegistro[] {
-  const registros: ImportacionRegistro[] = [];
-  const contenidoNorm = contenido.normalize("NFC");
-  const regex =
-    /<Registro>[\s\S]*?<Nave>([\s\S]*?)<\/Nave>[\s\S]*?<Contribuyente>([\s\S]*?)<\/Contribuyente>[\s\S]*?<NumBodega>([\s\S]*?)<\/NumBodega>[\s\S]*?<Gen01Codi>([\s\S]*?)<\/Gen01Codi>[\s\S]*?<\/Registro>/g;
-
-  let match;
-  let i = 1;
-  while ((match = regex.exec(contenidoNorm)) !== null) {
-    const nombre = limpiarTextoCelda(match[2]);
-    const puesto = limpiarTextoCelda(match[3]);
-    const nave = limpiarTextoCelda(match[1]);
-    const desglosados = desglosarCodigosPuestoMultiples(puesto);
-    for (const p of desglosados) {
-      const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, "General");
-      registros.push({
-        ciu: "-",
-        cedula: `18${String(10000000 + i).padStart(8, "0")}`,
-        nombre,
-        contribuyente: nombre,
-        actividad: "General",
-        nave,
-        puesto: puestoConDistincion,
-        numBodega: puestoConDistincion,
-        gen01Codi: limpiarTextoCelda(match[4]),
-      });
-    }
-    i++;
-  }
-
-  return registros;
-}
-
-export function parsearCSV(contenido: string): ImportacionRegistro[] {
-  const lineas = contenido
-    .normalize("NFC")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-  if (lineas.length === 0) return [];
-
-  // 1. Detectar delimitador (coma o punto y coma)
-  const primerLinea = lineas[0];
-  const cantComas = (primerLinea.match(/,/g) || []).length;
-  const cantPuntosComas = (primerLinea.match(/;/g) || []).length;
-  const sep = cantPuntosComas > cantComas ? ";" : ",";
-
-  const splitLinea = (linea: string): string[] => {
-    if (linea.includes('"')) {
-      const result: string[] = [];
-      let cur = "";
-      let inQuotes = false;
-      for (let i = 0; i < linea.length; i++) {
-        const char = linea[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === sep && !inQuotes) {
-          result.push(cur.trim().replace(/^"|"$/g, "").trim());
-          cur = "";
-        } else {
-          cur += char;
-        }
-      }
-      result.push(cur.trim().replace(/^"|"$/g, "").trim());
-      return result;
-    }
-    return linea.split(sep).map((s) => s.trim().replace(/^"|"$/g, "").trim());
-  };
-
-  const colsHeader = splitLinea(lineas[0]).map((c) => c.toUpperCase());
-  const primeraLineaUpper = lineas[0].toUpperCase();
-  const tieneCabecera =
-    primeraLineaUpper.includes("CEDULA") ||
-    primeraLineaUpper.includes("CÉDULA") ||
-    primeraLineaUpper.includes("CONTRIBUYENTE") ||
-    primeraLineaUpper.includes("NOMBRE") ||
-    primeraLineaUpper.includes("OCUPANTE") ||
-    primeraLineaUpper.includes("PUESTO") ||
-    primeraLineaUpper.includes("NAVE") ||
-    primeraLineaUpper.includes("CIU") ||
-    primeraLineaUpper.includes("CUI");
-
-  let idxCiu = -1;
-  let idxCedula = -1;
-  let idxNombre = -1;
-  let idxActividad = -1;
-  let idxPuesto = -1;
-  let idxNave = -1;
-
-  if (tieneCabecera) {
-    colsHeader.forEach((col, idx) => {
-      if (col.includes("CIU") || col.includes("CUI")) idxCiu = idx;
-      else if (col.includes("CEDULA") || col.includes("CÉDULA") || col.includes("RUC")) idxCedula = idx;
-      else if (
-        col.includes("CONTRIBUYENTE") ||
-        col.includes("NOMBRE") ||
-        col.includes("OCUPANTE") ||
-        col.includes("NOMBRES")
-      ) {
-        idxNombre = idx;
-      } else if (
-        col.includes("ACTIVIDAD") ||
-        col.includes("ARTICULO") ||
-        col.includes("ARTÍCULO")
-      ) {
-        idxActividad = idx;
-      } else if (
-        col.includes("PUESTO") ||
-        col.includes("BODEGA") ||
-        col.includes("NUMBODEGA")
-      ) {
-        idxPuesto = idx;
-      } else if (col.includes("NAVE")) {
-        idxNave = idx;
-      }
-    });
-  }
-
-  const lineasDatos = tieneCabecera ? lineas.slice(1) : lineas;
-  const registros: ImportacionRegistro[] = [];
-  let naveDetectadaEnArchivo = "";
-
-  for (let idx = 0; idx < lineasDatos.length; idx++) {
-    const partes = splitLinea(lineasDatos[idx]);
-    if (partes.length < 2 || !partes.some((p) => p.length > 0)) continue;
-
-    let ciu = "S/N";
-    let cedula = "";
-    let nombre = "";
-    let actividad = "General";
-    let puesto = "-";
-    let nave = "";
-
-    if (tieneCabecera && (idxCedula !== -1 || idxNombre !== -1)) {
-      if (idxCiu !== -1) {
-        const valCiu = limpiarTextoCelda(partes[idxCiu]);
-        ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
-      }
-      if (idxCedula !== -1 && partes[idxCedula]) cedula = limpiarTextoCelda(partes[idxCedula]);
-      if (idxNombre !== -1 && partes[idxNombre]) nombre = limpiarTextoCelda(partes[idxNombre]);
-      if (idxActividad !== -1 && partes[idxActividad]) actividad = limpiarTextoCelda(partes[idxActividad]) || "General";
-      if (idxPuesto !== -1 && partes[idxPuesto]) puesto = limpiarTextoCelda(partes[idxPuesto]) || "-";
-      if (idxNave !== -1 && partes[idxNave]) nave = limpiarTextoCelda(partes[idxNave]);
-    } else {
-      if (partes.length >= 5) {
-        const valCiu = limpiarTextoCelda(partes[0]);
-        ciu = (!valCiu || valCiu === "-" || valCiu === "S/N") ? "S/N" : valCiu;
-        cedula = limpiarTextoCelda(partes[1]);
-        nombre = limpiarTextoCelda(partes[2]) || "Comerciante";
-        actividad = limpiarTextoCelda(partes[3]) || "General";
-        puesto = limpiarTextoCelda(partes[4]) || "-";
-        nave = limpiarTextoCelda(partes[5]);
-      } else if (partes.length >= 4) {
-        nave = limpiarTextoCelda(partes[0]);
-        nombre = limpiarTextoCelda(partes[1]) || "Comerciante";
-        puesto = limpiarTextoCelda(partes[2]) || "-";
-        cedula = limpiarTextoCelda(partes[3]);
-      }
-    }
-
-    const normCedula = normalizarYCedula(cedula);
-    if (normCedula) {
-      cedula = normCedula;
-    } else if (!cedula) {
-      cedula = `18${String(10000000 + idx).padStart(8, "0")}`;
-    }
-
-    if (!ciu || ciu === "-" || ciu.trim() === "") {
-      ciu = "S/N";
-    }
-
-    let naveFinal = nave;
-    if (!naveFinal || naveFinal.toUpperCase() === "NO DEFINIDA") {
-      const naveInferida = inferirNaveDesdePuesto(puesto);
-      if (naveInferida) {
-        naveFinal = naveInferida;
-        naveDetectadaEnArchivo = naveInferida;
-      } else if (naveDetectadaEnArchivo) {
-        naveFinal = naveDetectadaEnArchivo;
-      } else {
-        naveFinal = "NAVE A";
-      }
-    }
-
-    const puestosDesglosados = desglosarCodigosPuestoMultiples(puesto);
-    for (const p of puestosDesglosados) {
-      const puestoConDistincion = aplicarSufijoVehiculoPorActividad(p, actividad || "General");
-      registros.push({
-        ciu: ciu || "S/N",
-        cedula,
-        nombre: nombre || "Comerciante",
-        contribuyente: nombre || "Comerciante",
-        actividad: actividad || "General",
-        nave: naveFinal,
-        puesto: puestoConDistincion,
-        numBodega: puestoConDistincion,
-        gen01Codi: "-",
-      });
-    }
-  }
-
-  return registros;
-}
-
 /**
  * Obtiene los nombres de las hojas disponibles en un libro Excel.
  */
@@ -1112,17 +890,17 @@ export function parsearArchivoCatastro(
   const ext = (fileName || "").toLowerCase().split(".").pop();
   if (typeof data === "string") {
     if (ext === "xml" || data.trim().startsWith("<")) {
-      return parsearXML(data);
+      return parsearXML(data, fileName);
     }
-    return parsearCSV(data);
+    return parsearCSV(data, fileName);
   }
   if (ext === "csv") {
     const decoder = new TextDecoder("utf-8");
-    return parsearCSV(decoder.decode(data));
+    return parsearCSV(decoder.decode(data), fileName);
   }
   if (ext === "xml") {
     const decoder = new TextDecoder("utf-8");
-    return parsearXML(decoder.decode(data));
+    return parsearXML(decoder.decode(data), fileName);
   }
   return parsearExcel(data, fileName);
 }

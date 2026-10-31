@@ -91,13 +91,13 @@ export class ImportadorRepositoryImpl implements IImportadorRepository {
     return Promise.resolve([...res]);
   }
 
-  async parsearXML(contenido: string): Promise<ImportacionRegistro[]> {
-    const res = parserXML(contenido);
+  async parsearXML(contenido: string, fileName?: string): Promise<ImportacionRegistro[]> {
+    const res = parserXML(contenido, fileName);
     return Promise.resolve([...res]);
   }
 
-  async parsearCSV(contenido: string): Promise<ImportacionRegistro[]> {
-    const res = parserCSV(contenido);
+  async parsearCSV(contenido: string, fileName?: string): Promise<ImportacionRegistro[]> {
+    const res = parserCSV(contenido, fileName);
     return Promise.resolve([...res]);
   }
 

@@ -29,8 +29,8 @@ export interface IImportadorRepository {
     fileName?: string
   ): Promise<ImportacionRegistro[]>;
   obtenerHojasExcel(data: ArrayBuffer | Uint8Array): Promise<string[]>;
-  parsearXML(contenido: string): Promise<ImportacionRegistro[]>;
-  parsearCSV(contenido: string): Promise<ImportacionRegistro[]>;
+  parsearXML(contenido: string, fileName?: string): Promise<ImportacionRegistro[]>;
+  parsearCSV(contenido: string, fileName?: string): Promise<ImportacionRegistro[]>;
   generarRegistrosEjemplo(cantidad?: number): Promise<ImportacionRegistro[]>;
   filtrarDuplicadosExactos100(registros: ImportacionRegistro[]): {
     registrosUnicos: ImportacionRegistro[];

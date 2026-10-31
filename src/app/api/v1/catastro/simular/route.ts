@@ -2,7 +2,10 @@
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
-import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
+import type {
+  ImportacionRegistro,
+  AccionReconciliacionItem,
+} from "@/domain/models/comerciante.model";
 import {
   reconciliarCatastroNaveExistente,
   inferirNaveDesdePuesto,
@@ -72,6 +75,140 @@ export async function POST(request: Request) {
     const actor = await getAuthenticatedUser(request);
     if (!actor) {
       return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
+    }
+
+    // ── MODO MASIVO MULTI-NAVE (2 o más naves distintas en el lote) ───────────
+    const navesValidasEnRegistros = Array.from(
+      new Set(
+        registros
+          .map((r) => (r.nave || "").normalize("NFC").trim().toUpperCase())
+          .filter((n) => n && n !== "NO DEFINIDA" && n !== "NAVE" && n !== "(NAVE)")
+      )
+    );
+
+    if (!naveIdManual && !crearNuevaNave && navesValidasEnRegistros.length >= 2) {
+      const todasNavesBD = await prisma.nave.findMany({
+        where: { estadoRegistro: { not: "Deshabilitado" } },
+        include: { puestos: true },
+      });
+
+      const gruposPorNave = new Map<string, ImportacionRegistro[]>();
+      for (const reg of registros) {
+        const nKey = (reg.nave || "").normalize("NFC").trim().toUpperCase() || "NO DEFINIDA";
+        if (!gruposPorNave.has(nKey)) {
+          gruposPorNave.set(nKey, []);
+        }
+        gruposPorNave.get(nKey)!.push(reg);
+      }
+
+      if (actor.rol === "SUPERVISOR") {
+        for (const [nombreNaveGrupo] of gruposPorNave) {
+          const slugGrupo = generarSlugNave(nombreNaveGrupo);
+          const esAmb = esNaveAmbulantes(nombreNaveGrupo);
+          const naveMatch = todasNavesBD.find((n) => {
+            const u = n.nombre.normalize("NFC").trim().toUpperCase();
+            return u === nombreNaveGrupo || n.id === slugGrupo || (esAmb && esNaveAmbulantes(n.nombre));
+          });
+          if (!naveMatch || !(await userCanAccessNave(request, naveMatch.id))) {
+            return NextResponse.json(
+              {
+                error: `Acceso denegado: El supervisor no tiene permisos sobre la nave '${nombreNaveGrupo}' incluida en el archivo.`,
+              },
+              { status: 403 }
+            );
+          }
+        }
+      }
+
+      let capacidadTotal = 0;
+      let totalOcupados = 0;
+      let totalVacantes = 0;
+      const cambiosDetectadosConsolidados: AccionReconciliacionItem[] = [];
+      const nombresNavesProcesadas: string[] = [];
+      let contieneBodegasMulti = false;
+
+      for (const [nombreNaveGrupo, regsRawGrupo] of gruposPorNave) {
+        const esAmb = esNaveAmbulantes(nombreNaveGrupo);
+        const regsGrupo = esAmb
+          ? aplicarReglaPuestosAmbulantes(regsRawGrupo, nombreNaveGrupo)
+          : regsRawGrupo;
+
+        if (regsGrupo.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""))) {
+          contieneBodegasMulti = true;
+        }
+
+        const slugGrupo = generarSlugNave(nombreNaveGrupo);
+        const naveMatch = todasNavesBD.find((n) => {
+          const u = n.nombre.normalize("NFC").trim().toUpperCase();
+          return u === nombreNaveGrupo || n.id === slugGrupo || (esAmb && esNaveAmbulantes(n.nombre));
+        });
+
+        if (naveMatch) {
+          nombresNavesProcesadas.push(naveMatch.nombre);
+          const puestosNave = naveMatch.puestos;
+          const comerciantesNave = await prisma.comerciante.findMany({
+            where: {
+              estadoRegistro: { not: "Deshabilitado" },
+              OR: [
+                { nave: naveMatch.nombre },
+                { nave: naveMatch.id },
+                { puestoId: { in: puestosNave.map((p) => p.codigo) } },
+              ],
+            },
+          });
+
+          const res = reconciliarCatastroNaveExistente(
+            regsGrupo,
+            naveMatch,
+            puestosNave,
+            comerciantesNave
+          );
+          capacidadTotal += res.reconciliacion.capacidadNave;
+          totalOcupados += res.reconciliacion.totalOcupados;
+          totalVacantes += res.reconciliacion.totalVacantes;
+
+          for (const cambio of res.reconciliacion.cambiosDetectados) {
+            cambiosDetectadosConsolidados.push({
+              ...cambio,
+              puesto: `[${naveMatch.nombre}] ${cambio.puesto}`,
+            });
+          }
+        } else {
+          if (actor.rol === "SUPERVISOR") {
+            return NextResponse.json(
+              { error: `La nave '${nombreNaveGrupo}' no existe en la base de datos.` },
+              { status: 403 }
+            );
+          }
+          nombresNavesProcesadas.push(nombreNaveGrupo);
+          capacidadTotal += regsGrupo.length;
+          totalOcupados += regsGrupo.length;
+          for (const r of regsGrupo) {
+            cambiosDetectadosConsolidados.push({
+              tipo: "NUEVO",
+              puesto: `[${nombreNaveGrupo}] ${r.puesto || "-"}`,
+              nuevo: r.nombre,
+              detalle: `Nuevo comerciante ${r.nombre} asignado a ${r.puesto || "-"} en nueva nave ${nombreNaveGrupo}`,
+            });
+          }
+        }
+      }
+
+      return NextResponse.json({
+        exitosos,
+        errores,
+        reconciliacion: {
+          naveNoEncontrada: false,
+          naveDetectada: `MÚLTIPLES NAVES (${nombresNavesProcesadas.join(", ")})`,
+          esNaveNueva: false,
+          capacidadNave: capacidadTotal,
+          totalOcupados,
+          totalVacantes,
+          esArchivoBodegas: contieneBodegasMulti,
+          modoUnificacion,
+          cambiosDetectados: cambiosDetectadosConsolidados,
+        },
+      });
     }
 
     const contieneBodegas = registros.some((r) => esCodigoTipoBodegaOLocal(r.puesto || ""));

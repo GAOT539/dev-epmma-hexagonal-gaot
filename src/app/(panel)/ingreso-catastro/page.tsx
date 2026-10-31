@@ -109,14 +109,23 @@ export default function IngresoCatastroPage() {
           parsed = await importadorService.parsearExcel(buffer, file.name);
         } else if (extension === "csv" || extension === "txt") {
           const texto = await file.text();
-          parsed = await importadorService.parsearCSV(texto);
+          parsed = await importadorService.parsearCSV(texto, file.name);
         } else if (extension === "xml") {
           const texto = await file.text();
-          parsed = await importadorService.parsearXML(texto);
+          parsed = await importadorService.parsearXML(texto, file.name);
         } else {
           toast.error(`Formato no soportado en ${file.name}.`);
           continue;
         }
+
+        const navesEnParsed = Array.from(
+          new Set(
+            parsed
+              .map((r) => r.nave?.trim().toUpperCase())
+              .filter((n) => n && n !== "NO DEFINIDA" && n !== "NAVE" && n !== "(NAVE)")
+          )
+        );
+        const esMultiNaveEnArchivo = navesEnParsed.length >= 2;
 
         // Inferencia de nave: prioridad absoluta a las celdas internas de la hoja (reg.nave)
         const nombreArchivoUpper = file.name.normalize("NFC").toUpperCase();
@@ -129,11 +138,13 @@ export default function IngresoCatastroPage() {
           if (m && m[1]) naveDesdeArchivo = `NAVE ${m[1]}`;
         }
 
-        const naveDetectadaEnHoja = parsed.find((r) => r.nave && r.nave.trim().toUpperCase() !== "NO DEFINIDA")?.nave?.trim().toUpperCase() || null;
-        if (naveDetectadaEnHoja && !naveInferidaGlobal) {
-          naveInferidaGlobal = naveDetectadaEnHoja;
-        } else if (naveDesdeArchivo && !naveInferidaGlobal) {
-          naveInferidaGlobal = naveDesdeArchivo;
+        const naveDetectadaEnHoja = navesEnParsed.length === 1 ? navesEnParsed[0] : null;
+        if (!esMultiNaveEnArchivo) {
+          if (naveDetectadaEnHoja && !naveInferidaGlobal) {
+            naveInferidaGlobal = naveDetectadaEnHoja;
+          } else if (naveDesdeArchivo && !naveInferidaGlobal) {
+            naveInferidaGlobal = naveDesdeArchivo;
+          }
         }
 
         const procesados = parsed.map((reg) => {
@@ -148,16 +159,16 @@ export default function IngresoCatastroPage() {
               if (match) {
                 const letra = (match[1] || match[4] || "").toUpperCase();
                 if (letra) naveReg = `NAVE ${letra}`;
-              } else if (naveDesdeArchivo) {
+              } else if (!esMultiNaveEnArchivo && naveDesdeArchivo) {
                 naveReg = naveDesdeArchivo;
-              } else if (naveInferidaGlobal) {
+              } else if (!esMultiNaveEnArchivo && naveInferidaGlobal) {
                 naveReg = naveInferidaGlobal;
               } else {
                 naveReg = "NO DEFINIDA";
               }
             }
           }
-          if (naveReg && naveReg !== "NO DEFINIDA" && !naveInferidaGlobal) {
+          if (!esMultiNaveEnArchivo && naveReg && naveReg !== "NO DEFINIDA" && !naveInferidaGlobal) {
             naveInferidaGlobal = naveReg;
           }
           return {
@@ -174,8 +185,15 @@ export default function IngresoCatastroPage() {
         return;
       }
 
-      // Si se infirió una nave global común para los archivos combinados (ej. NAVE H de Bodega Nave H.xls y Puestos Nave H.xls)
-      if (naveInferidaGlobal) {
+      // Solo propaga naveInferidaGlobal cuando en los archivos se haya detectado una única nave
+      const distinctNavesTotales = Array.from(
+        new Set(
+          todosParsed
+            .map((r) => (r.nave || "").trim().toUpperCase())
+            .filter((n) => n && n !== "NO DEFINIDA" && n !== "NAVE" && n !== "(NAVE)")
+        )
+      );
+      if (distinctNavesTotales.length === 1 && naveInferidaGlobal) {
         todosParsed = todosParsed.map((r) => ({
           ...r,
           nave: (!r.nave || r.nave === "NO DEFINIDA") ? naveInferidaGlobal! : r.nave,
@@ -413,8 +431,7 @@ export default function IngresoCatastroPage() {
                 <span>Archivos Estructurados (CSV / XML)</span>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed font-mono">
-                Columnas estándar: Nave, Contribuyente, NumBodega, Gen01Codi.
-                Reconoce estructuras tabulares delimitadas por comas o etiquetas XML.
+                Soporta columnas CIU, Cédula, Contribuyente, Artículo (o Actividad), Puesto y Nave en cualquier orden. Permite actualización masiva de CIU y reconciliación masiva multi-nave ignorando columnas secundarias como MTS.
               </p>
             </div>
           </div>

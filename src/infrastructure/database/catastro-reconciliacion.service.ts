@@ -205,6 +205,11 @@ export function filtrarDuplicadosExactos100(
   const clavesVistas = new Set<string>();
 
   for (const reg of registros) {
+    const naveClave = (reg.nave || "")
+      .normalize("NFC")
+      .trim()
+      .toUpperCase()
+      .replace(/\s+/g, " ");
     const nombreClave = normalizarNombreCompleto(reg.nombre || reg.contribuyente || "");
     const actividadClave = (reg.actividad || "")
       .normalize("NFC")
@@ -216,7 +221,7 @@ export function filtrarDuplicadosExactos100(
       .trim()
       .toUpperCase()
       .replace(/\s+/g, " ");
-    const claveExacta = `${nombreClave}||${actividadClave}||${puestoClave}`;
+    const claveExacta = `${naveClave}||${nombreClave}||${actividadClave}||${puestoClave}`;
 
     if (clavesVistas.has(claveExacta)) {
       duplicadosOmitidos.push(reg);
@@ -778,6 +783,7 @@ export function reconciliarCatastroNaveExistente(
     if (candidatos.length === 0) continue;
 
     // Buscar si algún candidato ya ocupa o tiene asignado este mismo puesto
+    // Priorizando coincidencia exacta puesto + (misma cédula o mismo contribuyente)
     let comMismoPuesto: ComercianteNaveBD | null = null;
     let puestoActualMatch: PuestoNaveBD | null = null;
 
@@ -788,20 +794,33 @@ export function reconciliarCatastroNaveExistente(
         (pActual && sonCodigosPuestosEquivalentes(pActual.codigo, reg.puesto)) ||
         sonCodigosPuestosEquivalentes(candStallId, reg.puesto);
 
-      // Si el contribuyente ya tiene un puesto en la nave y es el único registro en el archivo para esta persona
-      const esUnicoRegistroParaPersona =
-        candidatos.length === 1 &&
-        !registros.some(
-          (r, rIdx) => rIdx !== idx && sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, cand)
-        );
-
-      if (matchesDirect || (pActual && esUnicoRegistroParaPersona)) {
+      if (matchesDirect) {
         comMismoPuesto = cand;
         puestoActualMatch =
           pActual ||
           puestosNaveParticipantes.find((p) => sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)) ||
           null;
         break;
+      }
+    }
+
+    if (!comMismoPuesto) {
+      for (const cand of candidatos) {
+        const pActual = puestosNaveParticipantes.find((p) => p.comercianteId === cand.idInterno);
+        const esUnicoRegistroParaPersona =
+          candidatos.length === 1 &&
+          !registros.some(
+            (r, rIdx) => rIdx !== idx && sonMismoContribuyente({ contribuyente: r.nombre, cedula: r.cedula }, cand)
+          );
+
+        if (pActual && esUnicoRegistroParaPersona) {
+          comMismoPuesto = cand;
+          puestoActualMatch =
+            pActual ||
+            puestosNaveParticipantes.find((p) => sonCodigosPuestosEquivalentes(p.codigo, reg.puesto)) ||
+            null;
+          break;
+        }
       }
     }
 
@@ -847,29 +866,42 @@ export function reconciliarCatastroNaveExistente(
           : puestoDestino.codigo;
 
         // Solo detectar ACTUALIZACION si los datos cambiaron significativamente (idempotencia estricta)
-        const actActual = (comMismoPuesto.actividad || "").trim().toUpperCase();
-        const actNueva = (reg.actividad || "General").trim().toUpperCase();
+        const actActual = (comMismoPuesto.actividad || "").trim();
+        const actNueva = (reg.actividad || "").trim();
+        const tieneActEspecificaActual = Boolean(actActual && actActual.toUpperCase() !== "GENERAL");
+        const tieneActEspecificaNueva = Boolean(actNueva && actNueva.toUpperCase() !== "GENERAL");
+
+        const actividadFinal =
+          !tieneActEspecificaNueva && tieneActEspecificaActual
+            ? actActual
+            : (actNueva || actActual || "General");
+
         const cambioAct =
-          actActual && actNueva && actActual !== "GENERAL" && actNueva !== "GENERAL" && actActual !== actNueva;
+          tieneActEspecificaActual &&
+          tieneActEspecificaNueva &&
+          actActual.toUpperCase() !== actNueva.toUpperCase();
 
         const ciuActual = (comMismoPuesto.ciu || "").trim();
         const ciuNuevo = (reg.ciu || "").trim();
-        const cambioCiu =
-          ciuNuevo &&
-          ciuNuevo !== "S/N" &&
-          ciuNuevo !== "-" &&
-          ciuActual &&
-          ciuActual !== "S/N" &&
-          ciuActual !== "-" &&
-          ciuActual !== ciuNuevo;
+        const tieneCiuNuevoValido = Boolean(
+          ciuNuevo && ciuNuevo !== "S/N" && ciuNuevo !== "-" && ciuNuevo.toUpperCase() !== "NULL"
+        );
+        const cambioCiu = tieneCiuNuevoValido && ciuNuevo !== ciuActual;
+
+        const ciuFinal = tieneCiuNuevoValido
+          ? ciuNuevo
+          : (comMismoPuesto.ciu && comMismoPuesto.ciu !== "-" ? comMismoPuesto.ciu : "S/N");
 
         if (cambioAct || cambioCiu) {
+          const detallePartes: string[] = [];
+          if (cambioCiu) detallePartes.push(`CIU actualizado: ${ciuActual || "S/N"} -> ${ciuNuevo}`);
+          if (cambioAct) detallePartes.push(`actividad: ${actActual} -> ${actNueva}`);
           cambiosDetectados.push({
             tipo: "ACTUALIZACION",
             puesto: codigoPuestoFinal,
-            anterior: `${comMismoPuesto.contribuyente} (${comMismoPuesto.actividad})`,
-            nuevo: `${reg.nombre} (${reg.actividad || "General"})`,
-            detalle: `Datos actualizados para ${reg.nombre} (${reg.actividad || "General"}) en puesto ${codigoPuestoFinal}`,
+            anterior: `${comMismoPuesto.contribuyente} (${comMismoPuesto.actividad}) [CIU: ${ciuActual || "S/N"}]`,
+            nuevo: `${reg.nombre} (${actividadFinal}) [CIU: ${ciuFinal}]`,
+            detalle: `Datos actualizados para ${reg.nombre} en puesto ${codigoPuestoFinal} (${detallePartes.join(", ")})`,
           });
         }
 
@@ -883,10 +915,10 @@ export function reconciliarCatastroNaveExistente(
           comercianteId: comMismoPuesto.idInterno,
           esNuevoComerciante: false,
           datosComerciante: {
-            ciu: reg.ciu && reg.ciu !== "-" ? reg.ciu : comMismoPuesto.ciu || "S/N",
+            ciu: ciuFinal,
             cedula: reg.cedula || comMismoPuesto.cedula,
             contribuyente: reg.nombre || comMismoPuesto.contribuyente,
-            actividad: reg.actividad || comMismoPuesto.actividad || "General",
+            actividad: actividadFinal,
             puestoId: codigoPuestoFinal,
             nave: nave.nombre,
           },
@@ -946,6 +978,36 @@ export function reconciliarCatastroNaveExistente(
         });
       }
 
+      const actActual1B = (comCambio.actividad || "").trim();
+      const actNueva1B = (reg.actividad || "").trim();
+      const tieneActEspecificaActual1B = Boolean(actActual1B && actActual1B.toUpperCase() !== "GENERAL");
+      const tieneActEspecificaNueva1B = Boolean(actNueva1B && actNueva1B.toUpperCase() !== "GENERAL");
+
+      const actividadFinal1B =
+        !tieneActEspecificaNueva1B && tieneActEspecificaActual1B
+          ? actActual1B
+          : (actNueva1B || actActual1B || "General");
+
+      const ciuActual1B = (comCambio.ciu || "").trim();
+      const ciuNuevo1B = (reg.ciu || "").trim();
+      const tieneCiuNuevoValido1B = Boolean(
+        ciuNuevo1B && ciuNuevo1B !== "S/N" && ciuNuevo1B !== "-" && ciuNuevo1B.toUpperCase() !== "NULL"
+      );
+      const cambioCiu1B = tieneCiuNuevoValido1B && ciuNuevo1B !== ciuActual1B;
+      const ciuFinal1B = tieneCiuNuevoValido1B
+        ? ciuNuevo1B
+        : (comCambio.ciu && comCambio.ciu !== "-" ? comCambio.ciu : "S/N");
+
+      if (cambioCiu1B && puestoActual.id === puestoNuevoArchivo.id) {
+        cambiosDetectados.push({
+          tipo: "ACTUALIZACION",
+          puesto: codigoPuestoFinal,
+          anterior: `${comCambio.contribuyente} (${comCambio.actividad}) [CIU: ${ciuActual1B || "S/N"}]`,
+          nuevo: `${reg.nombre} (${actividadFinal1B}) [CIU: ${ciuFinal1B}]`,
+          detalle: `CIU actualizado (${ciuActual1B || "S/N"} -> ${ciuNuevo1B}) para ${reg.nombre} en puesto ${codigoPuestoFinal}`,
+        });
+      }
+
       puestosAsignadosIds.add(puestoNuevoArchivo.id);
       comerciantesProcesadosIds.add(comCambio.idInterno);
       registrosProcesadosIndices.add(idx);
@@ -956,10 +1018,10 @@ export function reconciliarCatastroNaveExistente(
         comercianteId: comCambio.idInterno,
         esNuevoComerciante: false,
         datosComerciante: {
-          ciu: reg.ciu || comCambio.ciu || "S/N",
+          ciu: ciuFinal1B,
           cedula: reg.cedula || comCambio.cedula,
           contribuyente: reg.nombre || comCambio.contribuyente,
-          actividad: reg.actividad || comCambio.actividad || "General",
+          actividad: actividadFinal1B,
           puestoId: codigoPuestoFinal,
           nave: nave.nombre,
         },

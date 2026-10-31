@@ -4,7 +4,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/infrastructure/database/prisma";
 import type { Prisma } from "@prisma/client";
 import crypto from "crypto";
-import type { ImportacionRegistro } from "@/domain/models/comerciante.model";
+import type {
+  ImportacionRegistro,
+  AccionReconciliacionItem,
+} from "@/domain/models/comerciante.model";
 import { asegurarAsistenciaInicialDelDia } from "@/infrastructure/database/daily-attendance.service";
 import {
   sincronizarPuestosDeNaveEnBD,
@@ -54,6 +57,355 @@ export async function POST(request: Request) {
     const actor = await getAuthenticatedUser(request);
     if (!actor) {
       return NextResponse.json({ error: "Usuario autenticado no encontrado." }, { status: 401 });
+    }
+
+    // ── MODO MASIVO MULTI-NAVE (2 o más naves distintas en el lote) ───────────
+    const navesValidasEnRegistros = Array.from(
+      new Set(
+        registros
+          .map((r) => (r.nave || "").normalize("NFC").trim().toUpperCase())
+          .filter((n) => n && n !== "NO DEFINIDA" && n !== "NAVE" && n !== "(NAVE)")
+      )
+    );
+
+    if (!naveIdManual && !crearNuevaNave && navesValidasEnRegistros.length >= 2) {
+      const todasNavesBD = await prisma.nave.findMany({
+        where: { estadoRegistro: { not: "Deshabilitado" } },
+        include: { puestos: true },
+      });
+
+      const gruposPorNave = new Map<string, ImportacionRegistro[]>();
+      for (const reg of registros) {
+        const nKey = (reg.nave || "").normalize("NFC").trim().toUpperCase() || "NO DEFINIDA";
+        if (!gruposPorNave.has(nKey)) {
+          gruposPorNave.set(nKey, []);
+        }
+        gruposPorNave.get(nKey)!.push(reg);
+      }
+
+      if (actor.rol === "SUPERVISOR") {
+        for (const [nombreNaveGrupo] of gruposPorNave) {
+          const slugGrupo = generarSlugNave(nombreNaveGrupo);
+          const esAmb = esNaveAmbulantes(nombreNaveGrupo);
+          const naveMatch = todasNavesBD.find((n) => {
+            const u = n.nombre.normalize("NFC").trim().toUpperCase();
+            return u === nombreNaveGrupo || n.id === slugGrupo || (esAmb && esNaveAmbulantes(n.nombre));
+          });
+          if (!naveMatch || !(await userCanAccessNave(request, naveMatch.id))) {
+            return NextResponse.json(
+              {
+                error: `Acceso denegado: El supervisor no tiene permisos sobre la nave '${nombreNaveGrupo}' incluida en el archivo.`,
+              },
+              { status: 403 }
+            );
+          }
+        }
+      }
+
+      await asegurarColacionEspanolEnBD();
+
+      let totalExitososMulti = 0;
+      let capacidadTotalMulti = 0;
+      let totalOcupadosMulti = 0;
+      let totalVacantesMulti = 0;
+      const cambiosDetectadosConsolidados: AccionReconciliacionItem[] = [];
+      const nombresNavesProcesadas: string[] = [];
+
+      for (const [nombreNaveGrupo, regsRawGrupo] of gruposPorNave) {
+        const esAmb = esNaveAmbulantes(nombreNaveGrupo);
+        const regsGrupo = esAmb
+          ? aplicarReglaPuestosAmbulantes(regsRawGrupo, nombreNaveGrupo)
+          : regsRawGrupo;
+
+        const slugGrupo = generarSlugNave(nombreNaveGrupo);
+        const naveMatch = todasNavesBD.find((n) => {
+          const u = n.nombre.normalize("NFC").trim().toUpperCase();
+          return u === nombreNaveGrupo || n.id === slugGrupo || (esAmb && esNaveAmbulantes(n.nombre));
+        });
+
+        if (naveMatch) {
+          nombresNavesProcesadas.push(naveMatch.nombre);
+          const puestosNave = naveMatch.puestos;
+          const comerciantesNave = await prisma.comerciante.findMany({
+            where: {
+              estadoRegistro: { not: "Deshabilitado" },
+              OR: [
+                { nave: naveMatch.nombre },
+                { nave: naveMatch.id },
+                { puestoId: { in: puestosNave.map((p) => p.codigo) } },
+              ],
+            },
+          });
+
+          const resultadoPlan = reconciliarCatastroNaveExistente(
+            regsGrupo,
+            naveMatch,
+            puestosNave,
+            comerciantesNave
+          );
+
+          const { asignacionesOcupar, puestosAVacante, reconciliacion } = resultadoPlan;
+
+          await prisma.$transaction(
+            async (tx) => {
+              for (const vac of puestosAVacante) {
+                if (vac.comercianteSalienteId) {
+                  await tx.comerciante.updateMany({
+                    where: { idInterno: vac.comercianteSalienteId },
+                    data: { puestoId: null },
+                  });
+                }
+                await tx.puesto.update({
+                  where: { id: vac.puestoId },
+                  data: {
+                    codigo: vac.puestoCodigo,
+                    estado: "Vacante",
+                    comercianteId: null,
+                  },
+                });
+              }
+
+              const puestoIdsAfectados = asignacionesOcupar
+                .filter((a) => !a.esNuevoPuesto && a.puestoId)
+                .map((a) => a.puestoId);
+              const comercianteIdsAfectados = asignacionesOcupar
+                .filter((a) => a.comercianteId)
+                .map((a) => a.comercianteId);
+
+              if (puestoIdsAfectados.length > 0 || comercianteIdsAfectados.length > 0) {
+                await tx.puesto.updateMany({
+                  where: {
+                    OR: [
+                      ...(puestoIdsAfectados.length > 0 ? [{ id: { in: puestoIdsAfectados } }] : []),
+                      ...(comercianteIdsAfectados.length > 0
+                        ? [{ comercianteId: { in: comercianteIdsAfectados } }]
+                        : []),
+                    ],
+                  },
+                  data: { comercianteId: null },
+                });
+              }
+
+              const nuevosComerciantesData: Prisma.ComercianteCreateManyInput[] = [];
+              const nuevosPuestosData: Prisma.PuestoCreateManyInput[] = [];
+
+              for (const asig of asignacionesOcupar) {
+                if (asig.esNuevoComerciante) {
+                  nuevosComerciantesData.push({
+                    idInterno: asig.comercianteId,
+                    ciu: asig.datosComerciante.ciu,
+                    cedula: asig.datosComerciante.cedula,
+                    contribuyente: asig.datosComerciante.contribuyente,
+                    actividad: asig.datosComerciante.actividad,
+                    puestoId: asig.puestoCodigo,
+                    nave: asig.datosComerciante.nave,
+                    estadoRegistro: "Habilitado",
+                    creadoPor: "importador-reconciliacion",
+                  });
+                }
+                if (asig.esNuevoPuesto) {
+                  nuevosPuestosData.push({
+                    id: asig.puestoId,
+                    codigo: asig.puestoCodigo,
+                    naveId: naveMatch.id,
+                    estado: "Ocupado",
+                    comercianteId: asig.comercianteId,
+                  });
+                }
+              }
+
+              if (nuevosComerciantesData.length > 0) {
+                await tx.comerciante.createMany({ data: nuevosComerciantesData });
+              }
+              if (nuevosPuestosData.length > 0) {
+                await tx.puesto.createMany({ data: nuevosPuestosData });
+              }
+
+              for (const asig of asignacionesOcupar) {
+                if (!asig.esNuevoComerciante) {
+                  await tx.comerciante.update({
+                    where: { idInterno: asig.comercianteId },
+                    data: {
+                      ciu: asig.datosComerciante.ciu,
+                      cedula: asig.datosComerciante.cedula,
+                      contribuyente: asig.datosComerciante.contribuyente,
+                      actividad: asig.datosComerciante.actividad,
+                      puestoId: asig.puestoCodigo,
+                      nave: asig.datosComerciante.nave,
+                      estadoRegistro: "Habilitado",
+                      modificadoPor: "importador-reconciliacion",
+                    },
+                  });
+                }
+
+                if (!asig.esNuevoPuesto) {
+                  await tx.puesto.update({
+                    where: { id: asig.puestoId },
+                    data: {
+                      codigo: asig.puestoCodigo,
+                      estado: "Ocupado",
+                      comercianteId: asig.comercianteId,
+                    },
+                  });
+                }
+              }
+
+              const totalPuestosEnNave = await tx.puesto.count({
+                where: { naveId: naveMatch.id },
+              });
+              await tx.nave.update({
+                where: { id: naveMatch.id },
+                data: {
+                  cantidadPuestos: totalPuestosEnNave,
+                  limitePuestos: totalPuestosEnNave,
+                },
+              });
+            },
+            { maxWait: 15000, timeout: 60000 }
+          );
+
+          await sincronizarPuestosDeNaveEnBD(naveMatch.id);
+
+          totalExitososMulti += asignacionesOcupar.length;
+          capacidadTotalMulti += reconciliacion.capacidadNave;
+          totalOcupadosMulti += reconciliacion.totalOcupados;
+          totalVacantesMulti += reconciliacion.totalVacantes;
+
+          for (const cambio of reconciliacion.cambiosDetectados) {
+            cambiosDetectadosConsolidados.push({
+              ...cambio,
+              puesto: `[${naveMatch.nombre}] ${cambio.puesto}`,
+            });
+          }
+        } else {
+          if (actor.rol === "SUPERVISOR") {
+            return NextResponse.json(
+              { error: `La nave '${nombreNaveGrupo}' no existe en la base de datos.` },
+              { status: 403 }
+            );
+          }
+
+          const nombreNueva = nombreNaveGrupo.normalize("NFC").trim().toUpperCase();
+          const idSlug = generarSlugNave(nombreNueva) || `nave-${Date.now()}`;
+          const capacidad = regsGrupo.length;
+
+          const resultadoCreacion = await prisma.$transaction(
+            async (tx) => {
+              const nuevaNave = await tx.nave.create({
+                data: {
+                  id: idSlug,
+                  nombre: nombreNueva,
+                  cantidadPuestos: capacidad,
+                  limitePuestos: capacidad,
+                  supervisores: [],
+                  estadoRegistro: "Habilitado",
+                },
+              });
+
+              const celdasPlano = [];
+              const dim = Math.max(8, Math.ceil(Math.sqrt(capacidad) + 2));
+              for (let r = 0; r < dim; r++) {
+                for (let c = 0; c < dim; c++) {
+                  celdasPlano.push({ fila: r, columna: c, tipo: "VACIO", rowSpan: 1, colSpan: 1 });
+                }
+              }
+              await tx.planoNave.create({
+                data: {
+                  naveId: nuevaNave.id,
+                  filas: dim,
+                  columnas: dim,
+                  planoJson: celdasPlano,
+                },
+              });
+
+              const comerciantesBatch: Prisma.ComercianteCreateManyInput[] = [];
+              const puestosBatch: Prisma.PuestoCreateManyInput[] = [];
+
+              for (let i = 0; i < regsGrupo.length; i++) {
+                const reg = regsGrupo[i];
+                const nombre = (reg.nombre || reg.contribuyente || "").trim();
+                const cedula = (reg.cedula || "").trim();
+                if (!nombre || !cedula) continue;
+
+                const codigoPuesto = (reg.puesto || `PUESTO-${i + 1}`).trim().toUpperCase();
+                const ciuNormalizado =
+                  reg.ciu && reg.ciu !== "-" && reg.ciu.trim().length > 0 ? reg.ciu.trim() : "S/N";
+
+                const idInterno = crypto.randomUUID();
+                const puestoId = crypto.randomUUID();
+
+                comerciantesBatch.push({
+                  idInterno,
+                  ciu: ciuNormalizado,
+                  cedula,
+                  contribuyente: nombre,
+                  actividad: reg.actividad || "General",
+                  puestoId: codigoPuesto,
+                  nave: nuevaNave.nombre,
+                  estadoRegistro: "Habilitado",
+                  creadoPor: "importador-catastro",
+                });
+
+                puestosBatch.push({
+                  id: puestoId,
+                  codigo: codigoPuesto,
+                  naveId: nuevaNave.id,
+                  estado: "Ocupado",
+                  comercianteId: idInterno,
+                });
+              }
+
+              if (comerciantesBatch.length > 0) {
+                await tx.comerciante.createMany({ data: comerciantesBatch });
+              }
+              if (puestosBatch.length > 0) {
+                await tx.puesto.createMany({ data: puestosBatch });
+              }
+
+              return {
+                exitosos: comerciantesBatch.length,
+                naveId: nuevaNave.id,
+                nombreNave: nuevaNave.nombre,
+              };
+            },
+            { maxWait: 15000, timeout: 60000 }
+          );
+
+          await sincronizarPuestosDeNaveEnBD(resultadoCreacion.naveId);
+
+          nombresNavesProcesadas.push(resultadoCreacion.nombreNave);
+          totalExitososMulti += resultadoCreacion.exitosos;
+          capacidadTotalMulti += capacidad;
+          totalOcupadosMulti += resultadoCreacion.exitosos;
+
+          for (const r of regsGrupo) {
+            cambiosDetectadosConsolidados.push({
+              tipo: "NUEVO",
+              puesto: `[${resultadoCreacion.nombreNave}] ${r.puesto || "-"}`,
+              nuevo: r.nombre,
+              detalle: `Nuevo comerciante ${r.nombre} asignado a ${r.puesto || "-"} en nueva nave ${resultadoCreacion.nombreNave}`,
+            });
+          }
+        }
+      }
+
+      invalidarNavesYaVerificadas();
+      await asegurarAsistenciaInicialDelDia(undefined, true);
+
+      return NextResponse.json({
+        exitosos: totalExitososMulti,
+        errores: [],
+        mensaje: `Importación masiva multi-nave completada exitosamente (${nombresNavesProcesadas.join(", ")}): ${totalExitososMulti} comerciantes procesados.`,
+        reconciliacion: {
+          naveDetectada: `MÚLTIPLES NAVES (${nombresNavesProcesadas.join(", ")})`,
+          esNaveNueva: false,
+          capacidadNave: capacidadTotalMulti,
+          totalOcupados: totalOcupadosMulti,
+          totalVacantes: totalVacantesMulti,
+          cambiosDetectados: cambiosDetectadosConsolidados,
+          modoUnificacion,
+        },
+      });
     }
 
     // 1. Detección o Selección de Nave con Validación Estricta Unicode NFC
@@ -386,6 +738,7 @@ export async function POST(request: Request) {
             where: { idInterno: asig.comercianteId },
             data: {
               ciu: asig.datosComerciante.ciu,
+              cedula: asig.datosComerciante.cedula,
               contribuyente: asig.datosComerciante.contribuyente,
               actividad: asig.datosComerciante.actividad,
               puestoId: asig.puestoCodigo,

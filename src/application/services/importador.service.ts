@@ -54,12 +54,12 @@ export class ImportadorService {
     return this.repository.obtenerHojasExcel(data);
   }
 
-  async parsearXML(contenido: string): Promise<ImportacionRegistro[]> {
-    return this.repository.parsearXML(contenido);
+  async parsearXML(contenido: string, fileName?: string): Promise<ImportacionRegistro[]> {
+    return this.repository.parsearXML(contenido, fileName);
   }
 
-  async parsearCSV(contenido: string): Promise<ImportacionRegistro[]> {
-    return this.repository.parsearCSV(contenido);
+  async parsearCSV(contenido: string, fileName?: string): Promise<ImportacionRegistro[]> {
+    return this.repository.parsearCSV(contenido, fileName);
   }
 
   async generarRegistrosEjemplo(cantidad?: number): Promise<ImportacionRegistro[]> {
